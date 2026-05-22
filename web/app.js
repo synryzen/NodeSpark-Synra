@@ -107,7 +107,7 @@ function shouldEnableSpeechOutput() {
   const override = pageParams.get("voiceOutput");
   if (override === "1" || override === "true") return true;
   if (override === "0" || override === "false") return false;
-  return /Linux|X11/i.test(navigator.userAgent);
+  return true;
 }
 
 function storageGet(key, fallback) {
@@ -789,7 +789,7 @@ window.addEventListener("pointermove", handlePointerMove, { passive: true });
 navigator.mediaDevices?.addEventListener?.("devicechange", enumerateDevices);
 
 speechOutputEnabled = shouldEnableSpeechOutput();
-if (!speechOutputEnabled && voiceNote) voiceNote.textContent = "Voice muted on remote view";
+if (!speechOutputEnabled && voiceNote) voiceNote.textContent = "Voice muted for this view";
 applyBackground(storageGet(storageKeys.background, "grid"));
 populateVoiceSelect();
 enumerateDevices();
