@@ -89,6 +89,17 @@ Open the monitor UI:
 http://127.0.0.1:8788
 ```
 
+Each Synra install can also set or change its Hub URL from the monitor UI. Use
+the NodeSparkHub panel, enter the user's Hub address, then pair that monitor.
+Changing the Hub URL clears the local pairing token because pairings belong to a
+specific Hub.
+
+For example, a public Hub URL can be:
+
+```text
+https://nodespark.msidragon.com
+```
+
 To launch Synra full-screen whenever the Jetson desktop user logs in:
 
 ```bash

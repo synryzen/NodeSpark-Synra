@@ -181,6 +181,12 @@ class StateStore:
         self.data["token_expires_at"] = expires_at
         self.save()
 
+    def clear_pairing(self) -> None:
+        self.data.pop("hub_id", None)
+        self.data.pop("device_token", None)
+        self.data.pop("token_expires_at", None)
+        self.save()
+
     @property
     def hub_base_url(self) -> str:
         return str(self.data.get("hub_base_url", ""))

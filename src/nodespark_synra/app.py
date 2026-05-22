@@ -108,19 +108,27 @@ class SynraApp:
 
     def connect_hub(self, base_url: str) -> dict[str, Any]:
         normalized = self._normalize_base_url(base_url)
+        changed_hub = bool(self.cfg.hub.base_url) and normalized != self.cfg.hub.base_url.rstrip("/")
         self.cfg.hub.base_url = normalized
         self.store.set_hub_base_url(normalized)
         self.hub.set_base_url(normalized)
+        if changed_hub and self.store.token:
+            self.store.clear_pairing()
+            self.hub.token = ""
         self.mark_hub_ok()
         try:
             self._hub_health = self.hub.health()
             self.mark_hub_ok()
             message = "NodeSparkHub is reachable. Enter a pairing code when you are ready."
+            if changed_hub:
+                message = "I updated the NodeSparkHub URL. Please pair this monitor with the new Hub."
             expression = "bright"
             style = "success"
         except Exception as exc:
             self.mark_hub_error(exc)
             message = "I saved the Hub URL, but I cannot reach NodeSparkHub yet."
+            if changed_hub:
+                message = "I changed the Hub URL, but I cannot reach the new NodeSparkHub yet."
             expression = "concerned"
             style = "warning"
         self.state.set_state({
