@@ -15,8 +15,10 @@ daemon, and a full-screen kiosk UI for the Jetson Orin Nano developer kit.
   workflow_running, success, warning, error, approval_needed, and sleep.
 - Human-like idle motion: relaxed stance, small gaze shifts, weight shifts,
   subtle stretches, and delayed yawn behavior.
-- Browser speech output with mouth motion and speaking nods.
-- Cute/soft/calm voice presets with natural female browser voice filtering.
+- Natural TTS bridge with ElevenLabs and local Kokoro support, plus browser
+  speech as the final fallback.
+- Synra natural, soft anime, and calm assistant voice presets with mouth motion
+  and speaking nods.
 - Browser microphone flow where permissions allow it.
 - Typed command bar for environments where the microphone is blocked.
 - Selectable monitor backgrounds: none, node grid, studio, night city, aurora,
@@ -104,6 +106,53 @@ bash scripts/launch_kiosk.sh
 By default it uses Chromium with software WebGL fallback flags so the VRM
 renderer stays available on systems where GPU acceleration is inconsistent.
 
+## Natural Voice
+
+Synra asks the local daemon for generated speech first. The daemon uses:
+
+- ElevenLabs when `ELEVENLABS_API_KEY` is set.
+- Kokoro when the optional local Kokoro stack is installed.
+- Browser speech only as a fallback.
+
+For the quickest natural voice, create an ElevenLabs API key and set it for the
+user service:
+
+```bash
+systemctl --user edit nodespark-synra
+```
+
+Add:
+
+```ini
+[Service]
+Environment=ELEVENLABS_API_KEY=your_key_here
+Environment=ELEVENLABS_VOICE_ID=EXAVITQu4vr4xnSDxMaL
+Environment=NODESPARK_SYNRA_TTS_PROVIDER=elevenlabs
+```
+
+Then restart:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user restart nodespark-synra
+```
+
+For a no-account local neural voice, install Kokoro in Synra's virtualenv:
+
+```bash
+bash /opt/nodespark-synra/scripts/install_kokoro_tts.sh
+systemctl --user edit nodespark-synra
+```
+
+Add:
+
+```ini
+[Service]
+Environment=NODESPARK_SYNRA_TTS_PROVIDER=kokoro
+```
+
+Then restart the service.
+
 ## Local API
 
 Set the avatar state:
@@ -164,6 +213,21 @@ List workflows Synra can launch:
 
 ```bash
 curl http://localhost:8788/api/workflows
+```
+
+Check natural TTS status:
+
+```bash
+curl http://localhost:8788/api/tts/status
+```
+
+Generate speech audio:
+
+```bash
+curl -X POST http://localhost:8788/api/tts \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Synra natural voice is ready.","voice":"cute"}' \
+  --output synra.mp3
 ```
 
 ## Avatar Assets

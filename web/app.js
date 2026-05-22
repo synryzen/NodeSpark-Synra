@@ -50,7 +50,10 @@ let speechVisualLock = false;
 let speechReleaseTimer = null;
 let commandSubmitting = false;
 let speechOutputEnabled = false;
+let activeSpeechAudio = null;
+let speechMouthTimer = null;
 let lastHealth = null;
+let ttsStatus = { available: false, provider: "browser" };
 const pageParams = new URLSearchParams(window.location.search);
 
 const storageKeys = {
@@ -242,6 +245,31 @@ async function fetchHealth() {
   }
 }
 
+async function fetchTtsStatus() {
+  try {
+    const response = await fetch("/api/tts/status", { cache: "no-store" });
+    const data = await response.json();
+    if (data.ok) {
+      ttsStatus = data;
+      renderTtsStatus();
+    }
+  } catch {
+    ttsStatus = { available: false, provider: "browser" };
+    renderTtsStatus();
+  }
+}
+
+function renderTtsStatus() {
+  if (!voiceNote) return;
+  const provider = ttsStatus.available ? ttsStatus.provider : "browser";
+  const label = provider === "elevenlabs"
+    ? "Natural voice ready"
+    : provider === "kokoro"
+      ? "Local neural voice ready"
+      : "Browser voice fallback";
+  voiceNote.textContent = label;
+}
+
 function renderHealth(health) {
   lastHealth = health;
   if (!hubStatus) return;
@@ -365,46 +393,111 @@ function syncStageVisualDataset() {
   stage.dataset.expression = visualState.expression || "soft_smile";
 }
 
-function maybeSpeak(state) {
+async function maybeSpeak(state) {
   const speechText = (state.speech_text || "").trim();
   const speechId = state.speech_id || "";
   if (!speechText || !speechId || speechId === lastSpeechId) return;
   lastSpeechId = speechId;
-  if (!speechOutputEnabled || !("speechSynthesis" in window)) return;
+  if (!speechOutputEnabled) return;
+  window.speechSynthesis?.cancel?.();
+  stopActiveSpeechAudio();
+  if (await playServerTts(speechText, speechId, state)) return;
+  if (!("speechSynthesis" in window)) return;
+  speakWithBrowserVoice(speechText, speechId, state);
+}
 
+function beginSpeechVisuals(state) {
+  speechVisualLock = true;
+  if (speechReleaseTimer) window.clearTimeout(speechReleaseTimer);
+  targetMotion.mouth = 1;
+  applyVisualState({ ...(lastServerState || state), mode: "speaking", expression: state.expression || "bright" });
+  window.synraAvatar3D?.setSpeaking(true);
+}
+
+function endSpeechVisuals(speechId) {
+  speechVisualLock = false;
+  targetMotion.mouth = 0;
+  window.synraAvatar3D?.setSpeaking(false);
+  if (speechMouthTimer) {
+    window.clearInterval(speechMouthTimer);
+    speechMouthTimer = null;
+  }
+  const nextVisualState =
+    lastServerState?.mode === "speaking"
+      ? { ...lastServerState, mode: "idle", expression: "soft_smile" }
+      : lastServerState || { mode: lastStateMode || "idle", expression: "soft_smile" };
+  applyVisualState(nextVisualState);
+  speechReleaseTimer = window.setTimeout(() => {
+    if (lastServerState?.speech_id === speechId && lastServerState?.mode === "speaking") {
+      setRemoteState({
+        mode: "idle",
+        expression: "soft_smile",
+        subtitle: "Ready"
+      });
+    }
+  }, 300);
+}
+
+async function playServerTts(text, speechId, state) {
+  try {
+    const response = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice: getVoicePreference() })
+    });
+    if (!response.ok) return false;
+    const blob = await response.blob();
+    if (!blob.size) return false;
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    activeSpeechAudio = audio;
+    audio.onplay = () => {
+      beginSpeechVisuals(state);
+      if (speechMouthTimer) window.clearInterval(speechMouthTimer);
+      speechMouthTimer = window.setInterval(() => {
+        targetMotion.mouth = 0.52 + Math.random() * 0.48;
+        window.synraAvatar3D?.setSpeaking(true);
+      }, 95);
+    };
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      if (activeSpeechAudio === audio) activeSpeechAudio = null;
+      endSpeechVisuals(speechId);
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      if (activeSpeechAudio === audio) activeSpeechAudio = null;
+      endSpeechVisuals(speechId);
+    };
+    await audio.play();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function stopActiveSpeechAudio() {
+  if (activeSpeechAudio) {
+    activeSpeechAudio.pause();
+    activeSpeechAudio.currentTime = 0;
+    activeSpeechAudio = null;
+  }
+  if (speechMouthTimer) {
+    window.clearInterval(speechMouthTimer);
+    speechMouthTimer = null;
+  }
+}
+
+function speakWithBrowserVoice(speechText, speechId, state) {
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(speechText);
   applyVoicePreference(utterance);
-  utterance.onstart = () => {
-    speechVisualLock = true;
-    if (speechReleaseTimer) window.clearTimeout(speechReleaseTimer);
-    targetMotion.mouth = 1;
-    applyVisualState({ ...(lastServerState || state), mode: "speaking", expression: state.expression || "bright" });
-    window.synraAvatar3D?.setSpeaking(true);
-  };
+  utterance.onstart = () => beginSpeechVisuals(state);
   utterance.onboundary = () => {
     targetMotion.mouth = 0.64 + Math.random() * 0.36;
     window.synraAvatar3D?.setSpeaking(true);
   };
-  utterance.onend = () => {
-    speechVisualLock = false;
-    targetMotion.mouth = 0;
-    window.synraAvatar3D?.setSpeaking(false);
-    const nextVisualState =
-      lastServerState?.mode === "speaking"
-        ? { ...lastServerState, mode: "idle", expression: "soft_smile" }
-        : lastServerState || { mode: lastStateMode || "idle", expression: "soft_smile" };
-    applyVisualState(nextVisualState);
-    speechReleaseTimer = window.setTimeout(() => {
-      if (lastServerState?.speech_id === speechId && lastServerState?.mode === "speaking") {
-        setRemoteState({
-          mode: "idle",
-          expression: "soft_smile",
-          subtitle: "Ready"
-        });
-      }
-    }, 300);
-  };
+  utterance.onend = () => endSpeechVisuals(speechId);
   utterance.onerror = utterance.onend;
   window.speechSynthesis.speak(utterance);
 }
@@ -923,7 +1016,7 @@ runWorkflowButton?.addEventListener("click", runSelectedWorkflow);
 backgroundSelect?.addEventListener("change", () => applyBackground(backgroundSelect.value));
 voiceSelect?.addEventListener("change", () => {
   storageSet(storageKeys.voice, voiceSelect.value);
-  voiceNote.textContent = voiceSelect.value === "cute" ? "Cute voice ready" : "Voice ready";
+  renderTtsStatus();
 });
 window.speechSynthesis?.addEventListener?.("voiceschanged", populateVoiceSelect);
 window.addEventListener("pointermove", handlePointerMove, { passive: true });
@@ -938,8 +1031,10 @@ updateMotion();
 fetchState();
 fetchHealth();
 fetchWorkflows();
+fetchTtsStatus();
 setInterval(fetchState, 650);
 setInterval(fetchHealth, 4000);
+setInterval(fetchTtsStatus, 15000);
 
 const params = new URLSearchParams(window.location.search);
 const shouldAutoWake =

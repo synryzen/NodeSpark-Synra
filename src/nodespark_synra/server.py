@@ -31,6 +31,9 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/workflows":
             self._json({"ok": True, "workflows": self.server.app.list_workflows()})
             return
+        if path == "/api/tts/status":
+            self._json({"ok": True, **self.server.app.tts.status()})
+            return
         if path == "/api/live2d":
             self._json({"ok": True, "live2d": live2d_status(self.server.web_root)})
             return
@@ -62,6 +65,18 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 self._json({"ok": False, "error": str(exc)}, status=400)
             return
+        if path == "/api/tts":
+            text = str(payload.get("text") or "")
+            voice = str(payload.get("voice") or "cute")
+            try:
+                result = self.server.app.tts.synthesize(text, voice)
+                self._binary(result.audio, result.content_type, {
+                    "X-Synra-TTS-Provider": result.provider,
+                    "X-Synra-TTS-Voice": result.voice,
+                })
+            except Exception as exc:
+                self._json({"ok": False, "error": str(exc), **self.server.app.tts.status()}, status=503)
+            return
         self._json({"ok": False, "error": f"Unknown API path: {path}"}, status=404)
 
     def log_message(self, fmt: str, *args) -> None:
@@ -86,6 +101,16 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(encoded)
+
+    def _binary(self, data: bytes, content_type: str, headers: dict[str, str] | None = None, status: int = 200) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        for key, value in (headers or {}).items():
+            self.send_header(key, value)
+        self.end_headers()
+        self.wfile.write(data)
 
 
 def serve(app: SynraApp, host: str, port: int) -> None:

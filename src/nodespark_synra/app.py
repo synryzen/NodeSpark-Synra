@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from .config import AppConfig, StateStore
 from .hub import HubClient
 from .state import SynraStateMachine
+from .tts import TTSService
 
 
 def local_assistant_reply(text: str, hub_configured: bool) -> tuple[str, str, str]:
@@ -65,6 +66,7 @@ class SynraApp:
             store.token,
             timeout=max(1.0, float(cfg.hub.timeout_seconds)),
         )
+        self.tts = TTSService(cfg.tts)
         self.running = False
         self._thread: threading.Thread | None = None
         self._hub_offline_until = 0.0

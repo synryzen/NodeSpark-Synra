@@ -50,11 +50,27 @@ class AvatarConfig:
 
 
 @dataclass
+class TTSConfig:
+    provider: str = "auto"
+    timeout_seconds: float = 20.0
+    max_text_chars: int = 900
+    elevenlabs_api_key: str = ""
+    elevenlabs_voice_id: str = "EXAVITQu4vr4xnSDxMaL"
+    elevenlabs_model_id: str = "eleven_multilingual_v2"
+    elevenlabs_stability: float = 0.42
+    elevenlabs_similarity_boost: float = 0.82
+    elevenlabs_style: float = 0.35
+    kokoro_voice: str = "af_heart"
+    kokoro_lang_code: str = "a"
+
+
+@dataclass
 class AppConfig:
     hub: HubConfig = field(default_factory=HubConfig)
     device: DeviceConfig = field(default_factory=DeviceConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     avatar: AvatarConfig = field(default_factory=AvatarConfig)
+    tts: TTSConfig = field(default_factory=TTSConfig)
 
 
 def default_config_paths() -> list[Path]:
@@ -89,7 +105,12 @@ def load_config(path: str | None = None) -> AppConfig:
     _merge_dataclass(cfg.device, raw.get("device", {}))
     _merge_dataclass(cfg.server, raw.get("server", {}))
     _merge_dataclass(cfg.avatar, raw.get("avatar", {}))
+    _merge_dataclass(cfg.tts, raw.get("tts", {}))
     cfg.hub.base_url = os.environ.get("NODESPARK_HUB_URL", cfg.hub.base_url).rstrip("/")
+    cfg.tts.provider = os.environ.get("NODESPARK_SYNRA_TTS_PROVIDER", cfg.tts.provider).strip().lower()
+    cfg.tts.elevenlabs_api_key = os.environ.get("ELEVENLABS_API_KEY", cfg.tts.elevenlabs_api_key).strip()
+    cfg.tts.elevenlabs_voice_id = os.environ.get("ELEVENLABS_VOICE_ID", cfg.tts.elevenlabs_voice_id).strip()
+    cfg.tts.elevenlabs_model_id = os.environ.get("ELEVENLABS_MODEL_ID", cfg.tts.elevenlabs_model_id).strip()
     return cfg
 
 
