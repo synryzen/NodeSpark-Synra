@@ -30,6 +30,9 @@ daemon, and a full-screen kiosk UI for the Jetson Orin Nano developer kit.
   workflows from the kiosk UI.
 - Assistant requests are routed to NodeSparkHub's default AI model for general
   questions, workflow setup help, and workflow run requests when paired.
+- Hybrid local brain: short greetings, personality chat, and lightweight
+  general prompts can run locally through Ollama while Hub/workflow actions stay
+  routed to NodeSparkHub.
 
 ## Project Layout
 
@@ -164,6 +167,28 @@ Environment=NODESPARK_SYNRA_TTS_PROVIDER=kokoro
 
 Then restart the service.
 
+## Local Brain
+
+Synra can use a small local model for fast personality replies and simple
+general chat. Hub/device/workflow actions still route to NodeSparkHub.
+
+On Jetson, install Ollama and pull the default model:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull qwen2.5:1.5b
+```
+
+Synra uses this config by default:
+
+```toml
+[local_ai]
+enabled = true
+provider = "ollama"
+base_url = "http://127.0.0.1:11434"
+model = "qwen2.5:1.5b"
+```
+
 ## Local API
 
 Set the avatar state:
@@ -230,6 +255,12 @@ Check natural TTS status:
 
 ```bash
 curl http://localhost:8788/api/tts/status
+```
+
+Check local AI status:
+
+```bash
+curl http://localhost:8788/api/local-ai/status
 ```
 
 Generate speech audio:

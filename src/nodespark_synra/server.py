@@ -34,6 +34,9 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/tts/status":
             self._json({"ok": True, **self.server.app.tts.status()})
             return
+        if path == "/api/local-ai/status":
+            self._json({"ok": True, **self.server.app.local_ai.status()})
+            return
         if path == "/api/live2d":
             self._json({"ok": True, "live2d": live2d_status(self.server.web_root)})
             return

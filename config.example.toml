@@ -28,6 +28,15 @@ elevenlabs_style = 0.35
 kokoro_voice = "af_heart"
 kokoro_lang_code = "a"
 
+[local_ai]
+enabled = true
+provider = "ollama"
+base_url = "http://127.0.0.1:11434"
+model = "qwen2.5:1.5b"
+timeout_seconds = 20.0
+route_general_locally = true
+route_short_inputs_locally = true
+
 [avatar]
 name = "Synra"
 personality = "Confident, warm, playful, and workflow-smart."

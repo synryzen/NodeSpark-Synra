@@ -306,7 +306,10 @@ function renderHealth(health) {
   hubStatus.textContent = health.hubPaired ? "Hub linked" : "Hub ready";
   hubStatus.dataset.status = "online";
   if (hubSetupStatus) hubSetupStatus.textContent = health.hubPaired ? "Linked" : "Ready";
-  if (hubDetail) hubDetail.textContent = `${health.assistantModel || "NodeSparkHub default"} / ${health.defaultWorkflow || "Workflow"}`;
+  if (hubDetail) {
+    const local = health.localAI?.available ? `Local: ${health.localAI.model}` : "Local: standby";
+    hubDetail.textContent = `${local} / Hub: ${health.assistantModel || "default"} / ${health.defaultWorkflow || "Workflow"}`;
+  }
   if (hubUrlInput) hubUrlInput.value = health.hubUrl || "";
   if (hubSetup) hubSetup.open = !health.hubPaired;
   refreshWorkflowOptions(health.favoriteWorkflows || []);

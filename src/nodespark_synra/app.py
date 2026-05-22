@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 from .config import AppConfig, StateStore
 from .hub import HubClient
+from .local_ai import LocalAIService
 from .state import SynraStateMachine
 from .tts import TTSService
 
@@ -67,6 +68,7 @@ class SynraApp:
             timeout=max(1.0, float(cfg.hub.timeout_seconds)),
             assistant_timeout=max(5.0, float(cfg.hub.assistant_timeout_seconds)),
         )
+        self.local_ai = LocalAIService(cfg.local_ai)
         self.tts = TTSService(cfg.tts)
         self.running = False
         self._thread: threading.Thread | None = None
@@ -106,6 +108,7 @@ class SynraApp:
             "assistantEndpoint": "/wisp/assistant",
             "assistantModel": selected_model or "NodeSparkHub default",
             "usesHubDefaultModel": True,
+            "localAI": self.local_ai.status(),
         }
 
     def connect_hub(self, base_url: str) -> dict[str, Any]:
@@ -208,19 +211,43 @@ class SynraApp:
 
         if kind in {"assistant", "ask", "askai"}:
             text = str(command.get("text") or command.get("body") or "Help me from NodeSpark Synra.")
+            local_candidate = self.local_ai.should_answer_locally(text)
             self.state.set_state({
                 "mode": "thinking",
                 "expression": "focused",
                 "message": f"Thinking about: {text}",
-                "subtitle": "Synra Assistant",
+                "subtitle": "Synra Local AI" if local_candidate else "Synra Assistant",
                 "card": {
                     "title": "Voice Request",
                     "body": text,
-                    "detail": "Sending to NodeSparkHub",
+                    "detail": "Thinking locally" if local_candidate else "Sending to NodeSparkHub",
                     "style": "thinking",
                 },
             })
-            if not self.hub.configured() or not self.hub_ready_for_actions():
+            local_answered = False
+            if local_candidate:
+                try:
+                    local = self.local_ai.answer(text)
+                    reply = _synra_identity_reply(local.text)
+                    self.state.apply_command({
+                        "type": "speak",
+                        "title": "Synra",
+                        "text": reply,
+                        "subtitle": "Local AI",
+                        "expression": "bright",
+                        "mode": "speaking",
+                        "style": "voice",
+                        "detail": f"Model: {local.model}",
+                        "id": command_id,
+                    })
+                    result = reply[:240]
+                    local_answered = True
+                except Exception as exc:
+                    print(f"[local-ai] local answer failed: {exc}")
+
+            if local_answered:
+                pass
+            elif not self.hub.configured() or not self.hub_ready_for_actions():
                 expression, subtitle, reply = local_assistant_reply(text, self.hub.configured())
                 if self.hub.configured() and not self.store.token:
                     expression, subtitle, reply = (

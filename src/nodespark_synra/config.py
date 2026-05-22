@@ -66,12 +66,25 @@ class TTSConfig:
 
 
 @dataclass
+class LocalAIConfig:
+    enabled: bool = True
+    provider: str = "ollama"
+    base_url: str = "http://127.0.0.1:11434"
+    model: str = "qwen2.5:1.5b"
+    timeout_seconds: float = 20.0
+    max_prompt_chars: int = 1200
+    route_general_locally: bool = True
+    route_short_inputs_locally: bool = True
+
+
+@dataclass
 class AppConfig:
     hub: HubConfig = field(default_factory=HubConfig)
     device: DeviceConfig = field(default_factory=DeviceConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     avatar: AvatarConfig = field(default_factory=AvatarConfig)
     tts: TTSConfig = field(default_factory=TTSConfig)
+    local_ai: LocalAIConfig = field(default_factory=LocalAIConfig)
 
 
 def default_config_paths() -> list[Path]:
@@ -107,12 +120,24 @@ def load_config(path: str | None = None) -> AppConfig:
     _merge_dataclass(cfg.server, raw.get("server", {}))
     _merge_dataclass(cfg.avatar, raw.get("avatar", {}))
     _merge_dataclass(cfg.tts, raw.get("tts", {}))
+    _merge_dataclass(cfg.local_ai, raw.get("local_ai", {}))
     cfg.hub.base_url = os.environ.get("NODESPARK_HUB_URL", cfg.hub.base_url).rstrip("/")
+    cfg.local_ai.enabled = _env_bool("NODESPARK_SYNRA_LOCAL_AI_ENABLED", cfg.local_ai.enabled)
+    cfg.local_ai.provider = os.environ.get("NODESPARK_SYNRA_LOCAL_AI_PROVIDER", cfg.local_ai.provider).strip().lower()
+    cfg.local_ai.base_url = os.environ.get("NODESPARK_SYNRA_LOCAL_AI_URL", cfg.local_ai.base_url).rstrip("/")
+    cfg.local_ai.model = os.environ.get("NODESPARK_SYNRA_LOCAL_AI_MODEL", cfg.local_ai.model).strip()
     cfg.tts.provider = os.environ.get("NODESPARK_SYNRA_TTS_PROVIDER", cfg.tts.provider).strip().lower()
     cfg.tts.elevenlabs_api_key = os.environ.get("ELEVENLABS_API_KEY", cfg.tts.elevenlabs_api_key).strip()
     cfg.tts.elevenlabs_voice_id = os.environ.get("ELEVENLABS_VOICE_ID", cfg.tts.elevenlabs_voice_id).strip()
     cfg.tts.elevenlabs_model_id = os.environ.get("ELEVENLABS_MODEL_ID", cfg.tts.elevenlabs_model_id).strip()
     return cfg
+
+
+def _env_bool(name: str, fallback: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return fallback
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _merge_dataclass(obj: object, values: dict) -> None:
