@@ -18,6 +18,8 @@ const commandForm = document.getElementById("commandForm");
 const commandInput = document.getElementById("commandInput");
 const commandSubmit = document.getElementById("commandSubmit");
 const hubStatus = document.getElementById("hubStatus");
+const backgroundSelect = document.getElementById("backgroundSelect");
+const voiceSelect = document.getElementById("voiceSelect");
 
 let lastSpeechId = "";
 let recognition = null;
@@ -36,6 +38,32 @@ let mediaActivationStarted = false;
 let speechVisualLock = false;
 let speechReleaseTimer = null;
 let commandSubmitting = false;
+
+const storageKeys = {
+  background: "nodespark.synra.background",
+  voice: "nodespark.synra.voice"
+};
+
+const voicePresets = {
+  cute: {
+    rate: 1.02,
+    pitch: 1.26,
+    volume: 1,
+    match: /samantha|zira|google us english|female|english/i
+  },
+  soft: {
+    rate: 0.94,
+    pitch: 1.12,
+    volume: 0.94,
+    match: /samantha|google uk english female|zira|female|english/i
+  },
+  calm: {
+    rate: 0.88,
+    pitch: 0.98,
+    volume: 0.96,
+    match: /daniel|alex|google uk english male|english/i
+  }
+};
 
 const demoText = {
   listening: "I’m listening. Tell me what you want NodeSparkHub to do.",
@@ -67,6 +95,72 @@ const demoStates = {
 
 function hasLocalMediaOrigin() {
   return window.isSecureContext || ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+}
+
+function storageGet(key, fallback) {
+  try {
+    return window.localStorage.getItem(key) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function storageSet(key, value) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Kiosk/private contexts can block localStorage; controls still work for the session.
+  }
+}
+
+function applyBackground(value) {
+  const background = value || "grid";
+  document.documentElement.dataset.background = background;
+  if (backgroundSelect) backgroundSelect.value = background;
+  storageSet(storageKeys.background, background);
+}
+
+function availableVoices() {
+  return "speechSynthesis" in window ? window.speechSynthesis.getVoices() : [];
+}
+
+function populateVoiceSelect() {
+  if (!voiceSelect) return;
+  const selected = storageGet(storageKeys.voice, "cute");
+  const existingVoiceValues = new Set([...voiceSelect.options].map((option) => option.value));
+  availableVoices()
+    .filter((voice) => voice.lang?.toLowerCase().startsWith("en"))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach((voice) => {
+      const value = `voice:${voice.voiceURI || voice.name}`;
+      if (existingVoiceValues.has(value)) return;
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = voice.name.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+      voiceSelect.append(option);
+      existingVoiceValues.add(value);
+    });
+  voiceSelect.value = [...voiceSelect.options].some((option) => option.value === selected) ? selected : "cute";
+}
+
+function currentVoicePreference() {
+  return storageGet(storageKeys.voice, voiceSelect?.value || "cute");
+}
+
+function applyVoicePreference(utterance) {
+  const preference = currentVoicePreference();
+  const voices = availableVoices();
+  const preset = voicePresets[preference] || voicePresets.cute;
+  utterance.rate = preset.rate;
+  utterance.pitch = preset.pitch;
+  utterance.volume = preset.volume;
+  let preferred = null;
+  if (preference.startsWith("voice:")) {
+    const voiceId = preference.slice("voice:".length);
+    preferred = voices.find((voice) => voice.voiceURI === voiceId || voice.name === voiceId);
+  }
+  preferred ||= voices.find((voice) => preset.match.test(`${voice.name} ${voice.lang}`));
+  if (preferred) utterance.voice = preferred;
 }
 
 async function fetchState() {
@@ -187,9 +281,7 @@ function maybeSpeak(state) {
 
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(speechText);
-  utterance.rate = 0.96;
-  utterance.pitch = 1.08;
-  utterance.volume = 1.0;
+  applyVoicePreference(utterance);
   utterance.onstart = () => {
     speechVisualLock = true;
     if (speechReleaseTimer) window.clearTimeout(speechReleaseTimer);
@@ -221,9 +313,6 @@ function maybeSpeak(state) {
     }, 300);
   };
   utterance.onerror = utterance.onend;
-  const voices = window.speechSynthesis.getVoices();
-  const preferred = voices.find((voice) => /female|samantha|zira|google us english/i.test(voice.name));
-  if (preferred) utterance.voice = preferred;
   window.speechSynthesis.speak(utterance);
 }
 
@@ -658,9 +747,17 @@ document.querySelectorAll("[data-demo]").forEach((button) => {
 listenButton.addEventListener("click", startVoiceLoop);
 cameraButton.addEventListener("click", activateCameraAndMic);
 commandForm?.addEventListener("submit", submitTypedCommand);
+backgroundSelect?.addEventListener("change", () => applyBackground(backgroundSelect.value));
+voiceSelect?.addEventListener("change", () => {
+  storageSet(storageKeys.voice, voiceSelect.value);
+  voiceNote.textContent = voiceSelect.value === "cute" ? "Cute voice ready" : "Voice ready";
+});
+window.speechSynthesis?.addEventListener?.("voiceschanged", populateVoiceSelect);
 window.addEventListener("pointermove", handlePointerMove, { passive: true });
 navigator.mediaDevices?.addEventListener?.("devicechange", enumerateDevices);
 
+applyBackground(storageGet(storageKeys.background, "grid"));
+populateVoiceSelect();
 enumerateDevices();
 updateMotion();
 fetchState();

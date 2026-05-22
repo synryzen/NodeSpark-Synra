@@ -226,6 +226,21 @@
           <input id="commandInput" autocomplete="off" spellcheck="true" placeholder="Ask Synra" />
           <button id="commandSubmit" type="submit">Ask</button>
         </form>
+        <div class="settings-row">
+          <select id="backgroundSelect" aria-label="Background">
+            <option value="none">No background</option>
+            <option value="grid">Node grid</option>
+            <option value="studio">Studio</option>
+            <option value="city">Night city</option>
+            <option value="aurora">Aurora</option>
+            <option value="deck">Command deck</option>
+          </select>
+          <select id="voiceSelect" aria-label="Voice">
+            <option value="cute">Cute voice</option>
+            <option value="soft">Soft voice</option>
+            <option value="calm">Calm voice</option>
+          </select>
+        </div>
         <div class="device-strip" aria-live="polite">
           <span id="micStatus">Mic checking</span>
           <span id="cameraStatus">Cam checking</span>
@@ -235,7 +250,7 @@
       </aside>
     </main>
 
-    <script type="module" src="/avatar3d-driver.js?v=20260522-relaxed-idle-1"></script>
-    <script src="/app.js?v=20260522-relaxed-idle-1"></script>
+    <script type="module" src="/avatar3d-driver.js?v=20260522-voice-bg-1"></script>
+    <script src="/app.js?v=20260522-voice-bg-1"></script>
   </body>
 </html>
