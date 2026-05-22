@@ -115,7 +115,10 @@ class SynraAvatar3DController {
       leftArmRaise: 0,
       rightArmFold: 0,
       leftArmFold: 0,
-      handToMouth: 0
+      handToMouth: 0,
+      fingerCurl: 0.32,
+      thumbRelax: 0.22,
+      fingerSpread: 0.04
     };
     this.poseTarget = { ...this.pose };
     this.gaze = { x: 0, y: 0 };
@@ -489,7 +492,10 @@ class SynraAvatar3DController {
       leftArmRaise: 0,
       rightArmFold: 0,
       leftArmFold: 0,
-      handToMouth: 0
+      handToMouth: 0,
+      fingerCurl: 0.32,
+      thumbRelax: 0.22,
+      fingerSpread: 0.04
     };
   }
 
@@ -521,6 +527,9 @@ class SynraAvatar3DController {
       this.poseTarget.armOpen = 0.045 + idleEase * 0.02;
       this.poseTarget.elbowBend = 0.018;
       this.poseTarget.wristTwist = slowSway * 0.02;
+      this.poseTarget.fingerCurl = 0.34 + Math.sin((elapsed + this.microMotionSeed) * 0.92) * 0.035;
+      this.poseTarget.thumbRelax = 0.24;
+      this.poseTarget.fingerSpread = 0.045 + idleEase * 0.012;
       this.poseTarget.hipsX = softRock * -0.012;
       this.poseTarget.hipsY = slowSway * 0.018;
       this.poseTarget.hipsZ = slowSway * -0.012;
@@ -534,6 +543,8 @@ class SynraAvatar3DController {
       this.poseTarget.upperChestX = 0.004;
       this.poseTarget.armOpen = 0.035;
       this.poseTarget.elbowBend = 0.018;
+      this.poseTarget.fingerCurl = 0.28;
+      this.poseTarget.fingerSpread = 0.052;
     }
     if (this.mode === "thinking" || this.mode === "workflow_running" || cue.includes("focused")) {
       this.expressionTargets.relaxed = 0.08;
@@ -547,6 +558,7 @@ class SynraAvatar3DController {
       this.poseTarget.armOpen = 0.025;
       this.poseTarget.elbowBend = -0.012;
       this.poseTarget.wristTwist = 0.035;
+      this.poseTarget.fingerCurl = 0.42;
     }
     if (this.mode === "speaking") {
       this.expressionTargets.happy = this.expression === "bright" ? 0.38 : 0.18;
@@ -558,6 +570,8 @@ class SynraAvatar3DController {
       this.poseTarget.armOpen = 0.045;
       this.poseTarget.elbowBend = 0.026;
       this.poseTarget.wristTwist = Math.sin(elapsed * 4.2) * 0.018;
+      this.poseTarget.fingerCurl = 0.26 + Math.sin(elapsed * 3.4) * 0.035;
+      this.poseTarget.fingerSpread = 0.06;
     }
     if (this.mode === "success" || this.expression === "bright" || this.expression === "wink") {
       this.expressionTargets.happy = this.expression === "wink" ? 0.78 : 0.58;
@@ -571,6 +585,8 @@ class SynraAvatar3DController {
       this.poseTarget.upperChestX = -0.034;
       this.poseTarget.armOpen = 0.055;
       this.poseTarget.elbowBend = 0.03;
+      this.poseTarget.fingerCurl = 0.25;
+      this.poseTarget.fingerSpread = 0.07;
     }
     if (this.mode === "approval_needed" || cue.includes("raised_brow") || cue.includes("curious")) {
       this.expressionTargets.surprised = 0.28;
@@ -579,6 +595,7 @@ class SynraAvatar3DController {
       this.poseTarget.chestY = -0.035;
       this.poseTarget.armOpen = 0.045;
       this.poseTarget.elbowBend = 0.02;
+      this.poseTarget.fingerCurl = 0.38;
     }
     if (cue.includes("confused") || cue.includes("unclear") || cue.includes("unknown")) {
       this.expressionTargets.surprised = 0.2;
@@ -590,6 +607,7 @@ class SynraAvatar3DController {
       this.poseTarget.upperChestY = -0.025;
       this.poseTarget.armOpen = 0.04;
       this.poseTarget.elbowBend = -0.02;
+      this.poseTarget.fingerCurl = 0.4;
     }
     if (this.mode === "warning" || this.mode === "error" || this.expression === "concerned" || cue.includes("sad")) {
       this.expressionTargets.sad = 0.56;
@@ -602,6 +620,7 @@ class SynraAvatar3DController {
       this.poseTarget.upperChestX = 0.035;
       this.poseTarget.shoulderLift = -0.05;
       this.poseTarget.armOpen = 0.012;
+      this.poseTarget.fingerCurl = 0.44;
     }
     if (cue.includes("look_left")) {
       this.poseTarget.headY = 0.22;
@@ -646,6 +665,7 @@ class SynraAvatar3DController {
       this.poseTarget.rightArmRaise = 0.92 * ease;
       this.poseTarget.rightArmFold = 0.88 * ease;
       this.poseTarget.handToMouth = 1.0 * ease;
+      this.poseTarget.fingerCurl = 0.22 + 0.16 * ease;
       this.targetMouth = Math.max(this.targetMouth, 0.78 * mouthRise);
       return;
     }
@@ -659,6 +679,8 @@ class SynraAvatar3DController {
       this.poseTarget.rightArmRaise = 0.22 * ease;
       this.poseTarget.leftArmFold = -0.12 * ease;
       this.poseTarget.rightArmFold = -0.08 * ease;
+      this.poseTarget.fingerCurl = 0.2;
+      this.poseTarget.fingerSpread = 0.08;
       return;
     }
 
@@ -670,6 +692,7 @@ class SynraAvatar3DController {
       this.poseTarget.armOpen += 0.025 * ease;
       this.poseTarget.leftArmFold = 0.08 * ease;
       this.poseTarget.rightArmFold = -0.04 * ease;
+      this.poseTarget.wristTwist += 0.035 * ease;
       return;
     }
 
@@ -680,6 +703,15 @@ class SynraAvatar3DController {
       this.poseTarget.headY += 0.06 * ease;
       this.poseTarget.chestY -= 0.025 * ease;
       this.poseTarget.leftArmFold = 0.2 * ease;
+      this.poseTarget.fingerCurl = 0.34 + 0.08 * ease;
+      return;
+    }
+
+    if (action.name === "hand_fidget") {
+      this.poseTarget.wristTwist += 0.08 * ease;
+      this.poseTarget.fingerCurl = 0.34 + 0.12 * ease;
+      this.poseTarget.fingerSpread = 0.06 + 0.025 * ease;
+      this.poseTarget.leftArmFold = 0.08 * ease;
     }
   }
 
@@ -791,15 +823,16 @@ class SynraAvatar3DController {
       rightLowerArm.rotation.y = lerp(rightLowerArm.rotation.y, -0.04 - this.pose.rightArmFold * 0.26, 0.06);
     }
     if (leftHand) {
-      leftHand.rotation.z = lerp(leftHand.rotation.z, -0.035, 0.08);
-      leftHand.rotation.x = lerp(leftHand.rotation.x, -0.02, 0.08);
-      leftHand.rotation.y = lerp(leftHand.rotation.y, this.pose.wristTwist, 0.08);
+      leftHand.rotation.z = lerp(leftHand.rotation.z, -0.13 - this.pose.handToMouth * 0.04, 0.08);
+      leftHand.rotation.x = lerp(leftHand.rotation.x, -0.055, 0.08);
+      leftHand.rotation.y = lerp(leftHand.rotation.y, this.pose.wristTwist - 0.045, 0.08);
     }
     if (rightHand) {
-      rightHand.rotation.z = lerp(rightHand.rotation.z, 0.035 - this.pose.handToMouth * 0.26, 0.08);
-      rightHand.rotation.x = lerp(rightHand.rotation.x, -0.02 - this.pose.handToMouth * 0.38, 0.08);
-      rightHand.rotation.y = lerp(rightHand.rotation.y, -this.pose.wristTwist - this.pose.handToMouth * 0.22, 0.08);
+      rightHand.rotation.z = lerp(rightHand.rotation.z, 0.13 - this.pose.handToMouth * 0.28, 0.08);
+      rightHand.rotation.x = lerp(rightHand.rotation.x, -0.055 - this.pose.handToMouth * 0.36, 0.08);
+      rightHand.rotation.y = lerp(rightHand.rotation.y, -this.pose.wristTwist + 0.045 - this.pose.handToMouth * 0.22, 0.08);
     }
+    this.applyRelaxedFingerPose(elapsed);
     if (this.vrm.expressionManager) {
       this.applyMouthTargets(mouth, elapsed);
       this.expressionTargets.blink = blink ? 1 : 0;
@@ -872,15 +905,51 @@ class SynraAvatar3DController {
             { name: "yawn", duration: 5.8 },
             { name: "stretch", duration: 4.8 },
             { name: "weight_shift", duration: 4.2 },
-            { name: "shy_smile", duration: 3.6 }
+            { name: "shy_smile", duration: 3.6 },
+            { name: "hand_fidget", duration: 3.2 }
           ]
         : [
             { name: "weight_shift", duration: 3.8 },
             { name: "shy_smile", duration: 3.2 },
-            { name: "stretch", duration: 4.4 }
+            { name: "stretch", duration: 4.4 },
+            { name: "hand_fidget", duration: 2.8 }
           ];
     const choice = options[Math.floor(Math.random() * options.length)];
     this.idleAction = { ...choice, startedAt: elapsed };
+  }
+
+  applyRelaxedFingerPose(elapsed) {
+    const curl = clamp(this.pose.fingerCurl + Math.sin((elapsed + this.microMotionSeed) * 1.7) * 0.018, 0.08, 0.62);
+    const thumbRelax = clamp(this.pose.thumbRelax, 0, 0.5);
+    const spread = clamp(this.pose.fingerSpread, 0, 0.12);
+    ["left", "right"].forEach((side) => {
+      const handedness = side === "left" ? 1 : -1;
+      const thumbMeta = this.vrm.humanoid?.getNormalizedBoneNode?.(`${side}ThumbMetacarpal`);
+      const thumbProximal = this.vrm.humanoid?.getNormalizedBoneNode?.(`${side}ThumbProximal`);
+      const thumbIntermediate = this.vrm.humanoid?.getNormalizedBoneNode?.(`${side}ThumbIntermediate`);
+      const thumbDistal = this.vrm.humanoid?.getNormalizedBoneNode?.(`${side}ThumbDistal`);
+      if (thumbMeta) {
+        thumbMeta.rotation.z = lerp(thumbMeta.rotation.z, handedness * (0.1 + thumbRelax * 0.16), 0.1);
+        thumbMeta.rotation.y = lerp(thumbMeta.rotation.y, handedness * -0.08, 0.1);
+      }
+      if (thumbProximal) thumbProximal.rotation.z = lerp(thumbProximal.rotation.z, handedness * (0.16 + thumbRelax * 0.16), 0.1);
+      if (thumbIntermediate) thumbIntermediate.rotation.z = lerp(thumbIntermediate.rotation.z, handedness * (0.12 + thumbRelax * 0.12), 0.1);
+      if (thumbDistal) thumbDistal.rotation.z = lerp(thumbDistal.rotation.z, handedness * (0.08 + thumbRelax * 0.08), 0.1);
+
+      ["Index", "Middle", "Ring", "Little"].forEach((finger, fingerIndex) => {
+        const proximal = this.vrm.humanoid?.getNormalizedBoneNode?.(`${side}${finger}Proximal`);
+        const intermediate = this.vrm.humanoid?.getNormalizedBoneNode?.(`${side}${finger}Intermediate`);
+        const distal = this.vrm.humanoid?.getNormalizedBoneNode?.(`${side}${finger}Distal`);
+        const fingerWeight = finger === "Index" ? 0.82 : finger === "Middle" ? 0.94 : finger === "Ring" ? 1.02 : 1.08;
+        const spreadOffset = (fingerIndex - 1.5) * spread * handedness;
+        if (proximal) {
+          proximal.rotation.z = lerp(proximal.rotation.z, handedness * 0.52 * curl * fingerWeight, 0.1);
+          proximal.rotation.y = lerp(proximal.rotation.y, spreadOffset, 0.1);
+        }
+        if (intermediate) intermediate.rotation.z = lerp(intermediate.rotation.z, handedness * 0.64 * curl * fingerWeight, 0.1);
+        if (distal) distal.rotation.z = lerp(distal.rotation.z, handedness * 0.38 * curl * fingerWeight, 0.1);
+      });
+    });
   }
 
   applyMouthTargets(mouth, elapsed) {
