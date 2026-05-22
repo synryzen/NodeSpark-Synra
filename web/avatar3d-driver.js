@@ -322,47 +322,85 @@ class SynraAvatar3DController {
   addSynraShirtDetail() {
     if (!this.vrm?.scene) return;
     const upperChest = this.vrm.humanoid?.getNormalizedBoneNode?.("upperChest") || this.vrm.scene;
-    const cleavageShape = new THREE.Shape();
-    cleavageShape.moveTo(-0.04, 0.026);
-    cleavageShape.bezierCurveTo(-0.026, 0.006, -0.012, -0.024, 0, -0.058);
-    cleavageShape.bezierCurveTo(0.012, -0.024, 0.026, 0.006, 0.04, 0.026);
-    cleavageShape.bezierCurveTo(0.018, 0.016, -0.018, 0.016, -0.04, 0.026);
 
-    const cleavage = new THREE.Mesh(
-      new THREE.ShapeGeometry(cleavageShape),
+    const bodiceShape = new THREE.Shape();
+    bodiceShape.moveTo(-0.118, 0.052);
+    bodiceShape.bezierCurveTo(-0.088, 0.006, -0.052, -0.036, -0.016, -0.052);
+    bodiceShape.bezierCurveTo(-0.006, -0.057, 0.006, -0.057, 0.016, -0.052);
+    bodiceShape.bezierCurveTo(0.052, -0.036, 0.088, 0.006, 0.118, 0.052);
+    bodiceShape.lineTo(0.098, -0.17);
+    bodiceShape.bezierCurveTo(0.052, -0.19, -0.052, -0.19, -0.098, -0.17);
+    bodiceShape.closePath();
+
+    const bodice = new THREE.Mesh(
+      new THREE.ShapeGeometry(bodiceShape),
       new THREE.MeshBasicMaterial({
-        color: 0xffd2dc,
+        color: 0x07050e,
         transparent: true,
-        opacity: 0.84,
+        opacity: 0.96,
         side: THREE.DoubleSide,
         depthTest: false,
         depthWrite: false
       })
     );
-    cleavage.name = "SynraVNeckCleavage";
-    cleavage.position.set(0, -0.032, -0.108);
-    cleavage.rotation.x = -0.08;
-    cleavage.renderOrder = 40;
-    upperChest.add(cleavage);
+    bodice.name = "SynraSoftBlousePanel";
+    bodice.position.set(0, -0.032, -0.112);
+    bodice.rotation.x = -0.09;
+    bodice.renderOrder = 40;
+    upperChest.add(bodice);
 
-    const trim = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(-0.058, 0.046, -0.096),
-        new THREE.Vector3(0, -0.054, -0.097),
-        new THREE.Vector3(0.058, 0.046, -0.096)
-      ]),
+    const neckline = [
+      new THREE.Vector3(-0.11, 0.02, -0.096),
+      new THREE.Vector3(-0.078, -0.018, -0.097),
+      new THREE.Vector3(-0.034, -0.05, -0.098),
+      new THREE.Vector3(0, -0.058, -0.098),
+      new THREE.Vector3(0.034, -0.05, -0.098),
+      new THREE.Vector3(0.078, -0.018, -0.097),
+      new THREE.Vector3(0.11, 0.02, -0.096)
+    ];
+    const necklineTrim = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(new THREE.CatmullRomCurve3(neckline).getPoints(30)),
       new THREE.LineBasicMaterial({
         color: 0x9b5cff,
         transparent: true,
-        opacity: 0.72,
+        opacity: 0.78,
         depthTest: false,
         depthWrite: false
       })
     );
-    trim.name = "SynraVNeckTrim";
-    trim.position.set(0, -0.032, -0.006);
-    trim.renderOrder = 41;
-    upperChest.add(trim);
+    necklineTrim.name = "SynraSoftBlouseNeckline";
+    necklineTrim.position.set(0, -0.032, -0.006);
+    necklineTrim.renderOrder = 41;
+    upperChest.add(necklineTrim);
+
+    const sideSeamMaterial = new THREE.LineBasicMaterial({
+      color: 0xffd166,
+      transparent: true,
+      opacity: 0.36,
+      depthTest: false,
+      depthWrite: false
+    });
+    [
+      [
+        new THREE.Vector3(-0.098, 0.012, -0.097),
+        new THREE.Vector3(-0.09, -0.056, -0.099),
+        new THREE.Vector3(-0.064, -0.158, -0.1)
+      ],
+      [
+        new THREE.Vector3(0.098, 0.012, -0.097),
+        new THREE.Vector3(0.09, -0.056, -0.099),
+        new THREE.Vector3(0.064, -0.158, -0.1)
+      ]
+    ].forEach((points, index) => {
+      const seam = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(new THREE.CatmullRomCurve3(points).getPoints(18)),
+        sideSeamMaterial.clone()
+      );
+      seam.name = `SynraSoftBlouseSideSeam${index + 1}`;
+      seam.position.set(0, -0.032, -0.006);
+      seam.renderOrder = 42;
+      upperChest.add(seam);
+    });
   }
 
   gaussian(value, center, width) {
