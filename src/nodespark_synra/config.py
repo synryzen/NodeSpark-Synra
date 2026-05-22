@@ -21,6 +21,7 @@ class HubConfig:
     default_workflow: str = "Synra Assistant"
     favorite_workflows: list[str] = field(default_factory=lambda: ["Synra Assistant"])
     timeout_seconds: float = 4.0
+    assistant_timeout_seconds: float = 45.0
     offline_cooldown_seconds: int = 30
 
 

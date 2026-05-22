@@ -21,6 +21,7 @@ class HubClient:
     device_name: str
     token: str = ""
     timeout: float = 20.0
+    assistant_timeout: float = 45.0
 
     def __post_init__(self) -> None:
         self.base_url = self.base_url.rstrip("/")
@@ -95,6 +96,9 @@ class HubClient:
             "platform": "NVIDIA Jetson Orin Nano / NodeSpark Synra",
             "sessionId": f"synra:{self.device_id}",
             "voice": True,
+            "assistantName": "Synra",
+            "personaName": "Synra",
+            "productName": "NodeSparkHub",
             "assistantMode": "general_and_workflow_operator",
             "useDefaultModel": True,
             "modelPreference": "nodesparkhub-default",
@@ -113,12 +117,13 @@ class HubClient:
                 "workflow",
             ],
             "systemContext": {
-                "identity": "Synra is the NodeSparkHub monitor AI assistant.",
+                "identity": "You are Synra, the anime AI monitor assistant for NodeSparkHub. Always call yourself Synra.",
                 "routing": "Use the NodeSparkHub selected default AI model for general Q&A, workflow help, and workflow setup guidance.",
                 "behavior": "Answer ordinary questions naturally. When the user asks to automate, build, configure, or run a workflow, help clarify inputs and route actions through NodeSparkHub.",
+                "avoid": "Do not identify as NodeSpark Wisp, Wisp, ChatGPT, or a generic hub. You are Synra.",
             },
         }
-        return self._request("POST", "/wisp/assistant", json=payload)
+        return self._request("POST", "/wisp/assistant", json=payload, timeout=self.assistant_timeout)
 
     def poll_commands(self, limit: int = 10) -> list[dict[str, Any]]:
         response = self._request("GET", f"/devices/{quote(self.device_id, safe='')}/commands/poll?limit={limit}")
@@ -131,7 +136,7 @@ class HubClient:
         payload = {"status": status, "result": result}
         return self._request("POST", f"/devices/{quote(self.device_id, safe='')}/commands/{quote(command_id, safe='')}/ack", json=payload)
 
-    def _request(self, method: str, path: str, json: Any | None = None, auth: bool = True) -> dict[str, Any]:
+    def _request(self, method: str, path: str, json: Any | None = None, auth: bool = True, timeout: float | None = None) -> dict[str, Any]:
         if not self.base_url:
             raise HubError("Hub base_url is not configured.")
         headers = {
@@ -152,7 +157,7 @@ class HubClient:
             body = jsonlib.dumps(json).encode("utf-8")
         request = Request(url, data=body, headers=headers, method=method)
         try:
-            with urlopen(request, timeout=self.timeout) as resp:
+            with urlopen(request, timeout=timeout or self.timeout) as resp:
                 status = int(resp.status)
                 text = resp.read().decode("utf-8", errors="replace").strip()
         except HTTPError as exc:

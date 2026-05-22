@@ -2,6 +2,8 @@
 base_url = "http://192.168.1.100:8787"
 default_workflow = "Synra Assistant"
 favorite_workflows = ["Synra Assistant"]
+timeout_seconds = 4.0
+assistant_timeout_seconds = 45.0
 
 [device]
 name = "NodeSpark Synra"

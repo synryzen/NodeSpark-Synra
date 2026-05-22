@@ -65,6 +65,7 @@ class SynraApp:
             cfg.device.name,
             store.token,
             timeout=max(1.0, float(cfg.hub.timeout_seconds)),
+            assistant_timeout=max(5.0, float(cfg.hub.assistant_timeout_seconds)),
         )
         self.tts = TTSService(cfg.tts)
         self.running = False
@@ -72,6 +73,7 @@ class SynraApp:
         self._hub_offline_until = 0.0
         self._hub_last_error = ""
         self._hub_health: dict[str, Any] = {}
+        self._assistant_model = ""
         self._workflow_cache: list[str] = list(cfg.hub.favorite_workflows)
 
     def hub_can_try(self) -> bool:
@@ -90,7 +92,7 @@ class SynraApp:
         return ""
 
     def health_snapshot(self) -> dict[str, Any]:
-        selected_model = self._selected_model_name(self._hub_health)
+        selected_model = self._assistant_model or self._selected_model_name(self._hub_health)
         return {
             "deviceId": self.store.device_id,
             "deviceName": self.cfg.device.name,
@@ -244,12 +246,18 @@ class SynraApp:
                     response = self.hub.ask_assistant(text)
                     self.mark_hub_ok()
                     reply = str(response.get("displayText") or response.get("reply") or response.get("message") or "No assistant reply.")
+                    reply = _synra_identity_reply(reply)
                     model = self._selected_model_name(response) or self._selected_model_name(self._hub_health) or "Hub default AI model"
+                    self._assistant_model = model
+                    reply_failed = _assistant_reply_failed(reply)
                     self.state.apply_command({
                         "type": "speak",
                         "title": "Synra",
                         "text": reply,
                         "subtitle": "NodeSparkHub AI",
+                        "expression": "concerned" if reply_failed else "bright",
+                        "mode": "warning" if reply_failed else "speaking",
+                        "style": "warning" if reply_failed else "voice",
                         "detail": f"Model: {model}",
                         "id": command_id,
                     })
@@ -375,3 +383,16 @@ class SynraApp:
                 if isinstance(name, str) and name.strip():
                     return name.strip()
         return ""
+
+
+def _synra_identity_reply(text: str) -> str:
+    return (
+        text.replace("NodeSpark Wisp", "Synra")
+        .replace("NodeSparkWisp", "Synra")
+        .replace(" Wisp ", " Synra ")
+    )
+
+
+def _assistant_reply_failed(text: str) -> bool:
+    lowered = text.lower()
+    return any(token in lowered for token in ("model call failed", "invalid response", "server returned an invalid", "could not reach"))
