@@ -55,6 +55,7 @@ let speechMouthTimer = null;
 let lastHealth = null;
 let ttsStatus = { available: false, provider: "browser" };
 const pageParams = new URLSearchParams(window.location.search);
+const serverTtsStartTimeoutMs = 3500;
 
 const storageKeys = {
   background: "nodespark.synra.background",
@@ -439,12 +440,16 @@ function endSpeechVisuals(speechId) {
 }
 
 async function playServerTts(text, speechId, state) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), serverTtsStartTimeoutMs);
   try {
     const response = await fetch("/api/tts", {
       method: "POST",
+      signal: controller.signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, voice: getVoicePreference() })
     });
+    window.clearTimeout(timeout);
     if (!response.ok) return false;
     const blob = await response.blob();
     if (!blob.size) return false;
@@ -472,6 +477,7 @@ async function playServerTts(text, speechId, state) {
     await audio.play();
     return true;
   } catch {
+    window.clearTimeout(timeout);
     return false;
   }
 }
