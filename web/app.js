@@ -38,6 +38,8 @@ let mediaActivationStarted = false;
 let speechVisualLock = false;
 let speechReleaseTimer = null;
 let commandSubmitting = false;
+let speechOutputEnabled = false;
+const pageParams = new URLSearchParams(window.location.search);
 
 const storageKeys = {
   background: "nodespark.synra.background",
@@ -99,6 +101,13 @@ const demoStates = {
 
 function hasLocalMediaOrigin() {
   return window.isSecureContext || ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+}
+
+function shouldEnableSpeechOutput() {
+  const override = pageParams.get("voiceOutput");
+  if (override === "1" || override === "true") return true;
+  if (override === "0" || override === "false") return false;
+  return /Linux|X11/i.test(navigator.userAgent);
 }
 
 function storageGet(key, fallback) {
@@ -300,7 +309,7 @@ function maybeSpeak(state) {
   const speechId = state.speech_id || "";
   if (!speechText || !speechId || speechId === lastSpeechId) return;
   lastSpeechId = speechId;
-  if (!("speechSynthesis" in window)) return;
+  if (!speechOutputEnabled || !("speechSynthesis" in window)) return;
 
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(speechText);
@@ -779,6 +788,8 @@ window.speechSynthesis?.addEventListener?.("voiceschanged", populateVoiceSelect)
 window.addEventListener("pointermove", handlePointerMove, { passive: true });
 navigator.mediaDevices?.addEventListener?.("devicechange", enumerateDevices);
 
+speechOutputEnabled = shouldEnableSpeechOutput();
+if (!speechOutputEnabled && voiceNote) voiceNote.textContent = "Voice muted on remote view";
 applyBackground(storageGet(storageKeys.background, "grid"));
 populateVoiceSelect();
 enumerateDevices();
