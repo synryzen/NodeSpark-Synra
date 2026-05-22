@@ -24,6 +24,10 @@ daemon, and a full-screen kiosk UI for the Jetson Orin Nano developer kit.
 - Local fallback assistant mode when NodeSparkHub is offline.
 - Hub client for pairing, check-in, command polling, workflow runs, assistant
   calls, and acknowledgements.
+- Monitor-side Hub onboarding: set the Hub URL, pair Synra, and launch favorite
+  workflows from the kiosk UI.
+- Assistant requests are routed to NodeSparkHub's default AI model for general
+  questions, workflow setup help, and workflow run requests when paired.
 
 ## Project Layout
 
@@ -138,6 +142,28 @@ Check health:
 
 ```bash
 curl http://localhost:8788/api/health
+```
+
+Connect to NodeSparkHub from the local API:
+
+```bash
+curl -X POST http://localhost:8788/api/connect \
+  -H "Content-Type: application/json" \
+  -d '{"baseUrl":"http://192.168.1.100:8787"}'
+```
+
+Pair with a Hub pairing code:
+
+```bash
+curl -X POST http://localhost:8788/api/pair \
+  -H "Content-Type: application/json" \
+  -d '{"code":"123456"}'
+```
+
+List workflows Synra can launch:
+
+```bash
+curl http://localhost:8788/api/workflows
 ```
 
 ## Avatar Assets

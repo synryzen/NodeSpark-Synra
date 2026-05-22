@@ -160,6 +160,14 @@ class StateStore:
         self.data["token_expires_at"] = expires_at
         self.save()
 
+    @property
+    def hub_base_url(self) -> str:
+        return str(self.data.get("hub_base_url", ""))
+
+    def set_hub_base_url(self, value: str) -> None:
+        self.data["hub_base_url"] = value.rstrip("/")
+        self.save()
+
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(self.data, indent=2, sort_keys=True) + "\n")

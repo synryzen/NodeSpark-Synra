@@ -26,14 +26,10 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
             self._json({"ok": True, "state": self.server.app.state.snapshot()})
             return
         if path == "/api/health":
-            self._json({
-                "ok": True,
-                "deviceId": self.server.app.store.device_id,
-                "hubConfigured": self.server.app.hub.configured(),
-                "hubCanTry": self.server.app.hub_can_try(),
-                "hubLastError": self.server.app.hub_offline_detail(),
-                "hubUrl": self.server.app.cfg.hub.base_url,
-            })
+            self._json({"ok": True, **self.server.app.health_snapshot()})
+            return
+        if path == "/api/workflows":
+            self._json({"ok": True, "workflows": self.server.app.list_workflows()})
             return
         if path == "/api/live2d":
             self._json({"ok": True, "live2d": live2d_status(self.server.web_root)})
@@ -49,6 +45,14 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
             return
         if path == "/api/command":
             self._json(self.server.app.handle_command(payload, ack=False))
+            return
+        if path == "/api/connect":
+            base_url = str(payload.get("baseUrl") or payload.get("hubUrl") or "")
+            try:
+                health = self.server.app.connect_hub(base_url)
+                self._json({"ok": True, "health": health})
+            except Exception as exc:
+                self._json({"ok": False, "error": str(exc)}, status=400)
             return
         if path == "/api/pair":
             code = str(payload.get("code") or "")

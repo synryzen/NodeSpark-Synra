@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 from .config import AppConfig, StateStore
 from .hub import HubClient
@@ -54,6 +55,9 @@ class SynraApp:
         self.cfg = cfg
         self.store = store
         self.state = SynraStateMachine()
+        stored_hub_url = store.hub_base_url
+        if stored_hub_url:
+            cfg.hub.base_url = stored_hub_url
         self.hub = HubClient(
             cfg.hub.base_url,
             store.device_id,
@@ -65,16 +69,71 @@ class SynraApp:
         self._thread: threading.Thread | None = None
         self._hub_offline_until = 0.0
         self._hub_last_error = ""
+        self._hub_health: dict[str, Any] = {}
+        self._workflow_cache: list[str] = list(cfg.hub.favorite_workflows)
 
     def hub_can_try(self) -> bool:
         return self.hub.configured() and time.time() >= self._hub_offline_until
 
+    def hub_ready_for_actions(self) -> bool:
+        return self.hub_can_try() and bool(self.store.token)
+
     def hub_offline_detail(self) -> str:
         if not self.hub.configured():
             return "NodeSparkHub URL is not configured."
+        if not self.store.token:
+            return "Synra is not paired with NodeSparkHub yet."
         if time.time() < self._hub_offline_until:
             return self._hub_last_error or "NodeSparkHub is cooling down after a failed request."
         return ""
+
+    def health_snapshot(self) -> dict[str, Any]:
+        selected_model = self._selected_model_name(self._hub_health)
+        return {
+            "deviceId": self.store.device_id,
+            "deviceName": self.cfg.device.name,
+            "hubConfigured": self.hub.configured(),
+            "hubPaired": bool(self.store.token),
+            "hubCanTry": self.hub_can_try(),
+            "hubLastError": self.hub_offline_detail(),
+            "hubUrl": self.cfg.hub.base_url,
+            "defaultWorkflow": self.cfg.hub.default_workflow,
+            "favoriteWorkflows": list(self._workflow_cache or self.cfg.hub.favorite_workflows),
+            "assistantEndpoint": "/wisp/assistant",
+            "assistantModel": selected_model or "NodeSparkHub default",
+            "usesHubDefaultModel": True,
+        }
+
+    def connect_hub(self, base_url: str) -> dict[str, Any]:
+        normalized = self._normalize_base_url(base_url)
+        self.cfg.hub.base_url = normalized
+        self.store.set_hub_base_url(normalized)
+        self.hub.set_base_url(normalized)
+        self.mark_hub_ok()
+        try:
+            self._hub_health = self.hub.health()
+            self.mark_hub_ok()
+            message = "NodeSparkHub is reachable. Enter a pairing code when you are ready."
+            expression = "bright"
+            style = "success"
+        except Exception as exc:
+            self.mark_hub_error(exc)
+            message = "I saved the Hub URL, but I cannot reach NodeSparkHub yet."
+            expression = "concerned"
+            style = "warning"
+        self.state.set_state({
+            "mode": "success" if style == "success" else "warning",
+            "expression": expression,
+            "message": message,
+            "subtitle": "Hub connection",
+            "card": {
+                "title": "NodeSparkHub",
+                "body": normalized,
+                "detail": self.hub_offline_detail() or "Ready to pair",
+                "style": style,
+            },
+        })
+        return self.health_snapshot()
 
     def mark_hub_ok(self) -> None:
         self._hub_offline_until = 0.0
@@ -103,7 +162,33 @@ class SynraApp:
         if token:
             self.store.set_pairing(str(response.get("hubId", "")), token, response.get("expiresAt"))
             self.hub.token = token
+            self.state.set_state({
+                "mode": "success",
+                "expression": "bright",
+                "message": "NodeSparkHub is linked. I can use the Hub AI and workflows now.",
+                "subtitle": "Paired",
+                "card": {
+                    "title": "NodeSparkHub Linked",
+                    "body": "Synra is connected.",
+                    "detail": "Assistant requests use the Hub default AI model.",
+                    "style": "success",
+                    "progress": 1,
+                },
+            })
         return response
+
+    def list_workflows(self) -> list[str]:
+        if self.hub_ready_for_actions():
+            try:
+                workflows = self.hub.list_workflows()
+                self.mark_hub_ok()
+                if workflows:
+                    self._workflow_cache = workflows
+                    return workflows
+            except Exception as exc:
+                self.mark_hub_error(exc)
+                print(f"[hub] workflow list failed: {exc}")
+        return list(self._workflow_cache or self.cfg.hub.favorite_workflows)
 
     def handle_command(self, command: dict[str, Any], ack: bool = False) -> dict[str, Any]:
         command_id = str(command.get("id") or command.get("commandId") or "")
@@ -123,9 +208,15 @@ class SynraApp:
                     "style": "thinking",
                 },
             })
-            if not self.hub.configured() or not self.hub_can_try():
+            if not self.hub.configured() or not self.hub_ready_for_actions():
                 expression, subtitle, reply = local_assistant_reply(text, self.hub.configured())
-                if self.hub.configured():
+                if self.hub.configured() and not self.store.token:
+                    expression, subtitle, reply = (
+                        "raised_brow",
+                        "Pair Synra",
+                        "I can use NodeSparkHub's default AI model after you pair this monitor with the Hub."
+                    )
+                if self.hub.configured() and self.store.token:
                     reply = f"{reply} I'm staying in local mode while NodeSparkHub comes back online."
                 self.state.apply_command({
                     "type": "speak",
@@ -143,11 +234,13 @@ class SynraApp:
                     response = self.hub.ask_assistant(text)
                     self.mark_hub_ok()
                     reply = str(response.get("displayText") or response.get("reply") or response.get("message") or "No assistant reply.")
+                    model = self._selected_model_name(response) or self._selected_model_name(self._hub_health) or "Hub default AI model"
                     self.state.apply_command({
                         "type": "speak",
                         "title": "Synra",
                         "text": reply,
                         "subtitle": "NodeSparkHub AI",
+                        "detail": f"Model: {model}",
                         "id": command_id,
                     })
                     result = reply[:240]
@@ -172,10 +265,10 @@ class SynraApp:
             payload = command.get("payload") if isinstance(command.get("payload"), dict) else {}
             payload.setdefault("source", "synra")
             payload.setdefault("deviceId", self.store.device_id)
-            if not self.hub.configured() or not self.hub_can_try():
+            if not self.hub.configured() or not self.hub_ready_for_actions():
                 result = f"Workflow staged locally: {workflow}. Configure hub.base_url to run it."
                 if self.hub.configured():
-                    result = f"I staged {workflow} locally while NodeSparkHub comes back online."
+                    result = f"I staged {workflow} locally. Pair Synra with NodeSparkHub to run it from this monitor."
                 self.state.apply_command({
                     "type": "speak",
                     "title": "Workflow Staged",
@@ -222,7 +315,7 @@ class SynraApp:
         next_poll = 0.0
         while self.running:
             now = time.time()
-            if self.hub.configured() and now >= next_checkin:
+            if self.hub.configured() and self.hub.token and now >= next_checkin:
                 self._checkin()
                 next_checkin = now + max(15, int(self.cfg.device.checkin_interval_seconds))
             if self.hub.configured() and self.hub.token and now >= next_poll:
@@ -233,6 +326,10 @@ class SynraApp:
     def _checkin(self) -> None:
         try:
             self.hub.checkin()
+            try:
+                self._hub_health = self.hub.health()
+            except Exception:
+                pass
             self.mark_hub_ok()
         except Exception as exc:
             self.mark_hub_error(exc)
@@ -248,3 +345,23 @@ class SynraApp:
             return
         for command in commands:
             self.handle_command(command, ack=True)
+
+    @staticmethod
+    def _normalize_base_url(value: str) -> str:
+        text = value.strip().rstrip("/")
+        parsed = urlparse(text)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("Enter a full NodeSparkHub URL, for example http://192.168.1.100:8787")
+        return text
+
+    @staticmethod
+    def _selected_model_name(values: dict[str, Any]) -> str:
+        for key in ("selectedModel", "defaultModel", "aiModel", "model", "modelName"):
+            value = values.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+            if isinstance(value, dict):
+                name = value.get("name") or value.get("id") or value.get("model")
+                if isinstance(name, str) and name.strip():
+                    return name.strip()
+        return ""

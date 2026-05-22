@@ -20,6 +20,17 @@ const commandSubmit = document.getElementById("commandSubmit");
 const hubStatus = document.getElementById("hubStatus");
 const backgroundSelect = document.getElementById("backgroundSelect");
 const voiceSelect = document.getElementById("voiceSelect");
+const hubSetup = document.getElementById("hubSetup");
+const hubSetupStatus = document.getElementById("hubSetupStatus");
+const hubConnectForm = document.getElementById("hubConnectForm");
+const hubUrlInput = document.getElementById("hubUrlInput");
+const hubConnectButton = document.getElementById("hubConnectButton");
+const hubPairForm = document.getElementById("hubPairForm");
+const pairCodeInput = document.getElementById("pairCodeInput");
+const hubPairButton = document.getElementById("hubPairButton");
+const workflowSelect = document.getElementById("workflowSelect");
+const runWorkflowButton = document.getElementById("runWorkflowButton");
+const hubDetail = document.getElementById("hubDetail");
 
 let lastSpeechId = "";
 let recognition = null;
@@ -39,6 +50,7 @@ let speechVisualLock = false;
 let speechReleaseTimer = null;
 let commandSubmitting = false;
 let speechOutputEnabled = false;
+let lastHealth = null;
 const pageParams = new URLSearchParams(window.location.search);
 
 const storageKeys = {
@@ -231,19 +243,68 @@ async function fetchHealth() {
 }
 
 function renderHealth(health) {
+  lastHealth = health;
   if (!hubStatus) return;
   if (!health.hubConfigured) {
     hubStatus.textContent = "Local mode";
     hubStatus.dataset.status = "local";
+    if (hubSetup) hubSetup.open = true;
+    if (hubSetupStatus) hubSetupStatus.textContent = "Local";
+    if (hubDetail) hubDetail.textContent = "NodeSparkHub URL needed";
+    if (hubUrlInput && health.hubUrl) hubUrlInput.value = health.hubUrl;
+    refreshWorkflowOptions(health.favoriteWorkflows || []);
+    return;
+  }
+  if (!health.hubPaired) {
+    hubStatus.textContent = "Pair Hub";
+    hubStatus.dataset.status = "local";
+    if (hubSetupStatus) hubSetupStatus.textContent = "Unpaired";
+    if (hubDetail) hubDetail.textContent = health.hubLastError || "Pair Synra with NodeSparkHub to unlock Hub AI and workflows";
+    if (hubUrlInput) hubUrlInput.value = health.hubUrl || "";
+    if (hubSetup) hubSetup.open = true;
+    refreshWorkflowOptions(health.favoriteWorkflows || []);
     return;
   }
   if (health.hubCanTry === false) {
     hubStatus.textContent = "Hub offline";
     hubStatus.dataset.status = "offline";
+    if (hubSetupStatus) hubSetupStatus.textContent = "Offline";
+    if (hubDetail) hubDetail.textContent = health.hubLastError || "NodeSparkHub unavailable";
+    if (hubUrlInput) hubUrlInput.value = health.hubUrl || "";
+    refreshWorkflowOptions(health.favoriteWorkflows || []);
     return;
   }
-  hubStatus.textContent = "Hub linked";
+  hubStatus.textContent = health.hubPaired ? "Hub linked" : "Hub ready";
   hubStatus.dataset.status = "online";
+  if (hubSetupStatus) hubSetupStatus.textContent = health.hubPaired ? "Linked" : "Ready";
+  if (hubDetail) hubDetail.textContent = `${health.assistantModel || "NodeSparkHub default"} / ${health.defaultWorkflow || "Workflow"}`;
+  if (hubUrlInput) hubUrlInput.value = health.hubUrl || "";
+  if (hubSetup) hubSetup.open = !health.hubPaired;
+  refreshWorkflowOptions(health.favoriteWorkflows || []);
+}
+
+function refreshWorkflowOptions(workflows = []) {
+  if (!workflowSelect) return;
+  const current = workflowSelect.value;
+  const names = [...new Set((workflows.length ? workflows : [lastHealth?.defaultWorkflow || "Synra Assistant"]).filter(Boolean))];
+  workflowSelect.innerHTML = "";
+  names.forEach((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    workflowSelect.append(option);
+  });
+  if (names.includes(current)) workflowSelect.value = current;
+}
+
+async function fetchWorkflows() {
+  try {
+    const response = await fetch("/api/workflows", { cache: "no-store" });
+    const data = await response.json();
+    if (data.ok) refreshWorkflowOptions(data.workflows || []);
+  } catch {
+    refreshWorkflowOptions(lastHealth?.favoriteWorkflows || []);
+  }
 }
 
 function renderState(state) {
@@ -438,6 +499,83 @@ async function submitTypedCommand(event) {
     if (commandInput) commandInput.disabled = false;
     if (commandSubmit) commandSubmit.disabled = false;
     commandInput?.focus();
+  }
+}
+
+async function connectHub(event) {
+  event.preventDefault();
+  const baseUrl = (hubUrlInput?.value || "").trim();
+  if (!baseUrl) {
+    hubUrlInput?.focus();
+    return;
+  }
+  if (hubConnectButton) hubConnectButton.disabled = true;
+  if (hubDetail) hubDetail.textContent = "Connecting...";
+  try {
+    const response = await fetch("/api/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl })
+    });
+    const data = await response.json();
+    if (!data.ok) throw new Error(data.error || "Connection failed");
+    renderHealth(data.health);
+    await fetchWorkflows();
+    await fetchState();
+  } catch (error) {
+    if (hubDetail) hubDetail.textContent = String(error.message || error);
+  } finally {
+    if (hubConnectButton) hubConnectButton.disabled = false;
+  }
+}
+
+async function pairHub(event) {
+  event.preventDefault();
+  const code = (pairCodeInput?.value || "").trim();
+  if (!code) {
+    pairCodeInput?.focus();
+    return;
+  }
+  if (hubPairButton) hubPairButton.disabled = true;
+  if (hubDetail) hubDetail.textContent = "Pairing...";
+  try {
+    const response = await fetch("/api/pair", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code })
+    });
+    const data = await response.json();
+    if (!data.ok) throw new Error(data.error || "Pairing failed");
+    if (pairCodeInput) pairCodeInput.value = "";
+    await fetchHealth();
+    await fetchWorkflows();
+    await fetchState();
+  } catch (error) {
+    if (hubDetail) hubDetail.textContent = String(error.message || error);
+  } finally {
+    if (hubPairButton) hubPairButton.disabled = false;
+  }
+}
+
+async function runSelectedWorkflow() {
+  const workflowName = workflowSelect?.value || lastHealth?.defaultWorkflow || "Synra Assistant";
+  if (!workflowName) return;
+  if (runWorkflowButton) runWorkflowButton.disabled = true;
+  try {
+    await fetch("/api/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: `workflow-${Date.now()}`,
+        type: "runWorkflow",
+        workflowName,
+        text: `Running ${workflowName}.`
+      })
+    });
+    await fetchState();
+    await fetchHealth();
+  } finally {
+    if (runWorkflowButton) runWorkflowButton.disabled = false;
   }
 }
 
@@ -779,6 +917,9 @@ document.querySelectorAll("[data-demo]").forEach((button) => {
 listenButton.addEventListener("click", startVoiceLoop);
 cameraButton.addEventListener("click", activateCameraAndMic);
 commandForm?.addEventListener("submit", submitTypedCommand);
+hubConnectForm?.addEventListener("submit", connectHub);
+hubPairForm?.addEventListener("submit", pairHub);
+runWorkflowButton?.addEventListener("click", runSelectedWorkflow);
 backgroundSelect?.addEventListener("change", () => applyBackground(backgroundSelect.value));
 voiceSelect?.addEventListener("change", () => {
   storageSet(storageKeys.voice, voiceSelect.value);
@@ -796,6 +937,7 @@ enumerateDevices();
 updateMotion();
 fetchState();
 fetchHealth();
+fetchWorkflows();
 setInterval(fetchState, 650);
 setInterval(fetchHealth, 4000);
 

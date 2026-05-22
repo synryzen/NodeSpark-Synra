@@ -28,6 +28,9 @@ class HubClient:
     def configured(self) -> bool:
         return bool(self.base_url)
 
+    def set_base_url(self, base_url: str) -> None:
+        self.base_url = base_url.rstrip("/")
+
     def health(self) -> dict[str, Any]:
         return self._request("GET", "/health", auth=False)
 
@@ -92,7 +95,28 @@ class HubClient:
             "platform": "NVIDIA Jetson Orin Nano / NodeSpark Synra",
             "sessionId": f"synra:{self.device_id}",
             "voice": True,
-            "capabilities": ["avatar", "expressions", "display", "speaker", "microphone", "camera", "workflow"],
+            "assistantMode": "general_and_workflow_operator",
+            "useDefaultModel": True,
+            "modelPreference": "nodesparkhub-default",
+            "intent": _assistant_intent(text),
+            "capabilities": [
+                "generalQuestions",
+                "workflowPlanning",
+                "workflowSetup",
+                "workflowRunRequests",
+                "avatar",
+                "expressions",
+                "display",
+                "speaker",
+                "microphone",
+                "camera",
+                "workflow",
+            ],
+            "systemContext": {
+                "identity": "Synra is the NodeSparkHub monitor AI assistant.",
+                "routing": "Use the NodeSparkHub selected default AI model for general Q&A, workflow help, and workflow setup guidance.",
+                "behavior": "Answer ordinary questions naturally. When the user asks to automate, build, configure, or run a workflow, help clarify inputs and route actions through NodeSparkHub.",
+            },
         }
         return self._request("POST", "/wisp/assistant", json=payload)
 
@@ -148,3 +172,12 @@ class HubClient:
         if isinstance(data, dict):
             return data
         return {"value": data}
+
+
+def _assistant_intent(text: str) -> str:
+    lowered = text.lower()
+    if any(token in lowered for token in ("run", "start", "launch", "execute")) and "workflow" in lowered:
+        return "workflow_run"
+    if any(token in lowered for token in ("workflow", "automate", "automation", "trigger", "integration", "setup", "configure")):
+        return "workflow_help"
+    return "general_question"

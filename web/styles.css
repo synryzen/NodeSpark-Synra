@@ -795,6 +795,25 @@ body {
   justify-content: center;
   gap: 10px;
   z-index: 2;
+  min-height: 0;
+  max-height: calc(100vh - clamp(44px, 6vw, 104px));
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(76, 201, 255, 0.45) rgba(255,255,255,0.05);
+}
+
+.brand-row,
+.mode-strip,
+.message-panel,
+.workflow-card,
+.hub-setup,
+.quick-actions,
+.command-bar,
+.settings-row,
+.device-strip,
+.voice-note {
+  flex-shrink: 0;
 }
 
 .brand-row {
@@ -886,6 +905,97 @@ h1 {
 .workflow-card h3 {
   margin-bottom: 10px;
   font-size: 21px;
+}
+
+.hub-setup {
+  border: 1px solid rgba(76, 201, 255, 0.28);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.035);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.hub-setup summary {
+  min-height: 34px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  list-style: none;
+}
+
+.hub-setup summary::-webkit-details-marker {
+  display: none;
+}
+
+.hub-setup summary span:last-child {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.hub-setup[open] summary {
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.hub-setup-body {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.hub-form,
+.workflow-launcher {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 82px;
+  gap: 8px;
+}
+
+.hub-form input,
+.workflow-launcher select,
+.hub-form button,
+.workflow-launcher button {
+  min-width: 0;
+  min-height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.055);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.hub-form input,
+.workflow-launcher select {
+  padding: 0 10px;
+  outline: none;
+}
+
+.hub-form input:focus,
+.workflow-launcher select:focus {
+  border-color: rgba(76, 201, 255, 0.9);
+  box-shadow: 0 0 0 3px rgba(76, 201, 255, 0.13);
+}
+
+.hub-form button,
+.workflow-launcher button {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.hub-form button:disabled,
+.workflow-launcher button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+#hubDetail {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .progress-track {
@@ -1315,6 +1425,19 @@ h1 {
   .message-panel,
   .workflow-card {
     padding: 14px;
+  }
+
+  .hub-setup summary,
+  .hub-form input,
+  .workflow-launcher select,
+  .hub-form button,
+  .workflow-launcher button {
+    min-height: 31px;
+  }
+
+  .hub-setup-body {
+    gap: 6px;
+    padding: 8px;
   }
 
   .message-panel h2 {
