@@ -8,6 +8,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from . import __version__
+from .system import percent_int, read_status
 
 
 class HubError(RuntimeError):
@@ -47,6 +48,7 @@ class HubClient:
         return self._request("POST", "/pair", json=payload, auth=False)
 
     def checkin(self) -> dict[str, Any]:
+        status = read_status()
         payload = {
             "deviceId": self.device_id,
             "name": self.device_name,
@@ -54,6 +56,10 @@ class HubClient:
             "osVersion": "Linux",
             "appVersion": f"nodespark-synra/{__version__}",
             "firmwareVersion": f"nodespark-synra/{__version__}",
+            "ipAddress": status.ip,
+            "wifiSSID": status.wifi,
+            "batteryPercent": percent_int(status.battery),
+            "temperature": status.temperature,
             "lastStatus": "Synra monitor companion online",
             "capabilities": [
                 "avatar",
