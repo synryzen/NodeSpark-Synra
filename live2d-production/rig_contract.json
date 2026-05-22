@@ -1,0 +1,51 @@
+{
+  "modelName": "NodeSpark Synra",
+  "entryFile": "synra.model3.json",
+  "requiredParameters": [
+    "ParamAngleX",
+    "ParamAngleY",
+    "ParamAngleZ",
+    "ParamBodyAngleX",
+    "ParamEyeBallX",
+    "ParamEyeBallY",
+    "ParamMouthOpenY",
+    "ParamMouthForm",
+    "ParamBreath"
+  ],
+  "requiredExpressions": [
+    "neutral",
+    "happy",
+    "attentive",
+    "focused",
+    "curious",
+    "concerned",
+    "wink"
+  ],
+  "requiredMotionGroups": [
+    "idle",
+    "listen",
+    "think",
+    "talk",
+    "success",
+    "concerned",
+    "approval"
+  ],
+  "stateMap": {
+    "idle": { "motion": "idle", "expression": "neutral" },
+    "listening": { "motion": "listen", "expression": "attentive" },
+    "thinking": { "motion": "think", "expression": "focused" },
+    "workflow_running": { "motion": "think", "expression": "focused" },
+    "speaking": { "motion": "talk" },
+    "success": { "motion": "success", "expression": "happy" },
+    "warning": { "motion": "concerned", "expression": "concerned" },
+    "error": { "motion": "concerned", "expression": "concerned" },
+    "approval_needed": { "motion": "approval", "expression": "curious" }
+  },
+  "performanceBudget": {
+    "targetDevice": "NVIDIA Jetson Orin Nano",
+    "targetFps": 30,
+    "maxTextureSize": 4096,
+    "preferTextureAtlases": 2,
+    "notes": "Keep physics stable and avoid excessive high-resolution texture atlases."
+  }
+}

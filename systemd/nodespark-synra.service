@@ -1,0 +1,15 @@
+[Unit]
+Description=NodeSpark Synra monitor companion
+After=network-online.target graphical-session.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/nodespark-synra
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/nodespark-synra/.venv/bin/nodespark-synra --config /etc/nodespark-synra/config.toml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

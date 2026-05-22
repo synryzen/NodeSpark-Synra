@@ -1,0 +1,135 @@
+{
+  "canvas": {
+    "width": 4096,
+    "height": 6144,
+    "framing": "waist-up adult anime operator, extra margin for hair and arm motion"
+  },
+  "groups": [
+    {
+      "name": "00_reference",
+      "layers": ["reference_flattened_synra", "safe_area_guides"]
+    },
+    {
+      "name": "10_back_hair",
+      "layers": [
+        "hair_back_mass",
+        "hair_back_shadow",
+        "hair_left_long_strand_01",
+        "hair_left_long_strand_02",
+        "hair_right_long_strand_01",
+        "hair_right_long_strand_02",
+        "hair_back_highlights"
+      ]
+    },
+    {
+      "name": "20_body",
+      "layers": [
+        "torso_skin",
+        "neck",
+        "shoulder_left",
+        "shoulder_right",
+        "arm_left_upper",
+        "arm_left_forearm",
+        "hand_left",
+        "arm_right_upper",
+        "arm_right_forearm",
+        "hand_right"
+      ]
+    },
+    {
+      "name": "30_outfit",
+      "layers": [
+        "shirt_base_black",
+        "shirt_left_panel",
+        "shirt_right_panel",
+        "shirt_buttons",
+        "collar_left",
+        "collar_right",
+        "lace_trim_left",
+        "lace_trim_right",
+        "sleeve_left_folds",
+        "sleeve_right_folds",
+        "belt",
+        "nodespark_logo_patch"
+      ]
+    },
+    {
+      "name": "40_head",
+      "layers": [
+        "face_base",
+        "ear_left",
+        "ear_right",
+        "nose_soft_shadow",
+        "cheek_blush_left",
+        "cheek_blush_right",
+        "face_highlight"
+      ]
+    },
+    {
+      "name": "50_eyes",
+      "layers": [
+        "eye_left_white",
+        "eye_left_iris_violet",
+        "eye_left_pupil",
+        "eye_left_highlight_big",
+        "eye_left_highlight_small",
+        "eye_left_upper_lid",
+        "eye_left_lower_lid",
+        "eye_left_lashes",
+        "eye_right_white",
+        "eye_right_iris_violet",
+        "eye_right_pupil",
+        "eye_right_highlight_big",
+        "eye_right_highlight_small",
+        "eye_right_upper_lid",
+        "eye_right_lower_lid",
+        "eye_right_lashes",
+        "brow_left",
+        "brow_right"
+      ]
+    },
+    {
+      "name": "60_mouth",
+      "layers": [
+        "mouth_line_closed",
+        "mouth_smile",
+        "mouth_frown",
+        "mouth_inner_shadow",
+        "mouth_teeth",
+        "mouth_tongue",
+        "mouth_shape_a",
+        "mouth_shape_i",
+        "mouth_shape_e",
+        "mouth_shape_o",
+        "mouth_shape_u"
+      ]
+    },
+    {
+      "name": "70_front_hair",
+      "layers": [
+        "bang_center",
+        "bang_left",
+        "bang_right",
+        "side_hair_left_front",
+        "side_hair_right_front",
+        "loose_strand_left_01",
+        "loose_strand_left_02",
+        "loose_strand_right_01",
+        "loose_strand_right_02",
+        "front_hair_highlights"
+      ]
+    },
+    {
+      "name": "80_accessories",
+      "layers": [
+        "earring_left_gem",
+        "earring_right_gem",
+        "choker_band",
+        "choker_gem",
+        "necklace_chain",
+        "necklace_pendant",
+        "purple_gem_highlights"
+      ]
+    }
+  ]
+}

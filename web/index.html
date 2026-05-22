@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NodeSpark Synra</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/assets/vendor/three/three.module.min.js",
+          "three/addons/": "/assets/vendor/three/examples/jsm/",
+          "@pixiv/three-vrm": "/assets/vendor/three-vrm/lib/three-vrm.module.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="synra-stage" data-mode="idle" data-expression="soft_smile" data-presence="sleeping">
+      <section class="avatar-zone" aria-label="NodeSpark Synra">
+        <div class="avatar-shell">
+          <div class="avatar3d-layer" id="avatar3dLayer" aria-label="NodeSpark Synra 3D avatar">
+            <canvas id="synraAvatar3DCanvas"></canvas>
+            <div class="avatar3d-status-pill" id="avatar3dStatus">3D avatar starting</div>
+          </div>
+          <video id="presenceVideo" class="presence-video" muted playsinline></video>
+          <svg class="synra-portrait" viewBox="0 0 720 1000" role="img" aria-labelledby="synraTitle synraDesc">
+            <title id="synraTitle">NodeSpark Synra anime assistant</title>
+            <desc id="synraDesc">An original adult anime-style woman with dark hair, cyan eyes, a sleek NodeSpark jacket, and expressive assistant states.</desc>
+            <defs>
+              <radialGradient id="skinGlow" cx="42%" cy="24%" r="76%">
+                <stop offset="0%" stop-color="#fff0e6" />
+                <stop offset="54%" stop-color="#f2b8ad" />
+                <stop offset="100%" stop-color="#c98691" />
+              </radialGradient>
+              <linearGradient id="hairInk" x1="19%" y1="5%" x2="76%" y2="94%">
+                <stop offset="0%" stop-color="#27314b" />
+                <stop offset="42%" stop-color="#0b0d17" />
+                <stop offset="100%" stop-color="#05050b" />
+              </linearGradient>
+              <linearGradient id="hairShine" x1="10%" y1="4%" x2="86%" y2="96%">
+                <stop offset="0%" stop-color="#70f1ff" stop-opacity="0.78" />
+                <stop offset="42%" stop-color="#5b6cff" stop-opacity="0.18" />
+                <stop offset="100%" stop-color="#ff4d8d" stop-opacity="0.2" />
+              </linearGradient>
+              <linearGradient id="suitMain" x1="28%" y1="4%" x2="74%" y2="94%">
+                <stop offset="0%" stop-color="#1b2339" />
+                <stop offset="58%" stop-color="#070910" />
+                <stop offset="100%" stop-color="#030407" />
+              </linearGradient>
+              <linearGradient id="cyanEdge" x1="5%" y1="0%" x2="93%" y2="100%">
+                <stop offset="0%" stop-color="#67f5ff" />
+                <stop offset="52%" stop-color="#4b7cff" />
+                <stop offset="100%" stop-color="#a956ff" />
+              </linearGradient>
+              <radialGradient id="eyeGlow" cx="48%" cy="48%" r="72%">
+                <stop offset="0%" stop-color="#faffff" />
+                <stop offset="18%" stop-color="#83f7ff" />
+                <stop offset="50%" stop-color="#3485ff" />
+                <stop offset="82%" stop-color="#26144c" />
+                <stop offset="100%" stop-color="#080715" />
+              </radialGradient>
+              <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+                <feGaussianBlur stdDeviation="7" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
+            <g class="aura-lines" opacity="0.78">
+              <path d="M106 627 C157 557 202 517 257 498" />
+              <path d="M614 625 C563 555 516 517 462 497" />
+              <path d="M166 830 C250 774 465 774 553 830" />
+            </g>
+
+            <g class="back-hair">
+              <path d="M358 88 C242 92 172 175 158 312 C143 456 75 604 111 791 C142 955 587 958 614 792 C643 615 576 449 562 313 C548 174 476 86 358 88 Z" />
+              <path class="hair-gloss broad" d="M270 117 C210 195 204 330 219 474 C237 642 180 735 215 861" />
+              <path class="hair-gloss" d="M456 121 C521 219 513 386 493 517 C468 679 529 755 493 870" />
+            </g>
+
+            <g class="body-layer">
+              <path class="shadow" d="M185 924 C221 744 259 626 357 626 C459 626 504 744 540 924 Z" />
+              <path class="left-arm" d="M231 638 C161 694 121 789 101 922 L202 922 C216 811 251 727 307 674 Z" />
+              <path class="right-arm" d="M489 638 C559 694 599 789 619 922 L518 922 C504 811 469 727 413 674 Z" />
+              <path class="jacket" d="M175 924 C202 739 265 612 357 612 C451 612 515 739 543 924 Z" />
+              <path class="torso" d="M250 914 C258 764 290 666 357 647 C427 666 459 764 467 914 Z" />
+              <path class="collar left" d="M303 619 L230 700 L316 747 L354 655 Z" />
+              <path class="collar right" d="M411 619 L485 700 L398 747 L360 655 Z" />
+              <path class="bodice" d="M284 730 C309 704 407 704 431 730 C418 788 405 858 399 925 L315 925 C310 858 297 788 284 730 Z" />
+              <g class="node-core" filter="url(#softGlow)">
+                <circle cx="357" cy="768" r="39" />
+                <circle cx="335" cy="752" r="6" />
+                <circle cx="383" cy="746" r="6" />
+                <circle cx="360" cy="791" r="6" />
+                <path d="M335 752 L383 746 L360 791 Z" />
+              </g>
+            </g>
+
+            <g class="neck-layer">
+              <path class="neck" d="M319 520 L400 520 L413 654 C390 680 328 680 304 654 Z" />
+              <path class="neck-shadow" d="M316 548 C339 574 383 574 406 548 L410 616 C384 638 333 638 309 616 Z" />
+            </g>
+
+            <g class="head-layer">
+              <path class="side-lock left" d="M223 210 C156 331 173 494 233 642 C256 553 256 432 239 343 C231 298 236 250 263 205 Z" />
+              <path class="side-lock right" d="M496 207 C565 329 547 494 487 642 C464 553 464 432 481 343 C489 298 484 250 457 205 Z" />
+              <path class="face" d="M359 151 C281 151 228 220 227 329 C227 419 265 505 323 546 C344 561 376 561 397 546 C455 505 493 419 493 329 C492 220 438 151 359 151 Z" />
+              <path class="blush left" d="M257 398 C283 386 306 389 320 405 C296 422 272 420 257 398 Z" />
+              <path class="blush right" d="M462 398 C436 386 414 389 400 405 C423 422 447 420 462 398 Z" />
+              <path class="nose" d="M363 362 C356 388 351 409 364 416" />
+            </g>
+
+            <g class="headset-layer">
+              <path class="band" d="M230 287 C235 165 287 103 359 103 C432 103 484 165 490 287" />
+              <g class="ear left">
+                <path d="M201 296 C191 248 209 206 246 190 C264 211 265 303 245 343 C221 342 207 326 201 296 Z" />
+                <circle cx="234" cy="271" r="23" />
+              </g>
+              <g class="ear right">
+                <path d="M518 296 C529 248 510 206 473 190 C455 211 454 303 475 343 C498 342 512 326 518 296 Z" />
+                <circle cx="486" cy="271" r="23" />
+              </g>
+            </g>
+
+            <g class="front-hair">
+              <path d="M213 244 C245 135 304 95 363 96 C431 97 484 143 509 246 C467 215 430 192 392 180 C371 201 339 248 311 318 C306 265 303 222 309 182 C268 195 237 217 213 244 Z" />
+              <path class="bang left" d="M309 158 C285 197 265 252 255 335 C289 296 319 240 336 169 Z" />
+              <path class="bang mid" d="M360 147 C335 207 327 278 343 359 C381 296 396 218 390 154 Z" />
+              <path class="bang right" d="M420 166 C443 209 464 267 470 337 C434 296 405 239 391 170 Z" />
+              <path class="highlight" d="M279 145 C250 197 240 268 244 335" />
+              <path class="highlight right" d="M455 150 C481 211 484 282 476 342" />
+            </g>
+
+            <g class="face-detail">
+              <g class="brows">
+                <path class="brow left" d="M270 321 C299 306 326 306 349 320" />
+                <path class="brow right" d="M374 320 C399 306 426 306 452 321" />
+              </g>
+              <g class="eyes">
+                <g class="eye left-eye">
+                  <path class="lash" d="M259 358 C278 328 329 327 352 358 C331 382 282 383 259 358 Z" />
+                  <ellipse class="iris" cx="306" cy="358" rx="22" ry="28" />
+                  <circle class="pupil" cx="309" cy="361" r="10" />
+                  <circle class="shine big" cx="296" cy="344" r="7" />
+                  <circle class="shine small" cx="318" cy="370" r="3" />
+                </g>
+                <g class="eye right-eye">
+                  <path class="lash" d="M367 358 C390 328 441 327 461 358 C438 383 390 382 367 358 Z" />
+                  <ellipse class="iris" cx="414" cy="358" rx="22" ry="28" />
+                  <circle class="pupil" cx="411" cy="361" r="10" />
+                  <circle class="shine big" cx="424" cy="344" r="7" />
+                  <circle class="shine small" cx="402" cy="370" r="3" />
+                </g>
+              </g>
+              <g class="mouths">
+                <path class="mouth idle" d="M341 463 C352 475 371 475 382 463" />
+                <path class="mouth talk" d="M343 456 C353 444 373 444 382 456 C379 488 346 488 343 456 Z" />
+                <path class="mouth concerned" d="M343 474 C354 462 371 462 382 474" />
+              </g>
+            </g>
+
+            <g class="spark-accessories">
+              <path class="choker" d="M312 589 C338 606 383 606 408 589" />
+              <path class="node-line" d="M235 722 C283 756 310 802 321 909" />
+              <path class="node-line right" d="M480 722 C431 756 405 802 394 909" />
+              <circle class="spark" cx="205" cy="620" r="5" />
+              <circle class="spark" cx="516" cy="618" r="5" />
+              <circle class="spark" cx="357" cy="936" r="7" />
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <aside class="status-zone">
+        <div class="brand-row">
+          <div class="spark-mark"></div>
+          <div>
+            <p>NodeSpark</p>
+            <h1>Synra</h1>
+          </div>
+        </div>
+
+        <div class="mode-strip" id="modeStrip">
+          <span>idle</span>
+          <span>listening</span>
+          <span>thinking</span>
+          <span>speaking</span>
+        </div>
+
+        <article class="message-panel">
+          <p class="eyebrow" id="stateLabel">Synra online</p>
+          <h2 id="messageText">NodeSparkHub is waiting for a workflow.</h2>
+          <p id="subtitleText">Ready</p>
+        </article>
+
+        <article class="workflow-card" id="card">
+          <div>
+            <p class="eyebrow" id="cardStyle">info</p>
+            <h3 id="cardTitle">NodeSparkHub</h3>
+          </div>
+          <p id="cardBody">Synra is ready.</p>
+          <p id="cardDetail">Waiting for your next command.</p>
+          <div class="progress-track" aria-hidden="true">
+            <span id="progressBar"></span>
+          </div>
+        </article>
+
+        <div class="quick-actions">
+          <button id="listenButton">Talk</button>
+          <button id="cameraButton">Cam</button>
+          <button data-demo="thinking">Think</button>
+          <button data-demo="workflow_running">Run</button>
+          <button data-demo="speaking">Speak</button>
+          <button data-demo="confused">?</button>
+          <button data-demo="sad">!</button>
+          <button data-demo="success">Done</button>
+          <button data-demo="look_left">←</button>
+          <button data-demo="look_right">→</button>
+          <button data-demo="look_up">↑</button>
+          <button data-demo="look_down">↓</button>
+        </div>
+        <form class="command-bar" id="commandForm">
+          <input id="commandInput" autocomplete="off" spellcheck="true" placeholder="Ask Synra" />
+          <button id="commandSubmit" type="submit">Ask</button>
+        </form>
+        <div class="device-strip" aria-live="polite">
+          <span id="micStatus">Mic checking</span>
+          <span id="cameraStatus">Cam checking</span>
+          <span id="hubStatus">Hub checking</span>
+        </div>
+        <p class="voice-note" id="voiceNote">Voice loop ready</p>
+      </aside>
+    </main>
+
+    <script type="module" src="/avatar3d-driver.js?v=20260522-relaxed-idle-1"></script>
+    <script src="/app.js?v=20260522-relaxed-idle-1"></script>
+  </body>
+</html>

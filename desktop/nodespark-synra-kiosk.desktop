@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=NodeSpark Synra Kiosk
+Comment=Launch the NodeSpark Synra monitor UI in full-screen browser mode
+Exec=/opt/nodespark-synra/scripts/launch_kiosk.sh http://127.0.0.1:8788
+Terminal=false
+X-GNOME-Autostart-enabled=true

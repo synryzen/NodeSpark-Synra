@@ -1,0 +1,13 @@
+[project]
+name = "nodespark-synra"
+version = "0.1.0"
+description = "NodeSpark Synra Jetson monitor companion for NodeSparkHub"
+requires-python = ">=3.10"
+dependencies = [
+]
+
+[project.scripts]
+nodespark-synra = "nodespark_synra.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

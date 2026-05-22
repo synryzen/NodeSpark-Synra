@@ -1,0 +1,24 @@
+[hub]
+base_url = "http://192.168.1.100:8787"
+default_workflow = "Synra Assistant"
+favorite_workflows = ["Synra Assistant"]
+
+[device]
+name = "NodeSpark Synra"
+checkin_interval_seconds = 60
+command_poll_interval_seconds = 2
+
+[server]
+host = "0.0.0.0"
+port = 8788
+open_browser = false
+
+[avatar]
+name = "Synra"
+personality = "Confident, warm, playful, and workflow-smart."
+accent_primary = "#4cc9ff"
+accent_secondary = "#9b5cff"
+accent_success = "#40f0a0"
+accent_warning = "#ffd166"
+accent_error = "#ff4d6d"
+
