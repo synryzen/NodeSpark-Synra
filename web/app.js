@@ -49,21 +49,25 @@ const voicePresets = {
     rate: 1.02,
     pitch: 1.26,
     volume: 1,
-    match: /samantha|zira|google us english|female|english/i
+    match: /samantha|victoria|ava|jenny|aria|zira|female|natural/i
   },
   soft: {
     rate: 0.94,
     pitch: 1.12,
     volume: 0.94,
-    match: /samantha|google uk english female|zira|female|english/i
+    match: /samantha|victoria|ava|allison|susan|karen|zira|female|natural/i
   },
   calm: {
-    rate: 0.88,
-    pitch: 0.98,
+    rate: 0.9,
+    pitch: 1.08,
     volume: 0.96,
-    match: /daniel|alex|google uk english male|english/i
+    match: /victoria|samantha|ava|jenny|aria|female|natural/i
   }
 };
+
+const naturalFemaleVoiceNames = /allison|aria|ava|catherine|fiona|joana|joanna|jenny|karen|kathy|kendra|kimberly|lisa|moira|nicky|samantha|sara|serena|susan|tessa|veena|victoria|zira|zoe|female/i;
+const unnaturalVoiceNames = /albert|bad news|bahh|bells|boing|bubbles|cellos|deranged|eddy|fred|good news|hysterical|junior|organ|pipe organ|princess|ralph|rocko|shelley|superstar|trinoids|whisper|wobble|zarvox|robot|novelty|compact/i;
+const maleVoiceNames = /aaron|alex|arthur|bruce|daniel|david|diego|eddy|fred|george|grandpa|jacques|jorge|juan|lee|liam|lucas|mark|martin|nathan|oliver|paul|reed|rishi|rocko|sandy|thomas|tom|xander|yuri|male/i;
 
 const demoText = {
   listening: "I’m listening. Tell me what you want NodeSparkHub to do.",
@@ -124,12 +128,29 @@ function availableVoices() {
   return "speechSynthesis" in window ? window.speechSynthesis.getVoices() : [];
 }
 
+function voiceLabel(voice) {
+  return `${voice.name || ""} ${voice.voiceURI || ""} ${voice.lang || ""}`.trim();
+}
+
+function isNaturalFemaleVoice(voice) {
+  const label = voiceLabel(voice);
+  return (
+    voice.lang?.toLowerCase().startsWith("en") &&
+    naturalFemaleVoiceNames.test(label) &&
+    !maleVoiceNames.test(label) &&
+    !unnaturalVoiceNames.test(label)
+  );
+}
+
 function populateVoiceSelect() {
   if (!voiceSelect) return;
   const selected = storageGet(storageKeys.voice, "cute");
+  [...voiceSelect.options].forEach((option) => {
+    if (option.value.startsWith("voice:")) option.remove();
+  });
   const existingVoiceValues = new Set([...voiceSelect.options].map((option) => option.value));
   availableVoices()
-    .filter((voice) => voice.lang?.toLowerCase().startsWith("en"))
+    .filter(isNaturalFemaleVoice)
     .sort((a, b) => a.name.localeCompare(b.name))
     .forEach((voice) => {
       const value = `voice:${voice.voiceURI || voice.name}`;
@@ -141,6 +162,7 @@ function populateVoiceSelect() {
       existingVoiceValues.add(value);
     });
   voiceSelect.value = [...voiceSelect.options].some((option) => option.value === selected) ? selected : "cute";
+  if (voiceSelect.value !== selected) storageSet(storageKeys.voice, voiceSelect.value);
 }
 
 function currentVoicePreference() {
@@ -157,9 +179,10 @@ function applyVoicePreference(utterance) {
   let preferred = null;
   if (preference.startsWith("voice:")) {
     const voiceId = preference.slice("voice:".length);
-    preferred = voices.find((voice) => voice.voiceURI === voiceId || voice.name === voiceId);
+    preferred = voices.find((voice) => (voice.voiceURI === voiceId || voice.name === voiceId) && isNaturalFemaleVoice(voice));
   }
-  preferred ||= voices.find((voice) => preset.match.test(`${voice.name} ${voice.lang}`));
+  preferred ||= voices.find((voice) => isNaturalFemaleVoice(voice) && preset.match.test(voiceLabel(voice)));
+  preferred ||= voices.find(isNaturalFemaleVoice);
   if (preferred) utterance.voice = preferred;
 }
 

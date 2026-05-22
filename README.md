@@ -16,7 +16,7 @@ daemon, and a full-screen kiosk UI for the Jetson Orin Nano developer kit.
 - Human-like idle motion: relaxed stance, small gaze shifts, weight shifts,
   subtle stretches, and delayed yawn behavior.
 - Browser speech output with mouth motion and speaking nods.
-- Cute/soft/calm voice presets with optional browser voice selection.
+- Cute/soft/calm voice presets with natural female browser voice filtering.
 - Browser microphone flow where permissions allow it.
 - Typed command bar for environments where the microphone is blocked.
 - Selectable monitor backgrounds: none, node grid, studio, night city, aurora,
