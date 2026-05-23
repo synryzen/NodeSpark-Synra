@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NodeSpark Synra</title>
-    <link rel="stylesheet" href="/styles.css?v=20260523-appliance-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260523-pairing-1" />
     <script type="importmap">
       {
         "imports": {
@@ -86,6 +86,22 @@
               <input id="pairCodeInput" autocomplete="one-time-code" spellcheck="false" placeholder="Pair code" />
               <button id="hubPairButton" type="submit">Pair</button>
             </form>
+            <div class="pairing-station" id="pairingStation">
+              <div class="pairing-station-head">
+                <span>Pairing Station</span>
+                <span id="pairingAction">Waiting for Hub URL</span>
+              </div>
+              <div class="pairing-device">
+                <span id="pairingDeviceName">NodeSpark Synra</span>
+                <code id="pairingDeviceId">device pending</code>
+              </div>
+              <div class="pairing-tools">
+                <button id="hubOpenButton" type="button">Open Hub</button>
+                <button id="hubCheckButton" type="button">Check</button>
+                <button id="pairingCopyButton" type="button">Copy ID</button>
+              </div>
+              <p id="pairingUriText">Save the Hub URL, then enter a pair code from NodeSparkHub.</p>
+            </div>
             <div class="workflow-launcher">
               <select id="workflowSelect" aria-label="Workflow"></select>
               <button id="runWorkflowButton" type="button">Run</button>
@@ -192,7 +208,7 @@
       </aside>
     </main>
 
-    <script type="module" src="/avatar3d-driver.js?v=20260523-appliance-1"></script>
-    <script src="/app.js?v=20260523-appliance-1"></script>
+    <script type="module" src="/avatar3d-driver.js?v=20260523-pairing-1"></script>
+    <script src="/app.js?v=20260523-pairing-1"></script>
   </body>
 </html>

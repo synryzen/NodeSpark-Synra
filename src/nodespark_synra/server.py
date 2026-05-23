@@ -37,6 +37,9 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/memory":
             self._json({"ok": True, "memory": self.server.app.public_memory()})
             return
+        if path == "/api/pairing":
+            self._json({"ok": True, "pairing": self.server.app.pairing_snapshot()})
+            return
         if path == "/api/workflows":
             self._json({"ok": True, "workflows": self.server.app.list_workflows()})
             return
@@ -78,6 +81,9 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
                 self._json({"ok": True, "health": health})
             except Exception as exc:
                 self._json({"ok": False, "error": str(exc)}, status=400)
+            return
+        if path == "/api/hub/check":
+            self._json({"ok": True, "diagnostics": self.server.app.hub_diagnostics()})
             return
         if path == "/api/pair":
             code = str(payload.get("code") or "")

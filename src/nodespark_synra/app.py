@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import time
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from .assistant_router import classify_assistant_request, extract_preferred_name
 from .config import AppConfig, StateStore
@@ -126,6 +126,7 @@ class SynraApp:
             "memory": self.public_memory(),
             "uiSettings": self.store.ui_settings,
             "privacy": self.privacy_snapshot(),
+            "pairing": self.pairing_snapshot(),
         }
 
     def public_memory(self) -> dict[str, Any]:
@@ -154,6 +155,69 @@ class SynraApp:
             "hubRequiredForWorkflows": True,
             "memoryStoredLocally": True,
         }
+
+    def pairing_snapshot(self) -> dict[str, Any]:
+        params = {
+            "deviceId": self.store.device_id,
+            "name": self.cfg.device.name,
+            "hub": self.cfg.hub.base_url,
+            "platform": "NodeSpark Synra",
+        }
+        if not self.hub.configured():
+            status = "hub_url_needed"
+            next_action = "Save the NodeSparkHub URL for this monitor."
+        elif not self.store.token:
+            status = "pair_code_needed"
+            next_action = "Create a pair code in NodeSparkHub, then enter it here."
+        elif not self.hub_can_try():
+            status = "hub_check_needed"
+            next_action = self.hub_offline_detail() or "Check the Hub connection."
+        else:
+            status = "linked"
+            next_action = "Synra is paired and ready for Hub AI and workflows."
+        return {
+            "deviceId": self.store.device_id,
+            "deviceName": self.cfg.device.name,
+            "hubUrl": self.cfg.hub.base_url,
+            "paired": bool(self.store.token),
+            "canPair": self.hub.configured() and not bool(self.store.token),
+            "status": status,
+            "nextAction": next_action,
+            "pairingUri": f"nodesparkhub-device://pair?{urlencode(params)}",
+        }
+
+    def hub_diagnostics(self) -> dict[str, Any]:
+        snapshot = self.health_snapshot()
+        result: dict[str, Any] = {
+            "configured": self.hub.configured(),
+            "paired": bool(self.store.token),
+            "url": self.cfg.hub.base_url,
+            "reachable": False,
+            "detail": self.hub_offline_detail(),
+            "health": {},
+            "snapshot": snapshot,
+        }
+        if not self.hub.configured():
+            result["detail"] = "NodeSparkHub URL is not configured."
+            return result
+        try:
+            health = self.hub.health()
+            self._hub_health = health
+            self.mark_hub_ok()
+            result.update({
+                "reachable": True,
+                "detail": "NodeSparkHub health endpoint answered.",
+                "health": health,
+                "snapshot": self.health_snapshot(),
+            })
+        except Exception as exc:
+            self.mark_hub_error(exc)
+            result.update({
+                "reachable": False,
+                "detail": str(exc),
+                "snapshot": self.health_snapshot(),
+            })
+        return result
 
     def setup_status(self) -> dict[str, Any]:
         local_status = self.local_ai.status()

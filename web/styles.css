@@ -1069,6 +1069,106 @@ h1 {
   gap: 8px;
 }
 
+.pairing-station {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid rgba(64, 240, 160, 0.2);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(76, 201, 255, 0.055), transparent 48%),
+    rgba(255,255,255,0.035);
+}
+
+.pairing-station-head,
+.pairing-device,
+.pairing-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.pairing-station-head {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+#pairingAction {
+  max-width: 150px;
+  padding: 4px 7px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 7px;
+  color: #ffe5a3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#pairingAction[data-status="online"] {
+  border-color: rgba(64, 240, 160, 0.34);
+  color: #c9ffd8;
+}
+
+#pairingAction[data-status="local"] {
+  color: #bcd4e8;
+}
+
+.pairing-device span,
+.pairing-device code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pairing-device span {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.pairing-device code {
+  max-width: 210px;
+  color: #c8f1ff;
+  font-size: 10px;
+}
+
+.pairing-tools {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pairing-tools button {
+  min-width: 0;
+  min-height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.055);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.pairing-tools button:disabled {
+  cursor: wait;
+  opacity: 0.56;
+}
+
+#pairingUriText {
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .hub-form input,
 .workflow-launcher select,
 .hub-form button,
@@ -1804,7 +1904,8 @@ h1 {
   .hub-form input,
   .workflow-launcher select,
   .hub-form button,
-  .workflow-launcher button {
+  .workflow-launcher button,
+  .pairing-tools button {
     min-height: 31px;
   }
 

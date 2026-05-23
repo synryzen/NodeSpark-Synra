@@ -31,6 +31,13 @@ const hubConnectButton = document.getElementById("hubConnectButton");
 const hubPairForm = document.getElementById("hubPairForm");
 const pairCodeInput = document.getElementById("pairCodeInput");
 const hubPairButton = document.getElementById("hubPairButton");
+const pairingAction = document.getElementById("pairingAction");
+const pairingDeviceName = document.getElementById("pairingDeviceName");
+const pairingDeviceId = document.getElementById("pairingDeviceId");
+const hubOpenButton = document.getElementById("hubOpenButton");
+const hubCheckButton = document.getElementById("hubCheckButton");
+const pairingCopyButton = document.getElementById("pairingCopyButton");
+const pairingUriText = document.getElementById("pairingUriText");
 const workflowSelect = document.getElementById("workflowSelect");
 const runWorkflowButton = document.getElementById("runWorkflowButton");
 const hubDetail = document.getElementById("hubDetail");
@@ -422,6 +429,7 @@ function renderHealth(health) {
   renderSetup(health.setup, health);
   renderCoreStatus(health);
   renderSetupGuide(health.setup, health);
+  renderPairingStation(health);
   renderMemory(health.memory || {});
   if (!hubStatus) return;
   if (!health.hubConfigured) {
@@ -463,6 +471,32 @@ function renderHealth(health) {
   if (hubUrlInput) hubUrlInput.value = health.hubUrl || "";
   if (hubSetup) hubSetup.open = !health.hubPaired;
   refreshWorkflowOptions(health.favoriteWorkflows || []);
+}
+
+function renderPairingStation(health = lastHealth) {
+  const pairing = health?.pairing || {};
+  const paired = Boolean(health?.hubPaired);
+  const configured = Boolean(health?.hubConfigured);
+  if (pairingAction) {
+    pairingAction.textContent = paired
+      ? "Linked"
+      : configured
+        ? "Pair code needed"
+        : "Hub URL needed";
+    pairingAction.dataset.status = paired ? "online" : configured ? "todo" : "local";
+  }
+  if (pairingDeviceName) pairingDeviceName.textContent = pairing.deviceName || health?.deviceName || "NodeSpark Synra";
+  if (pairingDeviceId) pairingDeviceId.textContent = pairing.deviceId || health?.deviceId || "device pending";
+  if (pairingUriText) {
+    pairingUriText.textContent = pairing.nextAction || "Save the Hub URL, then enter a pair code from NodeSparkHub.";
+    pairingUriText.title = pairing.pairingUri || "";
+  }
+  if (hubOpenButton) {
+    hubOpenButton.disabled = !configured;
+    hubOpenButton.title = configured ? (health.hubUrl || "") : "Save the Hub URL first.";
+  }
+  if (hubCheckButton) hubCheckButton.disabled = !configured;
+  if (pairingCopyButton) pairingCopyButton.disabled = !(pairing.deviceId || health?.deviceId);
 }
 
 function renderCoreStatus(health = lastHealth) {
@@ -1084,6 +1118,10 @@ async function connectHub(event) {
     const data = await response.json();
     if (!data.ok) throw new Error(data.error || "Connection failed");
     renderHealth(data.health);
+    pushActivity(
+      { mode: "success", expression: "attentive", subtitle: "Hub URL", message: "NodeSparkHub URL saved." },
+      { title: "Hub URL", style: "success" }
+    );
     await fetchWorkflows();
     await fetchState();
   } catch (error) {
@@ -1111,6 +1149,10 @@ async function pairHub(event) {
     const data = await response.json();
     if (!data.ok) throw new Error(data.error || "Pairing failed");
     if (pairCodeInput) pairCodeInput.value = "";
+    pushActivity(
+      { mode: "success", expression: "bright", subtitle: "Pairing", message: "Synra linked to NodeSparkHub." },
+      { title: "Pairing", style: "success" }
+    );
     await fetchHealth();
     await fetchWorkflows();
     await fetchState();
@@ -1118,6 +1160,53 @@ async function pairHub(event) {
     if (hubDetail) hubDetail.textContent = String(error.message || error);
   } finally {
     if (hubPairButton) hubPairButton.disabled = false;
+  }
+}
+
+async function checkHubConnection() {
+  if (hubCheckButton) hubCheckButton.disabled = true;
+  if (hubDetail) hubDetail.textContent = "Checking NodeSparkHub...";
+  try {
+    const data = await postJson("/api/hub/check", {});
+    const diagnostics = data.diagnostics || {};
+    if (diagnostics.snapshot) renderHealth(diagnostics.snapshot);
+    await setRemoteState({
+      mode: diagnostics.reachable ? "success" : "warning",
+      expression: diagnostics.reachable ? "bright" : "concerned",
+      message: diagnostics.reachable ? "NodeSparkHub answered the check." : "I saved the Hub URL, but the health check did not answer.",
+      subtitle: "Hub check",
+      card: {
+        title: diagnostics.reachable ? "Hub Reachable" : "Hub Check",
+        body: diagnostics.url || "NodeSparkHub",
+        detail: diagnostics.detail || "Check complete",
+        style: diagnostics.reachable ? "success" : "warning"
+      }
+    });
+  } catch (error) {
+    await showPanelError("Hub Check Error", "I could not complete the Hub check.", String(error.message || error));
+  } finally {
+    if (hubCheckButton) hubCheckButton.disabled = false;
+  }
+}
+
+function openHub() {
+  const url = (lastHealth?.hubUrl || hubUrlInput?.value || "").trim();
+  if (!url) {
+    hubUrlInput?.focus();
+    return;
+  }
+  window.open(url, "_blank", "noopener");
+}
+
+async function copyPairingId() {
+  const pairing = lastHealth?.pairing || {};
+  const text = pairing.pairingUri || pairing.deviceId || lastHealth?.deviceId || "";
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    if (pairingUriText) pairingUriText.textContent = "Pairing identity copied.";
+  } catch {
+    if (pairingUriText) pairingUriText.textContent = text;
   }
 }
 
@@ -1567,6 +1656,9 @@ visionButton?.addEventListener("click", askWithVision);
 commandForm?.addEventListener("submit", submitTypedCommand);
 hubConnectForm?.addEventListener("submit", connectHub);
 hubPairForm?.addEventListener("submit", pairHub);
+hubOpenButton?.addEventListener("click", openHub);
+hubCheckButton?.addEventListener("click", checkHubConnection);
+pairingCopyButton?.addEventListener("click", copyPairingId);
 memoryForm?.addEventListener("submit", saveMemory);
 memoryClearButton?.addEventListener("click", clearMemory);
 runWorkflowButton?.addEventListener("click", runSelectedWorkflow);
