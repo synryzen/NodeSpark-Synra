@@ -63,6 +63,93 @@ function actionEnvelope(progress, fadeIn = 0.16, fadeOut = 0.18) {
   return smoothstep(0, fadeIn, progress) * (1 - smoothstep(1 - fadeOut, 1, progress));
 }
 
+function createHandCueTexture(kind) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 192;
+  canvas.height = 220;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  const skin = "#ffd4e5";
+  const shadow = "rgba(202, 117, 150, 0.5)";
+  const line = kind === "back" ? "rgba(116, 54, 92, 0.34)" : "rgba(255, 250, 255, 0.45)";
+
+  ctx.save();
+  ctx.translate(96, 120);
+  ctx.rotate(kind === "back" ? -0.18 : 0.06);
+  ctx.fillStyle = skin;
+  ctx.strokeStyle = shadow;
+  ctx.lineWidth = 4;
+
+  const fingers = [
+    { x: -42, y: -60, w: 18, h: 86, r: -0.36 },
+    { x: -17, y: -74, w: 18, h: 96, r: -0.12 },
+    { x: 9, y: -74, w: 18, h: 94, r: 0.08 },
+    { x: 35, y: -60, w: 17, h: 78, r: 0.28 }
+  ];
+  fingers.forEach((finger) => {
+    ctx.save();
+    ctx.translate(finger.x, finger.y);
+    ctx.rotate(finger.r);
+    roundRect(ctx, -finger.w / 2, -finger.h / 2, finger.w, finger.h, 9);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  ctx.save();
+  ctx.translate(kind === "back" ? 47 : 50, 10);
+  ctx.rotate(kind === "back" ? -0.78 : -0.68);
+  roundRect(ctx, -9, -35, 18, 70, 9);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  roundRect(ctx, -47, -24, 94, 90, 36);
+  ctx.fill();
+  ctx.stroke();
+
+  if (kind === "back") {
+    ctx.strokeStyle = line;
+    ctx.lineWidth = 3;
+    [-25, 0, 25].forEach((x) => {
+      ctx.beginPath();
+      ctx.moveTo(x, -18);
+      ctx.quadraticCurveTo(x + 7, 8, x - 2, 32);
+      ctx.stroke();
+    });
+  } else {
+    ctx.strokeStyle = line;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 18, 26, 0.15, Math.PI - 0.15);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function roundRect(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
 function synraVrmUrl() {
   const candidate = new URLSearchParams(window.location.search).get("vrm");
   if (!candidate) return DEFAULT_SYNRA_VRM_URL;
@@ -150,6 +237,10 @@ class SynraAvatar3DController {
     this.nextIdleActionAt = 10 + Math.random() * 7;
     this.yawnCover = null;
     this.yawnCoverMaterials = [];
+    this.wavePalm = null;
+    this.wavePalmMaterial = null;
+    this.yawnHand = null;
+    this.yawnHandMaterial = null;
   }
 
   async boot() {
@@ -225,6 +316,7 @@ class SynraAvatar3DController {
       this.sculptSynraSilhouette();
       this.addSynraShirtDetail();
       this.addYawnCoverProp();
+      this.addHandCueSprites();
       this.frameModel();
       this.scene.add(this.vrm.scene);
     } catch (error) {
@@ -479,6 +571,44 @@ class SynraAvatar3DController {
     group.visible = false;
     head.add(group);
     this.yawnCover = group;
+  }
+
+  addHandCueSprites() {
+    if (!this.vrm?.scene) return;
+    const rightHand = this.vrm.humanoid?.getNormalizedBoneNode?.("rightHand");
+    const head = this.vrm.humanoid?.getNormalizedBoneNode?.("head");
+
+    if (rightHand) {
+      this.wavePalmMaterial = new THREE.SpriteMaterial({
+        map: createHandCueTexture("palm"),
+        transparent: true,
+        opacity: 0,
+        depthTest: false,
+        depthWrite: false
+      });
+      this.wavePalm = new THREE.Sprite(this.wavePalmMaterial);
+      this.wavePalm.name = "SynraWavePalmFacingCamera";
+      this.wavePalm.position.set(0.012, -0.004, 0.04);
+      this.wavePalm.scale.set(0.18, 0.205, 1);
+      this.wavePalm.renderOrder = 120;
+      rightHand.add(this.wavePalm);
+    }
+
+    if (head) {
+      this.yawnHandMaterial = new THREE.SpriteMaterial({
+        map: createHandCueTexture("back"),
+        transparent: true,
+        opacity: 0,
+        depthTest: false,
+        depthWrite: false
+      });
+      this.yawnHand = new THREE.Sprite(this.yawnHandMaterial);
+      this.yawnHand.name = "SynraYawnBackOfHandFacingCamera";
+      this.yawnHand.position.set(0.035, -0.07, -0.102);
+      this.yawnHand.scale.set(0.13, 0.15, 1);
+      this.yawnHand.renderOrder = 130;
+      head.add(this.yawnHand);
+    }
   }
 
   gaussian(value, center, width) {
@@ -1003,11 +1133,11 @@ class SynraAvatar3DController {
       const handToMouth = this.pose.handToMouth || 0;
       rightUpperArm.rotation.z = lerp(
         rightUpperArm.rotation.z,
-        -1.36 - this.pose.shoulderLift + this.pose.armOpen * 0.35 + this.pose.rightArmRaise * 0.55 + wave * 0.46 + explain * 0.18 + handToMouth * 0.45,
+        -1.36 - this.pose.shoulderLift + this.pose.armOpen * 0.35 + this.pose.rightArmRaise * 0.55 + wave * 0.5 + explain * 0.18 + handToMouth * 0.45,
         0.08
       );
-      rightUpperArm.rotation.x = lerp(rightUpperArm.rotation.x, -0.045 - this.gesture.y * 0.02 - this.pose.rightArmRaise * 0.2 - wave * 0.55 - explain * 0.16 - handToMouth * 0.12, 0.06);
-      rightUpperArm.rotation.y = lerp(rightUpperArm.rotation.y, -0.13 - this.pose.armOpen * 0.06 - this.pose.rightArmFold * 0.36 - wave * 0.2 - explain * 0.18 - handToMouth * 0.18, 0.06);
+      rightUpperArm.rotation.x = lerp(rightUpperArm.rotation.x, -0.045 - this.gesture.y * 0.02 - this.pose.rightArmRaise * 0.2 - wave * 0.32 - explain * 0.16 - handToMouth * 0.12, 0.06);
+      rightUpperArm.rotation.y = lerp(rightUpperArm.rotation.y, -0.13 - this.pose.armOpen * 0.06 - this.pose.rightArmFold * 0.36 + wave * 0.18 - explain * 0.18 - handToMouth * 0.18, 0.06);
     }
     if (leftLowerArm) {
       const explain = this.pose.explainHands || 0;
@@ -1022,11 +1152,11 @@ class SynraAvatar3DController {
       const waveBeat = Math.sin(elapsed * 9.5) * wave;
       rightLowerArm.rotation.z = lerp(
         rightLowerArm.rotation.z,
-        -0.16 + this.pose.armOpen * 0.08 - this.pose.elbowBend - this.pose.rightArmFold * 0.68 + wave * 1.5 - explain * 0.18 + handToMouth * 2.0,
+        -0.16 + this.pose.armOpen * 0.08 - this.pose.elbowBend - this.pose.rightArmFold * 0.68 + wave * 1.34 - explain * 0.18 + handToMouth * 2.0,
         0.06
       );
-      rightLowerArm.rotation.x = lerp(rightLowerArm.rotation.x, 0.035 - this.pose.rightArmRaise * 0.22 - handToMouth * 0.28 - wave * 0.42, 0.06);
-      rightLowerArm.rotation.y = lerp(rightLowerArm.rotation.y, -0.04 - this.pose.rightArmFold * 0.24 + waveBeat * 0.36 - explain * 0.12 + handToMouth * 0.9, 0.06);
+      rightLowerArm.rotation.x = lerp(rightLowerArm.rotation.x, 0.035 - this.pose.rightArmRaise * 0.22 - handToMouth * 0.28 + wave * 0.18, 0.06);
+      rightLowerArm.rotation.y = lerp(rightLowerArm.rotation.y, -0.04 - this.pose.rightArmFold * 0.24 + waveBeat * 0.42 - wave * 0.35 - explain * 0.12 + handToMouth * 0.9, 0.06);
     }
     if (leftHand) {
       leftHand.rotation.z = lerp(leftHand.rotation.z, -0.13 - this.pose.handToMouth * 0.04, 0.08);
@@ -1038,10 +1168,11 @@ class SynraAvatar3DController {
       const handToMouth = this.pose.handToMouth || 0;
       const waveBeat = Math.sin(elapsed * 11.5) * wave;
       rightHand.rotation.z = lerp(rightHand.rotation.z, 0.09 - handToMouth * 0.38 + waveBeat * 0.46, 0.08);
-      rightHand.rotation.x = lerp(rightHand.rotation.x, -0.035 - handToMouth * 0.58 - wave * 0.2, 0.08);
-      rightHand.rotation.y = lerp(rightHand.rotation.y, -this.pose.wristTwist + 0.035 + handToMouth * 0.45 + waveBeat * 0.24, 0.08);
+      rightHand.rotation.x = lerp(rightHand.rotation.x, -0.035 - handToMouth * 0.58 + wave * 0.28, 0.08);
+      rightHand.rotation.y = lerp(rightHand.rotation.y, -this.pose.wristTwist + 0.035 + handToMouth * 0.45 - wave * 0.58 + waveBeat * 0.24, 0.08);
     }
     this.applyRelaxedFingerPose(elapsed);
+    this.updateHandCueSprites(elapsed);
     this.updateYawnCover(elapsed);
     if (this.vrm.expressionManager) {
       this.applyMouthTargets(mouth, elapsed);
@@ -1051,10 +1182,33 @@ class SynraAvatar3DController {
     this.vrm.update(delta);
   }
 
+  updateHandCueSprites(elapsed) {
+    const wave = clamp(this.pose.wave || 0, 0, 1);
+    const cover = clamp(this.pose.mouthCover || 0, 0, 1);
+    if (this.wavePalm && this.wavePalmMaterial) {
+      const flutter = Math.sin(elapsed * 11.5) * 0.012 * wave;
+      this.wavePalm.visible = wave > 0.03;
+      this.wavePalm.position.x = 0.012 + flutter;
+      this.wavePalm.position.y = -0.004 + Math.sin(elapsed * 9.5) * 0.006 * wave;
+      this.wavePalmMaterial.opacity = wave * 0.98;
+      this.wavePalmMaterial.rotation = Math.sin(elapsed * 8.8) * 0.15 * wave;
+      this.wavePalmMaterial.needsUpdate = true;
+    }
+    if (this.yawnHand && this.yawnHandMaterial) {
+      const amount = clamp((cover - 0.18) / 0.58, 0, 1);
+      this.yawnHand.visible = amount > 0.02;
+      this.yawnHand.position.x = 0.035 + Math.sin(elapsed * 4.1) * 0.004 * amount;
+      this.yawnHand.position.y = -0.07 + Math.sin(elapsed * 3.2) * 0.003 * amount;
+      this.yawnHandMaterial.opacity = amount * 0.98;
+      this.yawnHandMaterial.rotation = -0.12 + Math.sin(elapsed * 3.8) * 0.035 * amount;
+      this.yawnHandMaterial.needsUpdate = true;
+    }
+  }
+
   updateYawnCover(elapsed) {
     if (!this.yawnCover) return;
     const amount = clamp(((this.pose.mouthCover || 0) - 0.18) / 0.58, 0, 1);
-    this.yawnCover.visible = amount > 0.02;
+    this.yawnCover.visible = false;
     const flutter = Math.sin(elapsed * 4.5) * 0.006 * amount;
     this.yawnCover.position.x = 0.034 + flutter;
     this.yawnCover.position.y = -0.066 + Math.sin(elapsed * 3.2) * 0.003 * amount;

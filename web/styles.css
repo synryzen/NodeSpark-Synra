@@ -301,7 +301,8 @@ body {
 
 [data-avatar3d="ready"] .synra-frame-rig,
 [data-avatar3d="ready"] .live2d-layer,
-[data-avatar3d="ready"] .fallback-avatar {
+[data-avatar3d="ready"] .fallback-avatar,
+[data-avatar3d="ready"] .synra-portrait {
   opacity: 0;
 }
 
@@ -592,7 +593,9 @@ body {
   animation: breathe 3.7s ease-in-out infinite;
   filter: drop-shadow(0 0 42px rgba(76, 201, 255, 0.35)) drop-shadow(0 30px 80px rgba(0, 0, 0, 0.55));
   z-index: 2;
-  display: none;
+  display: block;
+  opacity: 0.9;
+  transition: opacity 240ms ease;
 }
 
 .presence-video {
@@ -1440,7 +1443,6 @@ h1 {
 .synra-frame-rig,
 .fallback-avatar,
 .presence-aura,
-.synra-portrait,
 .platform,
 .synra-scanline {
   display: none !important;
