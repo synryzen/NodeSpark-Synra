@@ -87,7 +87,7 @@ let lastHealth = null;
 let ttsStatus = { available: false, provider: "browser" };
 let activityItems = [];
 const pageParams = new URLSearchParams(window.location.search);
-const serverTtsStartTimeoutMs = 3500;
+const serverTtsStartTimeoutMs = 45000;
 
 const storageKeys = {
   background: "nodespark.synra.background",
@@ -334,7 +334,7 @@ function populateVoiceSelect() {
 
 function syncVoiceOptions() {
   if (!voiceSelect) return;
-  const selected = storageGet(storageKeys.voice, voiceSelect.value || "kokoro:af_heart");
+  const selected = storageGet(storageKeys.voice, voiceSelect.value || "voicebox:anime");
   const serverVoices = Array.isArray(ttsStatus.voices) ? ttsStatus.voices : [];
   if (ttsStatus.available && serverVoices.length) {
     voiceSelect.innerHTML = "";
@@ -349,14 +349,13 @@ function syncVoiceOptions() {
     storageSet(storageKeys.voice, voiceSelect.value);
     return;
   }
-  if (![...voiceSelect.options].length) {
-    ["cute", "soft", "calm"].forEach((value) => {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = value === "cute" ? "Browser natural" : value === "soft" ? "Browser soft" : "Browser calm";
-      voiceSelect.append(option);
-    });
-  }
+  voiceSelect.innerHTML = "";
+  ["cute", "soft", "calm"].forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value === "cute" ? "Browser natural" : value === "soft" ? "Browser soft" : "Browser calm";
+    voiceSelect.append(option);
+  });
   populateVoiceSelect();
 }
 
@@ -445,6 +444,8 @@ function renderTtsStatus() {
   const selected = selectedVoiceName();
   const label = provider === "elevenlabs"
     ? `Natural voice ready: ${selected}`
+    : provider === "voicebox"
+      ? `Expressive anime voice: ${selected}`
     : provider === "kokoro"
       ? `Local neural voice: ${selected}`
       : `Browser voice fallback: ${selected}`;
@@ -631,7 +632,7 @@ function renderCoreStatus(health = lastHealth) {
       status: visionReady ? "online" : "local"
     },
     {
-      label: voiceProvider === "kokoro" ? "Local natural voice" : voiceProvider === "elevenlabs" ? "ElevenLabs voice" : "Browser voice",
+      label: voiceProvider === "voicebox" ? "Expressive anime voice" : voiceProvider === "kokoro" ? "Local natural voice" : voiceProvider === "elevenlabs" ? "ElevenLabs voice" : "Browser voice",
       detail: voiceProvider === "browser" ? "Fallback active" : "Natural speech ready",
       status: ttsStatus.available ? "online" : "local"
     },

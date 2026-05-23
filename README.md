@@ -15,10 +15,10 @@ daemon, and a full-screen kiosk UI for the Jetson Orin Nano developer kit.
   workflow_running, success, warning, error, approval_needed, and sleep.
 - Human-like idle motion: relaxed stance, small gaze shifts, weight shifts,
   subtle stretches, delayed yawn behavior, wave cues, and explanation gestures.
-- Natural TTS bridge with ElevenLabs and local Kokoro support, plus browser
-  speech as the final fallback.
-- Synra natural, soft anime, and calm assistant voice presets with mouth motion
-  and speaking nods.
+- Natural TTS bridge with Voicebox, ElevenLabs, and local Kokoro support, plus
+  browser speech as the final fallback.
+- Expressive anime voice presets for Voicebox/Qwen CustomVoice, plus mouth
+  motion and speaking nods.
 - Browser microphone flow where permissions allow it.
 - Typed command bar for environments where the microphone is blocked.
 - Selectable monitor backgrounds: none, node grid, studio, night city, aurora,
@@ -129,9 +129,26 @@ renderer stays available on systems where GPU acceleration is inconsistent.
 
 Synra asks the local daemon for generated speech first. The daemon uses:
 
+- Voicebox when its local REST server is reachable.
 - ElevenLabs when `ELEVENLABS_API_KEY` is set.
 - Kokoro when the optional local Kokoro stack is installed.
 - Browser speech only as a fallback.
+
+For the best free anime-style voice, run Voicebox as a separate local voice
+server and let Synra connect to it. Synra will auto-create four Qwen
+CustomVoice preset profiles the first time each one is used: Synra Anime,
+Synra Soft, Synra Bright, and Synra Emotional. These use delivery instructions
+so the voice is more expressive and less robotic.
+
+```ini
+[Service]
+Environment=NODESPARK_SYNRA_TTS_PROVIDER=voicebox
+Environment=NODESPARK_SYNRA_VOICEBOX_URL=http://127.0.0.1:17493
+Environment=NODESPARK_SYNRA_VOICEBOX_MODEL_SIZE=0.6B
+```
+
+Use `0.6B` first on small devices. If the voice server is running on another
+machine, set `NODESPARK_SYNRA_VOICEBOX_URL` to that machine's URL instead.
 
 For the quickest natural voice, create an ElevenLabs API key and set it for the
 user service:

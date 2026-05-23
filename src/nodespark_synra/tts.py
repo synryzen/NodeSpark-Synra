@@ -5,6 +5,7 @@ import io
 import json
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
 from .config import TTSConfig
@@ -40,6 +41,8 @@ class TTSService:
     def synthesize(self, text: str, voice: str = "cute") -> TTSResult:
         text = self._clean_text(text)
         provider = self._selected_provider()
+        if provider == "voicebox":
+            return self._voicebox(text, voice)
         if provider == "elevenlabs":
             return self._elevenlabs(text, voice)
         if provider == "kokoro":
@@ -50,10 +53,14 @@ class TTSService:
         requested = (self.cfg.provider or "auto").strip().lower()
         if requested in {"browser", "off", "none"}:
             return ""
+        if requested == "voicebox":
+            return "voicebox" if self._voicebox_available() else ""
         if requested == "elevenlabs":
             return "elevenlabs" if self.cfg.elevenlabs_api_key else ""
         if requested == "kokoro":
             return "kokoro" if self._kokoro_available() else ""
+        if self.cfg.voicebox_enabled and self._voicebox_available():
+            return "voicebox"
         if self.cfg.elevenlabs_api_key:
             return "elevenlabs"
         if self._kokoro_available():
@@ -61,10 +68,14 @@ class TTSService:
         return ""
 
     def _status_detail(self, provider: str) -> str:
+        if provider == "voicebox":
+            return "Voicebox expressive local voice server is available."
         if provider == "elevenlabs":
             return "ElevenLabs neural voice is configured."
         if provider == "kokoro":
             return "Kokoro local neural voice is available."
+        if (self.cfg.provider or "auto").strip().lower() == "voicebox":
+            return "Start Voicebox on the configured URL to enable Synra's expressive anime voice."
         if (self.cfg.provider or "auto").strip().lower() == "elevenlabs":
             return "Set ELEVENLABS_API_KEY to enable ElevenLabs."
         if (self.cfg.provider or "auto").strip().lower() == "kokoro":
@@ -119,6 +130,162 @@ class TTSService:
             return voice.split(":", 1)[1].strip()
         return self.cfg.elevenlabs_voice_id.strip()
 
+    def _voicebox_available(self) -> bool:
+        if not self.cfg.voicebox_enabled:
+            return False
+        try:
+            self._voicebox_json("GET", "/health", timeout=0.75)
+        except Exception:
+            try:
+                self._voicebox_json("GET", "/", timeout=0.75)
+            except Exception:
+                return False
+        return True
+
+    def _voicebox(self, text: str, voice: str) -> TTSResult:
+        preset = self._voicebox_preset_for(voice)
+        profile_id = self._voicebox_profile_id(preset)
+        payload = {
+            "profile_id": profile_id,
+            "text": text,
+            "language": preset["language"],
+            "engine": "qwen_custom_voice",
+            "model_size": self.cfg.voicebox_model_size or "0.6B",
+            "instruct": preset["instruct"],
+            "normalize": True,
+            "max_chunk_chars": 700,
+            "crossfade_ms": 65,
+        }
+        audio, content_type = self._voicebox_bytes("POST", "/generate/stream", payload, timeout=self.cfg.voicebox_timeout_seconds)
+        return TTSResult(audio, content_type or "audio/wav", "voicebox", preset["id"])
+
+    def _voicebox_profile_id(self, preset: dict[str, str]) -> str:
+        profiles = self._voicebox_json("GET", "/profiles", timeout=max(1.0, float(self.cfg.timeout_seconds)))
+        rows = profiles if isinstance(profiles, list) else profiles.get("profiles", [])
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            if row.get("id") == preset["profile"] or str(row.get("name") or "").lower() == preset["profile"].lower():
+                return str(row["id"])
+        if not self.cfg.voicebox_auto_create_profiles:
+            raise TTSError(f"Voicebox profile '{preset['profile']}' was not found.")
+        created = self._voicebox_json(
+            "POST",
+            "/profiles",
+            {
+                "name": preset["profile"],
+                "description": preset["description"],
+                "language": preset["language"],
+                "voice_type": "preset",
+                "preset_engine": "qwen_custom_voice",
+                "preset_voice_id": preset["preset_voice_id"],
+                "default_engine": "qwen_custom_voice",
+                "personality": (
+                    "Synra is a realistic anime-style AI assistant: bright, warm, emotionally expressive, "
+                    "quick with a little playful charm, and never robotic."
+                ),
+            },
+            timeout=max(2.0, float(self.cfg.timeout_seconds)),
+        )
+        profile_id = str(created.get("id") or "")
+        if not profile_id:
+            raise TTSError("Voicebox did not return a profile id.")
+        return profile_id
+
+    def _voicebox_preset_for(self, voice: str) -> dict[str, str]:
+        key = voice.split(":", 1)[1] if voice.startswith("voicebox:") else voice
+        presets = {item["id"]: item for item in self._voicebox_presets()}
+        return presets.get(key, presets["anime"])
+
+    def _voicebox_presets(self) -> list[dict[str, str]]:
+        return [
+            {
+                "id": "anime",
+                "profile": "Synra Anime",
+                "name": "Synra Anime",
+                "style": "playful realistic anime female",
+                "language": "en",
+                "preset_voice_id": "Ono_Anna",
+                "description": "Playful anime-girl voice powered by Voicebox Qwen CustomVoice.",
+                "instruct": "Speak in English as a realistic anime girl: cute, bright, emotional, lively, and natural. Avoid a robotic or announcer tone.",
+            },
+            {
+                "id": "soft",
+                "profile": "Synra Soft",
+                "name": "Synra Soft",
+                "style": "gentle emotional female",
+                "language": "en",
+                "preset_voice_id": "Serena",
+                "description": "Soft expressive female voice powered by Voicebox Qwen CustomVoice.",
+                "instruct": "Speak softly with warm emotion, natural breath, and a caring anime-assistant personality. Keep it realistic.",
+            },
+            {
+                "id": "bright",
+                "profile": "Synra Bright",
+                "name": "Synra Bright",
+                "style": "bright energetic female",
+                "language": "en",
+                "preset_voice_id": "Vivian",
+                "description": "Bright young female voice powered by Voicebox Qwen CustomVoice.",
+                "instruct": "Speak with upbeat youthful energy, subtle anime charm, clear emotion, and natural pacing. Do not sound robotic.",
+            },
+            {
+                "id": "emotional",
+                "profile": "Synra Emotional",
+                "name": "Synra Emotional",
+                "style": "warm expressive female",
+                "language": "en",
+                "preset_voice_id": "Sohee",
+                "description": "Warm emotional female voice powered by Voicebox Qwen CustomVoice.",
+                "instruct": "Speak with rich feeling, gentle confidence, and realistic conversational timing. Keep the voice cute but human.",
+            },
+        ]
+
+    def _voicebox_json(self, method: str, path: str, payload: dict[str, Any] | None = None, timeout: float | None = None) -> Any:
+        data = None if payload is None else json.dumps(payload).encode("utf-8")
+        request = Request(
+            self._voicebox_url(path),
+            data=data,
+            method=method,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "User-Agent": "nodespark-synra",
+            },
+        )
+        try:
+            with urlopen(request, timeout=timeout or max(1.0, float(self.cfg.timeout_seconds))) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:500]
+            raise TTSError(f"Voicebox HTTP {exc.code}: {detail}") from exc
+        except (URLError, TimeoutError, ValueError) as exc:
+            raise TTSError(f"Could not reach Voicebox: {exc}") from exc
+
+    def _voicebox_bytes(self, method: str, path: str, payload: dict[str, Any], timeout: float | None = None) -> tuple[bytes, str]:
+        request = Request(
+            self._voicebox_url(path),
+            data=json.dumps(payload).encode("utf-8"),
+            method=method,
+            headers={
+                "Accept": "audio/wav",
+                "Content-Type": "application/json",
+                "User-Agent": "nodespark-synra",
+            },
+        )
+        try:
+            with urlopen(request, timeout=timeout or max(1.0, float(self.cfg.voicebox_timeout_seconds))) as response:
+                return response.read(), response.headers.get_content_type() or "audio/wav"
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:500]
+            raise TTSError(f"Voicebox HTTP {exc.code}: {detail}") from exc
+        except (URLError, TimeoutError) as exc:
+            raise TTSError(f"Could not reach Voicebox: {exc}") from exc
+
+    def _voicebox_url(self, path: str) -> str:
+        base = (self.cfg.voicebox_base_url or "http://127.0.0.1:17493").rstrip("/") + "/"
+        return urljoin(base, path.lstrip("/"))
+
     def _kokoro_available(self) -> bool:
         try:
             import kokoro  # noqa: F401
@@ -168,6 +335,11 @@ class TTSService:
         return mapping.get(voice, self.cfg.kokoro_voice or "af_heart")
 
     def _voice_catalog(self, provider: str) -> list[dict[str, str]]:
+        if provider == "voicebox":
+            return [
+                {"id": f"voicebox:{preset['id']}", "name": preset["name"], "style": preset["style"], "provider": "voicebox"}
+                for preset in self._voicebox_presets()
+            ]
         if provider == "kokoro":
             return [
                 {"id": "kokoro:af_heart", "name": "Synra Heart", "style": "warm natural female", "provider": "kokoro"},
