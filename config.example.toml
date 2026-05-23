@@ -33,7 +33,9 @@ enabled = true
 provider = "ollama"
 base_url = "http://127.0.0.1:11434"
 model = "qwen2.5:1.5b"
+vision_model = "moondream"
 timeout_seconds = 20.0
+vision_timeout_seconds = 45.0
 route_general_locally = true
 route_short_inputs_locally = true
 

@@ -10,6 +10,7 @@ const progressBar = document.getElementById("progressBar");
 const modeStrip = document.getElementById("modeStrip");
 const listenButton = document.getElementById("listenButton");
 const cameraButton = document.getElementById("cameraButton");
+const visionButton = document.getElementById("visionButton");
 const voiceNote = document.getElementById("voiceNote");
 const micStatus = document.getElementById("micStatus");
 const cameraStatus = document.getElementById("cameraStatus");
@@ -657,13 +658,82 @@ async function askAssistant(text) {
     }
   });
 
+  const image = shouldAttachVision(trimmed) ? captureCameraFrame() : "";
   await fetch("/api/command", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       id: `voice-${Date.now()}`,
       type: "assistant",
-      text: trimmed
+      text: trimmed,
+      ...(image ? { image } : {})
+    })
+  });
+  fetchState();
+  fetchHealth();
+}
+
+function shouldAttachVision(text) {
+  return Boolean(
+    cameraStream &&
+      presenceVideo?.videoWidth &&
+      /what do you see|can you see|look at|look around|use the camera|describe the room|see me|see anything/i.test(text)
+  );
+}
+
+function captureCameraFrame() {
+  if (!presenceVideo || !presenceVideo.videoWidth || !presenceVideo.videoHeight) return "";
+  const canvas = document.createElement("canvas");
+  const width = 512;
+  const height = Math.max(1, Math.round((presenceVideo.videoHeight / presenceVideo.videoWidth) * width));
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+  ctx.drawImage(presenceVideo, 0, 0, width, height);
+  return canvas.toDataURL("image/jpeg", 0.72);
+}
+
+async function askWithVision() {
+  if (!cameraStream) {
+    await activateCameraAndMic();
+  }
+  const image = captureCameraFrame();
+  if (!image) {
+    await setRemoteState({
+      mode: "warning",
+      expression: "raised_brow",
+      message: "I need the camera active before I can look.",
+      subtitle: "Camera vision",
+      card: {
+        title: "Camera Vision",
+        body: "Tap Cam from the kiosk, then ask me to look again.",
+        detail: "Browser camera permission controls this.",
+        style: "warning"
+      }
+    });
+    return;
+  }
+  const prompt = (commandInput?.value || "").trim() || "What do you see?";
+  await setRemoteState({
+    mode: "thinking",
+    expression: "look_left",
+    message: "Looking through the camera.",
+    subtitle: "Camera vision",
+    card: {
+      title: "Camera Vision",
+      body: prompt,
+      detail: "Sending a frame to Synra's vision model",
+      style: "thinking"
+    }
+  });
+  await fetch("/api/vision", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: `vision-${Date.now()}`,
+      text: prompt,
+      image
     })
   });
   fetchState();
@@ -1106,6 +1176,7 @@ document.querySelectorAll("[data-demo]").forEach((button) => {
 
 listenButton.addEventListener("click", startVoiceLoop);
 cameraButton.addEventListener("click", activateCameraAndMic);
+visionButton?.addEventListener("click", askWithVision);
 commandForm?.addEventListener("submit", submitTypedCommand);
 hubConnectForm?.addEventListener("submit", connectHub);
 hubPairForm?.addEventListener("submit", pairHub);

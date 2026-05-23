@@ -145,6 +145,12 @@ class SynraApp:
                 "detail": str(local_status.get("model") or local_status.get("detail") or "Ollama"),
             },
             {
+                "id": "vision",
+                "label": "Vision",
+                "done": bool(local_status.get("visionAvailable")),
+                "detail": str(local_status.get("visionModel") or "vision model"),
+            },
+            {
                 "id": "voice",
                 "label": "Voice",
                 "done": bool(tts_status.get("available")) or tts_status.get("provider") == "browser",
@@ -268,8 +274,19 @@ class SynraApp:
 
         if kind in {"assistant", "ask", "askai"}:
             text = str(command.get("text") or command.get("body") or "Help me from NodeSpark Synra.")
+            image = str(command.get("image") or command.get("imageBase64") or "")
             route = classify_assistant_request(text, self.cfg.hub.default_workflow)
             self.store.update_memory({"lastAssistantRoute": route.route if not route.tool else f"{route.route}:{route.tool}"})
+            if image or route.route == "vision":
+                result = self._handle_vision_request(text, image, command_id)
+                if ack and command_id and self.hub_can_try():
+                    try:
+                        self.hub.ack_command(command_id, "completed", result)
+                        self.mark_hub_ok()
+                    except Exception as exc:
+                        self.mark_hub_error(exc)
+                        print(f"[hub] command ack failed: {exc}")
+                return {"ok": True, "result": result, "state": self.state.snapshot()}
             tool_result = self._try_tool_route(text, route, command_id)
             if tool_result is not None:
                 result = tool_result
@@ -484,6 +501,52 @@ class SynraApp:
                 return reply
             return str(result.get("result", "Workflow request staged."))
         return None
+
+    def _handle_vision_request(self, text: str, image: str, command_id: str) -> str:
+        if not image:
+            reply = "I can use camera vision, but I need the kiosk camera active first. Tap Cam, then ask me what I see."
+            self._speak_tool_reply(command_id, reply, "Camera vision", "raised_brow", "No camera frame received", "warning")
+            return reply
+        self.state.set_state({
+            "mode": "thinking",
+            "expression": "look_left",
+            "message": "Looking through the camera.",
+            "subtitle": "Vision",
+            "card": {
+                "title": "Camera Vision",
+                "body": text or "What do you see?",
+                "detail": "Analyzing the latest frame locally",
+                "style": "thinking",
+            },
+        })
+        try:
+            local = self.local_ai.answer_vision(text or "What do you see?", image, self._local_context())
+            reply = _synra_identity_reply(local.text)
+            self.state.apply_command({
+                "type": "speak",
+                "title": "Synra Vision",
+                "text": reply,
+                "subtitle": "Camera Vision",
+                "expression": "explain",
+                "mode": "speaking",
+                "style": "voice",
+                "detail": f"Model: {local.model}",
+                "id": command_id,
+            })
+            return reply[:240]
+        except Exception as exc:
+            reply = "I tried to look, but my vision model is not ready yet. Install or pull the local vision model and I can use the camera."
+            self.state.apply_command({
+                "type": "speak",
+                "title": "Vision Unavailable",
+                "text": reply,
+                "subtitle": "Camera Vision",
+                "expression": "concerned",
+                "detail": str(exc),
+                "style": "warning",
+                "id": command_id,
+            })
+            return reply
 
     def _speak_tool_reply(self, command_id: str, reply: str, subtitle: str, expression: str, detail: str, style: str) -> None:
         self.state.apply_command({

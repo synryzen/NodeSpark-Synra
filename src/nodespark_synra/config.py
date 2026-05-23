@@ -71,7 +71,9 @@ class LocalAIConfig:
     provider: str = "ollama"
     base_url: str = "http://127.0.0.1:11434"
     model: str = "qwen2.5:1.5b"
+    vision_model: str = "moondream"
     timeout_seconds: float = 20.0
+    vision_timeout_seconds: float = 45.0
     max_prompt_chars: int = 1200
     route_general_locally: bool = True
     route_short_inputs_locally: bool = True
@@ -126,6 +128,7 @@ def load_config(path: str | None = None) -> AppConfig:
     cfg.local_ai.provider = os.environ.get("NODESPARK_SYNRA_LOCAL_AI_PROVIDER", cfg.local_ai.provider).strip().lower()
     cfg.local_ai.base_url = os.environ.get("NODESPARK_SYNRA_LOCAL_AI_URL", cfg.local_ai.base_url).rstrip("/")
     cfg.local_ai.model = os.environ.get("NODESPARK_SYNRA_LOCAL_AI_MODEL", cfg.local_ai.model).strip()
+    cfg.local_ai.vision_model = os.environ.get("NODESPARK_SYNRA_VISION_MODEL", cfg.local_ai.vision_model).strip()
     cfg.tts.provider = os.environ.get("NODESPARK_SYNRA_TTS_PROVIDER", cfg.tts.provider).strip().lower()
     cfg.tts.elevenlabs_api_key = os.environ.get("ELEVENLABS_API_KEY", cfg.tts.elevenlabs_api_key).strip()
     cfg.tts.elevenlabs_voice_id = os.environ.get("ELEVENLABS_VOICE_ID", cfg.tts.elevenlabs_voice_id).strip()

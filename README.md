@@ -35,6 +35,8 @@ daemon, and a full-screen kiosk UI for the Jetson Orin Nano developer kit.
   routed to NodeSparkHub.
 - Tool-aware assistant router for setup status, local memory, workflow lists,
   workflow launches, Hub questions, and local chat.
+- Local camera vision path for "what do you see" prompts when a vision model is
+  installed.
 - Persistent monitor preferences for background and voice selection.
 
 ## Project Layout
@@ -190,12 +192,19 @@ enabled = true
 provider = "ollama"
 base_url = "http://127.0.0.1:11434"
 model = "qwen2.5:1.5b"
+vision_model = "moondream"
 ```
 
 The assistant router keeps fast general chat local while sending NodeSparkHub
 questions, workflow setup, device status, and workflow actions to the Hub. It
 also handles local tools directly, such as remembering a preferred name,
 reporting setup readiness, listing workflows, and launching a selected workflow.
+
+For camera-aware prompts, pull the vision model too:
+
+```bash
+ollama pull moondream
+```
 
 ## Local API
 

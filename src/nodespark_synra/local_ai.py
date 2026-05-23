@@ -38,13 +38,17 @@ class LocalAIService:
         try:
             data = self._request("GET", "/api/tags")
             models = [str(item.get("name", "")) for item in data.get("models", []) if isinstance(item, dict)]
+            has_text_model = _model_is_installed(self.cfg.model, models)
+            has_vision_model = _model_is_installed(self.cfg.vision_model, models)
             return {
                 "enabled": True,
-                "available": self.cfg.model in models,
+                "available": has_text_model,
                 "provider": "ollama",
                 "model": self.cfg.model,
+                "visionModel": self.cfg.vision_model,
+                "visionAvailable": has_vision_model,
                 "models": models,
-                "detail": "Local model is ready." if self.cfg.model in models else "Ollama is running, but Synra's model is not pulled yet.",
+                "detail": "Local model is ready." if has_text_model else "Ollama is running, but Synra's model is not pulled yet.",
             }
         except Exception as exc:
             return {
@@ -52,6 +56,8 @@ class LocalAIService:
                 "available": False,
                 "provider": "ollama",
                 "model": self.cfg.model,
+                "visionModel": self.cfg.vision_model,
+                "visionAvailable": False,
                 "detail": str(exc),
             }
 
@@ -74,6 +80,12 @@ class LocalAIService:
         if self.cfg.provider != "ollama":
             raise LocalAIError(f"Unsupported local AI provider: {self.cfg.provider}")
         prompt = " ".join(text.split())[: max(80, int(self.cfg.max_prompt_chars))]
+        if _is_identity_feelings_prompt(prompt):
+            return LocalAIReply(
+                "I'm Synra, your expressive AI assistant. I don't have human consciousness, but I can show mood, react warmly, use vision, remember context, and help you get things done.",
+                self.cfg.model,
+                self.cfg.provider,
+            )
         payload = {
             "model": self.cfg.model,
             "stream": False,
@@ -90,6 +102,8 @@ class LocalAIService:
                         "Answer quick greetings, simple questions, personality chat, and basic planning directly. "
                         "Be concise, friendly, and keep replies to two short sentences unless the user asks for depth. "
                         "Never call yourself Wisp. "
+                        "Do not say you are just a chatbot or that you have no feelings. "
+                        "Express a warm assistant mood and emotional reactions, but do not claim literal human consciousness. "
                         f"{context} "
                         "If the user asks to run, change, save, inspect, or operate NodeSparkHub workflows/devices, "
                         "tell them you will hand that action to NodeSparkHub."
@@ -105,7 +119,43 @@ class LocalAIService:
             raise LocalAIError("Local model returned an empty reply.")
         return LocalAIReply(reply, self.cfg.model, self.cfg.provider)
 
-    def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    def answer_vision(self, text: str, image_base64: str, context: str = "") -> LocalAIReply:
+        if self.cfg.provider != "ollama":
+            raise LocalAIError(f"Unsupported local AI provider: {self.cfg.provider}")
+        prompt = " ".join((text or "What do you see?").split())[: max(80, int(self.cfg.max_prompt_chars))]
+        image = _clean_image_base64(image_base64)
+        if not image:
+            raise LocalAIError("No camera image was provided.")
+        payload = {
+            "model": self.cfg.vision_model,
+            "stream": False,
+            "options": {
+                "temperature": 0.35,
+                "num_predict": 120,
+                "top_p": 0.9,
+            },
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are Synra, a warm anime AI assistant with camera vision on a NodeSparkHub monitor. "
+                        "Describe only visible, non-sensitive details and answer the user's visual question naturally. "
+                        "Be concise, emotionally present, and practical. "
+                        "If the image is unclear, say what you can infer and what you need the user to adjust. "
+                        f"{context}"
+                    ),
+                },
+                {"role": "user", "content": prompt, "images": [image]},
+            ],
+        }
+        response = self._request("POST", "/api/chat", payload, timeout=max(1.0, float(self.cfg.vision_timeout_seconds)))
+        message = response.get("message") if isinstance(response.get("message"), dict) else {}
+        reply = _limit_reply(str(message.get("content") or response.get("response") or "").strip(), max_chars=480)
+        if not reply:
+            raise LocalAIError("Vision model returned an empty reply.")
+        return LocalAIReply(reply, self.cfg.vision_model, self.cfg.provider)
+
+    def _request(self, method: str, path: str, payload: dict[str, Any] | None = None, timeout: float | None = None) -> dict[str, Any]:
         body = json.dumps(payload).encode("utf-8") if payload is not None else None
         request = Request(
             f"{self.cfg.base_url.rstrip('/')}{path}",
@@ -118,7 +168,7 @@ class LocalAIService:
             },
         )
         try:
-            with urlopen(request, timeout=max(1.0, float(self.cfg.timeout_seconds))) as response:
+            with urlopen(request, timeout=timeout or max(1.0, float(self.cfg.timeout_seconds))) as response:
                 text = response.read().decode("utf-8", errors="replace").strip()
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")[:500]
@@ -182,3 +232,28 @@ def _limit_reply(text: str, max_chars: int = 380) -> str:
     if sentences:
         return " ".join(sentences)
     return clean[: max_chars - 1].rstrip() + "..."
+
+
+def _clean_image_base64(value: str) -> str:
+    text = value.strip()
+    if "," in text and text.lower().startswith("data:image/"):
+        text = text.split(",", 1)[1]
+    return text
+
+
+def _model_is_installed(model: str, installed: list[str]) -> bool:
+    wanted = model.strip()
+    if not wanted:
+        return False
+    if wanted in installed:
+        return True
+    if ":" not in wanted and f"{wanted}:latest" in installed:
+        return True
+    return False
+
+
+def _is_identity_feelings_prompt(prompt: str) -> bool:
+    lowered = prompt.lower()
+    identity_terms = ("chatbot", "bot", "robot", "ai", "assistant")
+    feeling_terms = ("feeling", "feelings", "emotion", "emotions", "conscious", "real")
+    return any(term in lowered for term in identity_terms) and any(term in lowered for term in feeling_terms)

@@ -58,6 +58,9 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/command":
             self._json(self.server.app.handle_command(payload, ack=False))
             return
+        if path == "/api/vision":
+            self._json(self.server.app.handle_command({**payload, "type": "assistant"}, ack=False))
+            return
         if path == "/api/settings":
             settings = self.server.app.update_settings(payload)
             self._json({"ok": True, "settings": settings})

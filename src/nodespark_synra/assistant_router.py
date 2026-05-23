@@ -62,6 +62,8 @@ def classify_assistant_request(text: str, default_workflow: str = "Synra Assista
         return AssistantRoute("tool", "remember_user", "bright", "Remember the user's preferred name.", confidence=0.92)
     if _looks_like_setup(lowered):
         return AssistantRoute("tool", "setup_status", "attentive", "Guide NodeSparkHub setup.", confidence=0.88)
+    if _looks_like_vision(lowered):
+        return AssistantRoute("vision", "camera", "curious", "Use Synra camera vision.", confidence=0.9)
     if _looks_like_health(lowered):
         return AssistantRoute("tool", "status", "attentive", "Summarize local, Hub, voice, and workflow readiness.", confidence=0.86)
     if _looks_like_workflow_list(lowered):
@@ -144,6 +146,24 @@ def _looks_like_setup(lowered: str) -> bool:
 def _looks_like_health(lowered: str) -> bool:
     return any(token in lowered for token in ("status", "health", "online", "ready", "connected")) and any(
         token in lowered for token in ("hub", "synra", "local", "voice", "workflow", "device", "model")
+    )
+
+
+def _looks_like_vision(lowered: str) -> bool:
+    return any(
+        token in lowered
+        for token in (
+            "what do you see",
+            "can you see",
+            "look at",
+            "look around",
+            "use the camera",
+            "camera see",
+            "describe the room",
+            "describe what",
+            "see me",
+            "see anything",
+        )
     )
 
 
