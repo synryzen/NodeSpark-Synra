@@ -100,6 +100,8 @@ class SynraAvatar3DController {
     this.expression = "soft_smile";
     this.speaking = false;
     this.motion = { x: 0, y: 0, rotate: 0, scale: 1, mouth: 0 };
+    this.personality = "balanced";
+    this.motionLevel = 1;
     this.targetMouth = 0;
     this.expressionTargets = {};
     this.expressionValues = {};
@@ -460,7 +462,7 @@ class SynraAvatar3DController {
       this.stateChangedAt = this.clock.elapsedTime;
       this.lastInteractionAt = this.stateChangedAt;
       this.idleAction = { name: "none", startedAt: 0, duration: 0 };
-      this.nextIdleActionAt = this.stateChangedAt + 8 + Math.random() * 8;
+      this.nextIdleActionAt = this.stateChangedAt + (8 + Math.random() * 8) / (this.motionLevel || 1);
       this.blinkUntil = this.stateChangedAt + 0.11;
       if (this.expression === "stretch") this.idleAction = { name: "stretch", startedAt: this.stateChangedAt, duration: 4.4 };
     }
@@ -474,6 +476,15 @@ class SynraAvatar3DController {
       this.lastInteractionAt = this.clock.elapsedTime;
       this.idleAction = { name: "none", startedAt: 0, duration: 0 };
     }
+  }
+
+  setPersonality(value = "balanced") {
+    const allowed = new Set(["balanced", "warm", "playful", "focused"]);
+    this.personality = allowed.has(value) ? value : "balanced";
+  }
+
+  setMotionLevel(value = "normal") {
+    this.motionLevel = value === "calm" ? 0.64 : value === "expressive" ? 1.26 : 1;
   }
 
   update(motion = {}) {
@@ -527,6 +538,8 @@ class SynraAvatar3DController {
   updateBehaviorTargets(elapsed = this.clock.elapsedTime) {
     this.resetTargets();
     const cue = `${this.mode} ${this.expression}`.toLowerCase();
+    const motionLevel = this.motionLevel || 1;
+    const personality = this.personality || "balanced";
     const stateAge = Math.max(0, elapsed - this.stateChangedAt);
     const arrival = clamp(1 - stateAge / 0.85, 0, 1);
     const talkBeat = this.speaking ? Math.sin(elapsed * 8.5) * 0.012 : 0;
@@ -539,26 +552,47 @@ class SynraAvatar3DController {
     if (this.mode === "idle") {
       const slowSway = Math.sin((elapsed + this.microMotionSeed) * 0.42);
       const softRock = Math.sin((elapsed + this.microMotionSeed) * 0.27);
-      this.poseTarget.headX = -0.018 + softRock * 0.014;
-      this.poseTarget.headY = slowSway * 0.035;
-      this.poseTarget.headZ = slowSway * 0.018;
-      this.poseTarget.chestX = -0.03 + softRock * 0.018;
-      this.poseTarget.chestY = slowSway * 0.018;
-      this.poseTarget.spineX = 0.012 + softRock * 0.008;
-      this.poseTarget.spineY = slowSway * -0.012;
-      this.poseTarget.upperChestX = -0.032 + softRock * 0.01;
-      this.poseTarget.upperChestY = slowSway * 0.014;
+      this.poseTarget.headX = -0.018 + softRock * 0.014 * motionLevel;
+      this.poseTarget.headY = slowSway * 0.035 * motionLevel;
+      this.poseTarget.headZ = slowSway * 0.018 * motionLevel;
+      this.poseTarget.chestX = -0.03 + softRock * 0.018 * motionLevel;
+      this.poseTarget.chestY = slowSway * 0.018 * motionLevel;
+      this.poseTarget.spineX = 0.012 + softRock * 0.008 * motionLevel;
+      this.poseTarget.spineY = slowSway * -0.012 * motionLevel;
+      this.poseTarget.upperChestX = -0.032 + softRock * 0.01 * motionLevel;
+      this.poseTarget.upperChestY = slowSway * 0.014 * motionLevel;
       this.poseTarget.shoulderLift = -0.055;
-      this.poseTarget.armOpen = 0.045 + idleEase * 0.02;
+      this.poseTarget.armOpen = 0.045 + idleEase * 0.02 * motionLevel;
       this.poseTarget.elbowBend = 0.018;
-      this.poseTarget.wristTwist = slowSway * 0.02;
-      this.poseTarget.fingerCurl = 0.4 + Math.sin((elapsed + this.microMotionSeed) * 0.92) * 0.028;
+      this.poseTarget.wristTwist = slowSway * 0.02 * motionLevel;
+      this.poseTarget.fingerCurl = 0.4 + Math.sin((elapsed + this.microMotionSeed) * 0.92) * 0.028 * motionLevel;
       this.poseTarget.thumbRelax = 0.26;
       this.poseTarget.fingerSpread = 0.026 + idleEase * 0.01;
-      this.poseTarget.hipsX = softRock * -0.012;
-      this.poseTarget.hipsY = slowSway * 0.018;
-      this.poseTarget.hipsZ = slowSway * -0.012;
+      this.poseTarget.hipsX = softRock * -0.012 * motionLevel;
+      this.poseTarget.hipsY = slowSway * 0.018 * motionLevel;
+      this.poseTarget.hipsZ = slowSway * -0.012 * motionLevel;
       this.applyIdleActionTargets(elapsed, idleAge);
+    }
+
+    if (personality === "warm") {
+      this.expressionTargets.happy = Math.max(this.expressionTargets.happy || 0, this.mode === "idle" ? 0.2 : 0.12);
+      this.expressionTargets.relaxed = Math.max(this.expressionTargets.relaxed || 0, 0.34);
+      this.poseTarget.headZ += 0.018;
+      this.poseTarget.armOpen += 0.012 * motionLevel;
+      this.poseTarget.fingerCurl = Math.min(this.poseTarget.fingerCurl, 0.36);
+    } else if (personality === "playful") {
+      const playfulBeat = Math.sin(elapsed * 1.9 + this.microMotionSeed);
+      this.expressionTargets.fun = Math.max(this.expressionTargets.fun || 0, this.mode === "idle" ? 0.26 : 0.16);
+      this.expressionTargets.happy = Math.max(this.expressionTargets.happy || 0, 0.18);
+      this.poseTarget.headZ += playfulBeat * 0.018 * motionLevel;
+      this.poseTarget.headY += playfulBeat * 0.012 * motionLevel;
+      this.poseTarget.fingerSpread += 0.016 * motionLevel;
+    } else if (personality === "focused") {
+      this.expressionTargets.fun = Math.min(this.expressionTargets.fun || 0, 0.08);
+      this.poseTarget.headX += 0.018;
+      this.poseTarget.shoulderLift += 0.018;
+      this.poseTarget.armOpen = Math.max(0.018, this.poseTarget.armOpen * 0.75);
+      this.poseTarget.fingerCurl = Math.max(this.poseTarget.fingerCurl, 0.36);
     }
 
     if (this.mode === "listening" || cue.includes("attentive")) {
@@ -601,14 +635,24 @@ class SynraAvatar3DController {
       this.poseTarget.fingerSpread = 0.045;
     }
     if (this.mode === "speaking") {
+      const handTalk = (0.5 + Math.sin(elapsed * 2.7) * 0.5) * 0.16 * motionLevel;
       this.expressionTargets.happy = this.expression === "bright" ? 0.38 : 0.18;
       this.expressionTargets.joy = this.expression === "bright" ? 0.36 : 0.16;
       this.expressionTargets.fun = 0.16;
       this.poseTarget.headX = -0.015 + talkBeat;
       this.poseTarget.chestX = -0.004;
       this.poseTarget.upperChestX = -0.006;
-      this.poseTarget.armOpen = 0.045;
-      this.poseTarget.elbowBend = 0.026;
+      this.poseTarget.armOpen = 0.045 + handTalk * 0.35;
+      this.poseTarget.elbowBend = 0.026 + handTalk * 0.08;
+      this.poseTarget.leftArmRaise = Math.max(this.poseTarget.leftArmRaise, handTalk * 0.38);
+      this.poseTarget.rightArmRaise = Math.max(this.poseTarget.rightArmRaise, handTalk * 0.34);
+      this.poseTarget.leftArmFold = Math.max(this.poseTarget.leftArmFold, handTalk * 0.54);
+      this.poseTarget.rightArmFold = Math.max(this.poseTarget.rightArmFold, handTalk * 0.48);
+      this.poseTarget.leftArmForward = Math.max(this.poseTarget.leftArmForward, handTalk * 0.45);
+      this.poseTarget.rightArmForward = Math.max(this.poseTarget.rightArmForward, handTalk * 0.4);
+      this.poseTarget.explainHands = Math.max(this.poseTarget.explainHands, handTalk * 0.32);
+      this.poseTarget.leftPalmOut = Math.max(this.poseTarget.leftPalmOut, handTalk * 0.22);
+      this.poseTarget.rightPalmOut = Math.max(this.poseTarget.rightPalmOut, handTalk * 0.2);
       this.poseTarget.wristTwist = Math.sin(elapsed * 4.2) * 0.018;
       this.poseTarget.fingerCurl = 0.26 + Math.sin(elapsed * 3.4) * 0.035;
       this.poseTarget.fingerSpread = 0.06;
@@ -756,13 +800,13 @@ class SynraAvatar3DController {
       this.poseTarget.upperChestY += 0.035 * envelope;
       this.poseTarget.shoulderLift += 0.02 * envelope;
       this.poseTarget.armOpen += 0.05 * envelope;
-      this.poseTarget.rightArmRaise = Math.max(this.poseTarget.rightArmRaise, 1.18 * envelope);
-      this.poseTarget.rightArmFold = Math.max(this.poseTarget.rightArmFold, 0.72 * envelope);
-      this.poseTarget.rightArmForward = Math.max(this.poseTarget.rightArmForward, 0.58 * envelope);
+      this.poseTarget.rightArmRaise = Math.max(this.poseTarget.rightArmRaise, 1.34 * envelope);
+      this.poseTarget.rightArmFold = Math.max(this.poseTarget.rightArmFold, 0.94 * envelope);
+      this.poseTarget.rightArmForward = Math.max(this.poseTarget.rightArmForward, 0.82 * envelope);
       this.poseTarget.leftArmFold += 0.04 * envelope;
       this.poseTarget.wave = envelope;
       this.poseTarget.rightPalmOut = envelope;
-      this.poseTarget.wristTwist += wristWave * 0.28;
+      this.poseTarget.wristTwist += wristWave * 0.22;
       this.poseTarget.fingerCurl = 0.13 + 0.04 * (1 - envelope);
       this.poseTarget.thumbRelax = 0.12;
       this.poseTarget.fingerSpread = 0.11 * envelope;
@@ -800,6 +844,7 @@ class SynraAvatar3DController {
     if (action.name === "none") return;
     const progress = clamp((elapsed - action.startedAt) / action.duration, 0, 1);
     const ease = Math.sin(progress * Math.PI);
+    const motionLevel = this.motionLevel || 1;
     if (progress >= 1) return;
 
     if (action.name === "stretch") {
@@ -851,6 +896,50 @@ class SynraAvatar3DController {
       this.poseTarget.fingerCurl = 0.34 + 0.12 * ease;
       this.poseTarget.fingerSpread = 0.06 + 0.025 * ease;
       this.poseTarget.leftArmFold = 0.08 * ease;
+      return;
+    }
+
+    if (action.name === "shoulder_roll") {
+      const roll = Math.sin(progress * Math.PI * 2) * ease * motionLevel;
+      this.poseTarget.shoulderLift += 0.05 * ease;
+      this.poseTarget.chestY += 0.035 * roll;
+      this.poseTarget.upperChestY += 0.028 * roll;
+      this.poseTarget.headZ -= 0.024 * roll;
+      this.poseTarget.armOpen += 0.035 * ease;
+      this.poseTarget.fingerCurl = 0.34;
+      return;
+    }
+
+    if (action.name === "lookaround") {
+      const glance = smoothstep(0.08, 0.28, progress) * (1 - smoothstep(0.76, 1, progress));
+      const side = action.side || 1;
+      this.expressionTargets.surprised = Math.max(this.expressionTargets.surprised || 0, 0.08 * glance);
+      this.poseTarget.headY += side * 0.14 * glance;
+      this.poseTarget.headX += 0.025 * glance;
+      this.poseTarget.chestY += side * 0.035 * glance;
+      this.gazeTarget.x = side * 0.1 * glance;
+      this.gazeTarget.y = 0.025 * glance;
+      return;
+    }
+
+    if (action.name === "ready_breath") {
+      const breath = Math.sin(progress * Math.PI) * motionLevel;
+      this.expressionTargets.relaxed = Math.max(this.expressionTargets.relaxed || 0, 0.5 * breath);
+      this.poseTarget.chestX -= 0.04 * breath;
+      this.poseTarget.upperChestX -= 0.034 * breath;
+      this.poseTarget.headX -= 0.018 * breath;
+      this.poseTarget.armOpen += 0.035 * breath;
+      this.poseTarget.fingerCurl = 0.3;
+      this.poseTarget.fingerSpread = 0.055;
+      return;
+    }
+
+    if (action.name === "soft_nod") {
+      const nod = Math.sin(progress * Math.PI * 2.2) * ease * motionLevel;
+      this.expressionTargets.happy = Math.max(this.expressionTargets.happy || 0, 0.18 * ease);
+      this.poseTarget.headX += 0.055 * nod;
+      this.poseTarget.chestX += 0.018 * nod;
+      this.poseTarget.fingerCurl = 0.32;
       return;
     }
 
@@ -1092,28 +1181,33 @@ class SynraAvatar3DController {
   }
 
   updateIdleAction(elapsed) {
+    const motionLevel = this.motionLevel || 1;
     if (this.mode !== "idle" || this.speaking) {
       this.idleAction = { name: "none", startedAt: 0, duration: 0 };
-      this.nextIdleActionAt = elapsed + 8 + Math.random() * 8;
+      this.nextIdleActionAt = elapsed + (8 + Math.random() * 8) / motionLevel;
       return;
     }
     const active = this.idleAction.name !== "none";
     if (active && elapsed < this.idleAction.startedAt + this.idleAction.duration) return;
     if (active) {
       this.idleAction = { name: "none", startedAt: 0, duration: 0 };
-      this.nextIdleActionAt = elapsed + 5 + Math.random() * 8;
+      this.nextIdleActionAt = elapsed + (5 + Math.random() * 8) / motionLevel;
       return;
     }
     if (elapsed < this.nextIdleActionAt) return;
 
     const idleAge = Math.max(0, elapsed - this.lastInteractionAt);
-    const options =
+    let options =
       idleAge > 24
         ? [
             { name: "stretch", duration: 4.8 },
             { name: "weight_shift", duration: 4.2 },
             { name: "shy_smile", duration: 3.6 },
             { name: "hand_fidget", duration: 3.2 },
+            { name: "shoulder_roll", duration: 3.4 },
+            { name: "lookaround", duration: 3.8, side: Math.random() > 0.5 ? 1 : -1 },
+            { name: "ready_breath", duration: 3.4 },
+            { name: "soft_nod", duration: 2.6 },
             { name: "thoughtful_glance", duration: 4.2 },
             { name: "hair_tuck", duration: 3.8 },
             { name: "happy_bounce", duration: 2.8 }
@@ -1121,14 +1215,24 @@ class SynraAvatar3DController {
         : [
             { name: "weight_shift", duration: 3.8 },
             { name: "shy_smile", duration: 3.2 },
-            { name: "stretch", duration: 4.4 },
+            { name: "shoulder_roll", duration: 3.2 },
+            { name: "lookaround", duration: 3.4, side: Math.random() > 0.5 ? 1 : -1 },
+            { name: "ready_breath", duration: 3.0 },
+            { name: "soft_nod", duration: 2.4 },
             { name: "hand_fidget", duration: 2.8 },
             { name: "thoughtful_glance", duration: 3.8 },
             { name: "hair_tuck", duration: 3.6 },
             { name: "happy_bounce", duration: 2.6 }
           ];
+    if (this.personality === "focused") {
+      options = options.filter((item) => ["weight_shift", "lookaround", "ready_breath", "soft_nod", "thoughtful_glance"].includes(item.name));
+    } else if (this.personality === "playful") {
+      options.push({ name: "happy_bounce", duration: 2.7 }, { name: "shy_smile", duration: 3.3 }, { name: "hand_fidget", duration: 3 });
+    } else if (this.personality === "warm") {
+      options.push({ name: "soft_nod", duration: 2.6 }, { name: "ready_breath", duration: 3.2 }, { name: "hair_tuck", duration: 3.6 });
+    }
     const choice = options[Math.floor(Math.random() * options.length)];
-    this.idleAction = { ...choice, startedAt: elapsed };
+    this.idleAction = { ...choice, duration: choice.duration / Math.max(0.78, motionLevel * 0.88), startedAt: elapsed };
   }
 
   applyRelaxedFingerPose(elapsed) {

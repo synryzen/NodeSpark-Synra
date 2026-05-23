@@ -21,6 +21,8 @@ const commandSubmit = document.getElementById("commandSubmit");
 const hubStatus = document.getElementById("hubStatus");
 const backgroundSelect = document.getElementById("backgroundSelect");
 const voiceSelect = document.getElementById("voiceSelect");
+const personalitySelect = document.getElementById("personalitySelect");
+const motionSelect = document.getElementById("motionSelect");
 const hubSetup = document.getElementById("hubSetup");
 const hubSetupStatus = document.getElementById("hubSetupStatus");
 const hubConnectForm = document.getElementById("hubConnectForm");
@@ -38,6 +40,7 @@ const voiceBrainBadge = document.getElementById("voiceBrainBadge");
 const setupMeterLabel = document.getElementById("setupMeterLabel");
 const setupMeterValue = document.getElementById("setupMeterValue");
 const setupSteps = document.getElementById("setupSteps");
+const setupDiagnostics = document.getElementById("setupDiagnostics");
 
 let lastSpeechId = "";
 let recognition = null;
@@ -66,7 +69,9 @@ const serverTtsStartTimeoutMs = 3500;
 
 const storageKeys = {
   background: "nodespark.synra.background",
-  voice: "nodespark.synra.voice"
+  voice: "nodespark.synra.voice",
+  personality: "nodespark.synra.personality",
+  motion: "nodespark.synra.motion"
 };
 
 const voicePresets = {
@@ -179,6 +184,26 @@ function applyVoice(value) {
   postSettings({ voice });
 }
 
+function applyPersonality(value, options = {}) {
+  const personality = value || "balanced";
+  const persist = options.persist !== false;
+  document.documentElement.dataset.personality = personality;
+  if (personalitySelect) personalitySelect.value = personality;
+  storageSet(storageKeys.personality, personality);
+  window.synraAvatar3D?.setPersonality?.(personality);
+  if (persist) postSettings({ personality });
+}
+
+function applyMotion(value, options = {}) {
+  const motion = value || "normal";
+  const persist = options.persist !== false;
+  document.documentElement.dataset.motion = motion;
+  if (motionSelect) motionSelect.value = motion;
+  storageSet(storageKeys.motion, motion);
+  window.synraAvatar3D?.setMotionLevel?.(motion);
+  if (persist) postSettings({ motion });
+}
+
 async function postSettings(settings) {
   try {
     await fetch("/api/settings", {
@@ -233,6 +258,8 @@ async function fetchSettings() {
       storageSet(storageKeys.voice, settings.voice);
       if (voiceSelect) voiceSelect.value = settings.voice;
     }
+    applyPersonality(settings.personality || storageGet(storageKeys.personality, "balanced"), { persist: false });
+    applyMotion(settings.motion || storageGet(storageKeys.motion, "normal"), { persist: false });
   } catch {
     // Local storage covers offline sessions.
   }
@@ -364,7 +391,7 @@ function renderTtsStatus() {
 function renderHealth(health) {
   lastHealth = health;
   updateBrainBadges(health);
-  renderSetup(health.setup);
+  renderSetup(health.setup, health);
   if (!hubStatus) return;
   if (!health.hubConfigured) {
     hubStatus.textContent = "Local mode";
@@ -425,7 +452,7 @@ function updateBrainBadges(health) {
   }
 }
 
-function renderSetup(setup) {
+function renderSetup(setup, health = lastHealth) {
   if (!setup || !setupSteps) return;
   if (setupMeterValue) setupMeterValue.textContent = `${setup.complete || 0}/${setup.total || 0}`;
   if (setupMeterLabel) setupMeterLabel.textContent = setup.ready ? "Ready" : "Setup";
@@ -436,6 +463,45 @@ function renderSetup(setup) {
     item.textContent = step.label || step.id || "Step";
     item.title = step.detail || "";
     setupSteps.append(item);
+  });
+  renderSetupDiagnostics(setup, health);
+}
+
+function renderSetupDiagnostics(setup, health = lastHealth) {
+  if (!setupDiagnostics) return;
+  setupDiagnostics.innerHTML = "";
+  const missing = (setup.steps || []).filter((step) => !step.done);
+  const lines = [];
+  if (!missing.length) {
+    lines.push({ label: "Ready", detail: "Synra is fully connected and ready for Hub AI, voice, vision, and workflows.", status: "online" });
+  } else {
+    missing.slice(0, 3).forEach((step) => {
+      const action =
+        step.id === "hub_url"
+          ? "Save your NodeSparkHub URL."
+          : step.id === "pairing"
+            ? "Generate a pair code in NodeSparkHub and enter it here."
+            : step.id === "local_ai"
+              ? "Start Ollama or pull the configured text model."
+              : step.id === "vision"
+                ? "Pull the configured vision model and enable the kiosk camera."
+                : step.id === "voice"
+                  ? "Install Kokoro or configure ElevenLabs for natural speech."
+                  : "Refresh workflows from NodeSparkHub.";
+      lines.push({ label: step.label || step.id, detail: action, status: "todo" });
+    });
+  }
+  if (health?.hubLastError) {
+    lines.push({ label: "Hub detail", detail: health.hubLastError, status: "warning" });
+  }
+  if (health?.memory?.assistantTurns) {
+    lines.push({ label: "Memory", detail: `${health.memory.assistantTurns} assistant turns remembered locally.`, status: "online" });
+  }
+  lines.slice(0, 4).forEach((line) => {
+    const item = document.createElement("span");
+    item.dataset.status = line.status;
+    item.textContent = `${line.label}: ${line.detail}`;
+    setupDiagnostics.append(item);
   });
 }
 
@@ -1281,6 +1347,8 @@ voiceSelect?.addEventListener("change", () => {
   applyVoice(voiceSelect.value);
   renderTtsStatus();
 });
+personalitySelect?.addEventListener("change", () => applyPersonality(personalitySelect.value));
+motionSelect?.addEventListener("change", () => applyMotion(motionSelect.value));
 window.speechSynthesis?.addEventListener?.("voiceschanged", populateVoiceSelect);
 window.addEventListener("pointermove", handlePointerMove, { passive: true });
 navigator.mediaDevices?.addEventListener?.("devicechange", enumerateDevices);
@@ -1288,6 +1356,8 @@ navigator.mediaDevices?.addEventListener?.("devicechange", enumerateDevices);
 speechOutputEnabled = shouldEnableSpeechOutput();
 if (!speechOutputEnabled && voiceNote) voiceNote.textContent = "Voice muted for this view";
 applyBackground(storageGet(storageKeys.background, "grid"), { persist: false });
+applyPersonality(storageGet(storageKeys.personality, "balanced"), { persist: false });
+applyMotion(storageGet(storageKeys.motion, "normal"), { persist: false });
 populateVoiceSelect();
 fetchSettings();
 enumerateDevices();

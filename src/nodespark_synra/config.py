@@ -246,7 +246,7 @@ class StateStore:
         return value if isinstance(value, dict) else {}
 
     def update_ui_settings(self, values: dict) -> dict:
-        allowed = {"background", "voice", "voiceOutput", "autoMedia", "kioskMode"}
+        allowed = {"background", "voice", "personality", "motion", "voiceOutput", "autoMedia", "kioskMode"}
         settings = {**self.ui_settings}
         for key, value in values.items():
             if key not in allowed:

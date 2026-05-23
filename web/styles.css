@@ -928,6 +928,44 @@ h1 {
   color: #bdf7d8;
 }
 
+.setup-diagnostics {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.setup-diagnostics span {
+  min-width: 0;
+  padding: 6px 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 7px;
+  background: rgba(255,255,255,0.035);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setup-diagnostics span[data-status="online"] {
+  border-color: rgba(64, 240, 160, 0.3);
+  color: #bdf7d8;
+  background: rgba(64, 240, 160, 0.07);
+}
+
+.setup-diagnostics span[data-status="todo"] {
+  border-color: rgba(76, 201, 255, 0.28);
+  color: #b9e9ff;
+}
+
+.setup-diagnostics span[data-status="warning"] {
+  border-color: rgba(255, 209, 102, 0.34);
+  color: #ffe5a3;
+  background: rgba(255, 209, 102, 0.07);
+}
+
 .progress-track {
   height: 7px;
   border-radius: 99px;
@@ -979,6 +1017,22 @@ h1 {
 .settings-row select:focus {
   border-color: rgba(76, 201, 255, 0.9);
   box-shadow: 0 0 0 3px rgba(76, 201, 255, 0.13);
+}
+
+[data-personality="warm"] .avatar3d-layer {
+  filter: saturate(1.08) brightness(1.03);
+}
+
+[data-personality="focused"] .avatar3d-layer {
+  filter: saturate(0.96) contrast(1.05);
+}
+
+[data-motion="calm"] .avatar3d-layer {
+  transition: filter 320ms ease;
+}
+
+[data-motion="expressive"] .avatar3d-layer {
+  filter: saturate(1.12);
 }
 
 .command-bar input,

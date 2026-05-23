@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NodeSpark Synra</title>
-    <link rel="stylesheet" href="/styles.css?v=20260523-next-level-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260523-human-product-2" />
     <script type="importmap">
       {
         "imports": {
@@ -96,6 +96,7 @@
             <span id="setupMeterValue">0/5</span>
           </div>
           <div class="setup-steps" id="setupSteps"></div>
+          <div class="setup-diagnostics" id="setupDiagnostics" aria-live="polite"></div>
         </section>
 
         <div class="quick-actions">
@@ -139,6 +140,17 @@
             <option value="soft">Soft anime</option>
             <option value="calm">Calm assistant</option>
           </select>
+          <select id="personalitySelect" aria-label="Personality">
+            <option value="balanced">Balanced</option>
+            <option value="warm">Warm</option>
+            <option value="playful">Playful</option>
+            <option value="focused">Focused</option>
+          </select>
+          <select id="motionSelect" aria-label="Motion">
+            <option value="normal">Motion normal</option>
+            <option value="calm">Motion calm</option>
+            <option value="expressive">Motion expressive</option>
+          </select>
         </div>
         <div class="device-strip" aria-live="polite">
           <span id="micStatus">Mic checking</span>
@@ -149,7 +161,7 @@
       </aside>
     </main>
 
-    <script type="module" src="/avatar3d-driver.js?v=20260523-next-level-1"></script>
-    <script src="/app.js?v=20260523-next-level-1"></script>
+    <script type="module" src="/avatar3d-driver.js?v=20260523-human-product-2"></script>
+    <script src="/app.js?v=20260523-human-product-2"></script>
   </body>
 </html>
