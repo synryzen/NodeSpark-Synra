@@ -51,6 +51,7 @@ const setupDiagnostics = document.getElementById("setupDiagnostics");
 const emotionBadge = document.getElementById("emotionBadge");
 const coreGrid = document.getElementById("coreGrid");
 const setupGuide = document.getElementById("setupGuide");
+const opsBoard = document.getElementById("opsBoard");
 const memoryForm = document.getElementById("memoryForm");
 const memoryNameInput = document.getElementById("memoryNameInput");
 const memoryNoteInput = document.getElementById("memoryNoteInput");
@@ -430,6 +431,8 @@ function renderHealth(health) {
   renderCoreStatus(health);
   renderSetupGuide(health.setup, health);
   renderPairingStation(health);
+  renderOperations(health);
+  renderActivityFeed(health.activity || []);
   renderMemory(health.memory || {});
   if (!hubStatus) return;
   if (!health.hubConfigured) {
@@ -497,6 +500,43 @@ function renderPairingStation(health = lastHealth) {
   }
   if (hubCheckButton) hubCheckButton.disabled = !configured;
   if (pairingCopyButton) pairingCopyButton.disabled = !(pairing.deviceId || health?.deviceId);
+}
+
+function renderOperations(health = lastHealth) {
+  if (!opsBoard) return;
+  const ops = health?.operations || {};
+  const active = ops.currentMode === "workflow_running" || ops.currentMode === "thinking" || ops.currentMode === "listening";
+  const route = ops.lastRoute || (health?.hubPaired ? "hub:ready" : "local:first");
+  const source = ops.lastReplySource || "standby";
+  const cards = [
+    {
+      label: "Current",
+      detail: ops.currentMessage || "Synra is standing by.",
+      status: active ? "workflow" : "online"
+    },
+    {
+      label: "Hub",
+      detail: ops.hubState || "checking",
+      status: health?.hubPaired ? "online" : "todo"
+    },
+    {
+      label: "Route",
+      detail: `${route}${source !== "standby" ? ` / ${source}` : ""}`,
+      status: source === "fallback" ? "warning" : "online"
+    },
+    {
+      label: ops.activeWorkflow ? "Workflow" : "Turns",
+      detail: ops.activeWorkflow || `${ops.assistantTurns || 0} remembered locally`,
+      status: ops.activeWorkflow ? "workflow" : "online"
+    }
+  ];
+  opsBoard.innerHTML = "";
+  cards.forEach((card) => {
+    const item = document.createElement("span");
+    item.dataset.status = card.status;
+    item.innerHTML = `<strong>${escapeHtml(card.label)}</strong><small>${escapeHtml(card.detail)}</small>`;
+    opsBoard.append(item);
+  });
 }
 
 function renderCoreStatus(health = lastHealth) {
@@ -769,6 +809,29 @@ function pushActivity(state, card = {}) {
     row.innerHTML = `<strong>${escapeHtml(entry.at)} ${escapeHtml(entry.label)}</strong><small>${escapeHtml(entry.body)}</small>`;
     activityFeed.append(row);
   });
+}
+
+function renderActivityFeed(items = []) {
+  if (!activityFeed || !items.length) return;
+  activityItems = items.slice(0, 5).map((item) => ({
+    at: formatActivityTime(item.at),
+    label: item.label || item.kind || "Synra",
+    body: item.body || item.detail || "",
+    style: item.style || "info"
+  }));
+  activityFeed.innerHTML = "";
+  activityItems.forEach((entry) => {
+    const row = document.createElement("span");
+    row.dataset.status = entry.style;
+    row.innerHTML = `<strong>${escapeHtml(entry.at)} ${escapeHtml(entry.label)}</strong><small>${escapeHtml(entry.body)}</small>`;
+    activityFeed.append(row);
+  });
+}
+
+function formatActivityTime(value) {
+  const seconds = Number(value || 0);
+  if (!seconds) return "now";
+  return new Date(seconds * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 function visualStateFor(state) {

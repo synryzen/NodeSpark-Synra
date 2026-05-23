@@ -1379,6 +1379,7 @@ h1 {
 }
 
 .core-grid,
+.ops-board,
 .setup-guide {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1386,6 +1387,7 @@ h1 {
 }
 
 .core-grid span,
+.ops-board span,
 .setup-guide span,
 .activity-feed span {
   min-width: 0;
@@ -1401,6 +1403,7 @@ h1 {
 }
 
 .core-grid strong,
+.ops-board strong,
 .setup-guide strong,
 .activity-feed strong {
   overflow: hidden;
@@ -1412,6 +1415,7 @@ h1 {
 }
 
 .core-grid small,
+.ops-board small,
 .setup-guide small,
 .activity-feed small {
   overflow: hidden;
@@ -1423,13 +1427,25 @@ h1 {
 }
 
 .core-grid span[data-status="online"],
+.ops-board span[data-status="online"],
 .setup-guide span[data-status="online"] {
   border-color: rgba(64, 240, 160, 0.34);
   background: rgba(64, 240, 160, 0.065);
 }
 
 .core-grid span[data-status="warning"],
+.ops-board span[data-status="warning"],
 .setup-guide span[data-status="todo"] {
+  border-color: rgba(255, 209, 102, 0.32);
+  background: rgba(255, 209, 102, 0.06);
+}
+
+.ops-board span[data-status="workflow"] {
+  border-color: rgba(76, 201, 255, 0.38);
+  background: rgba(76, 201, 255, 0.075);
+}
+
+.ops-board span[data-status="todo"] {
   border-color: rgba(255, 209, 102, 0.32);
   background: rgba(255, 209, 102, 0.06);
 }
@@ -1854,6 +1870,7 @@ h1 {
   }
 
   .core-grid,
+  .ops-board,
   .setup-guide,
   .memory-form {
     grid-template-columns: 1fr;
@@ -1949,6 +1966,7 @@ h1 {
   }
 
   .core-grid span,
+  .ops-board span,
   .setup-guide span,
   .activity-feed span {
     min-height: 31px;

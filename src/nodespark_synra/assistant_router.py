@@ -174,6 +174,9 @@ def _looks_like_setup(lowered: str) -> bool:
 
 
 def _looks_like_health(lowered: str) -> bool:
+    normalized = re.sub(r"[^\w\s']", "", lowered).strip()
+    if normalized in {"status", "health", "are you ready", "what is your status", "what's your status", "how are you doing"}:
+        return True
     return any(token in lowered for token in ("status", "health", "online", "ready", "connected")) and any(
         token in lowered for token in ("hub", "synra", "local", "voice", "workflow", "device", "model")
     )

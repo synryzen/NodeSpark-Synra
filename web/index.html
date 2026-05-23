@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NodeSpark Synra</title>
-    <link rel="stylesheet" href="/styles.css?v=20260523-pairing-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260523-ops-1" />
     <script type="importmap">
       {
         "imports": {
@@ -137,6 +137,12 @@
             <span data-status="local">Hub standby</span>
           </div>
           <div class="setup-guide" id="setupGuide"></div>
+          <div class="ops-board" id="opsBoard" aria-label="Synra operations">
+            <span data-status="local"><strong>Current</strong><small>Waiting for state</small></span>
+            <span data-status="local"><strong>Hub</strong><small>Checking link</small></span>
+            <span data-status="local"><strong>Route</strong><small>Local first</small></span>
+            <span data-status="local"><strong>Turns</strong><small>0 remembered</small></span>
+          </div>
           <form class="memory-form" id="memoryForm">
             <input id="memoryNameInput" autocomplete="name" spellcheck="false" placeholder="Name Synra should remember" />
             <input id="memoryNoteInput" autocomplete="off" spellcheck="true" placeholder="Preference or role note" />
@@ -208,7 +214,7 @@
       </aside>
     </main>
 
-    <script type="module" src="/avatar3d-driver.js?v=20260523-pairing-1"></script>
-    <script src="/app.js?v=20260523-pairing-1"></script>
+    <script type="module" src="/avatar3d-driver.js?v=20260523-ops-1"></script>
+    <script src="/app.js?v=20260523-ops-1"></script>
   </body>
 </html>

@@ -246,6 +246,24 @@ class StateStore:
         return {}
 
     @property
+    def activity(self) -> list:
+        value = self.data.get("activity", [])
+        return value if isinstance(value, list) else []
+
+    def append_activity(self, values: dict, limit: int = 40) -> list:
+        event = {}
+        for key in ("at", "kind", "label", "body", "detail", "style"):
+            value = values.get(key)
+            if isinstance(value, (str, int, float, bool)):
+                event[key] = value
+        if not event.get("at"):
+            event["at"] = 0
+        events = [event, *[item for item in self.activity if isinstance(item, dict)]]
+        self.data["activity"] = events[: max(5, int(limit))]
+        self.save()
+        return self.activity
+
+    @property
     def ui_settings(self) -> dict:
         value = self.data.get("ui_settings", {})
         return value if isinstance(value, dict) else {}

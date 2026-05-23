@@ -37,6 +37,9 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/memory":
             self._json({"ok": True, "memory": self.server.app.public_memory()})
             return
+        if path == "/api/activity":
+            self._json({"ok": True, "activity": self.server.app.public_activity()})
+            return
         if path == "/api/pairing":
             self._json({"ok": True, "pairing": self.server.app.pairing_snapshot()})
             return

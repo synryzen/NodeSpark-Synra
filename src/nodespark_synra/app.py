@@ -127,6 +127,8 @@ class SynraApp:
             "uiSettings": self.store.ui_settings,
             "privacy": self.privacy_snapshot(),
             "pairing": self.pairing_snapshot(),
+            "operations": self.operations_snapshot(),
+            "activity": self.public_activity(),
         }
 
     def public_memory(self) -> dict[str, Any]:
@@ -140,6 +142,22 @@ class SynraApp:
             "assistantTurns": int(memory.get("assistantTurns", 0) or 0),
             "recentTurns": recent_turns if isinstance(recent_turns, list) else [],
         }
+
+    def public_activity(self) -> list[dict[str, Any]]:
+        return [
+            item for item in self.store.activity[:12]
+            if isinstance(item, dict)
+        ]
+
+    def record_activity(self, label: str, body: str, style: str = "info", kind: str = "event", detail: str = "") -> None:
+        self.store.append_activity({
+            "at": int(time.time()),
+            "kind": kind[:40],
+            "label": label[:80],
+            "body": " ".join(body.split())[:220],
+            "detail": " ".join(detail.split())[:220],
+            "style": style[:32],
+        })
 
     def privacy_snapshot(self) -> dict[str, Any]:
         tts_status = self.tts.status()
@@ -184,6 +202,24 @@ class SynraApp:
             "status": status,
             "nextAction": next_action,
             "pairingUri": f"nodesparkhub-device://pair?{urlencode(params)}",
+        }
+
+    def operations_snapshot(self) -> dict[str, Any]:
+        state = self.state.snapshot()
+        card = state.get("card") if isinstance(state.get("card"), dict) else {}
+        memory = self.store.memory
+        hub_state = "linked" if self.hub_ready_for_actions() else self.pairing_snapshot()["status"]
+        return {
+            "currentMode": str(state.get("mode") or "idle"),
+            "currentExpression": str(state.get("expression") or "soft_smile"),
+            "currentMessage": str(state.get("message") or ""),
+            "currentDetail": str(card.get("detail") or state.get("subtitle") or ""),
+            "hubState": hub_state,
+            "activeWorkflow": str(card.get("body") or self.cfg.hub.default_workflow) if state.get("mode") == "workflow_running" else "",
+            "lastRoute": str(memory.get("lastAssistantRoute", "")),
+            "lastReplySource": str(memory.get("lastReplySource", "")),
+            "assistantTurns": int(memory.get("assistantTurns", 0) or 0),
+            "activityCount": len(self.store.activity),
         }
 
     def hub_diagnostics(self) -> dict[str, Any]:
@@ -305,6 +341,7 @@ class SynraApp:
                 "style": style,
             },
         })
+        self.record_activity("Hub URL", message, style, "hub", normalized)
         return self.health_snapshot()
 
     def mark_hub_ok(self) -> None:
@@ -347,6 +384,7 @@ class SynraApp:
                     "progress": 1,
                 },
             })
+            self.record_activity("Hub paired", "Synra linked to NodeSparkHub.", "success", "pairing", self.cfg.hub.base_url)
         return response
 
     def list_workflows(self) -> list[str]:
@@ -367,7 +405,9 @@ class SynraApp:
 
     def update_memory_settings(self, values: dict[str, Any]) -> dict[str, Any]:
         if values.get("clear") is True:
-            return self.store.clear_memory()
+            memory = self.store.clear_memory()
+            self.record_activity("Memory cleared", "Synra local memory was cleared.", "success", "memory")
+            return memory
         updates: dict[str, Any] = {}
         if "preferredName" in values:
             name = str(values.get("preferredName") or "").strip()[:80]
@@ -375,7 +415,10 @@ class SynraApp:
         if "profileNote" in values:
             note = str(values.get("profileNote") or "").strip()[:240]
             updates["profileNote"] = note or None
-        return self.store.update_memory(updates)
+        memory = self.store.update_memory(updates)
+        if updates:
+            self.record_activity("Memory saved", "Synra updated local personality memory.", "success", "memory")
+        return memory
 
     def handle_command(self, command: dict[str, Any], ack: bool = False) -> dict[str, Any]:
         command_id = str(command.get("id") or command.get("commandId") or "")
@@ -386,6 +429,7 @@ class SynraApp:
             image = str(command.get("image") or command.get("imageBase64") or "")
             route = classify_assistant_request(text, self.cfg.hub.default_workflow)
             self.store.update_memory({"lastAssistantRoute": route.route if not route.tool else f"{route.route}:{route.tool}"})
+            self.record_activity("User request", text, "thinking", "assistant", route.detail)
             if image or route.route == "vision":
                 result = self._handle_vision_request(text, image, command_id)
                 if ack and command_id and self.hub_can_try():
@@ -515,6 +559,7 @@ class SynraApp:
                 result = f"Workflow staged locally: {workflow}. Configure hub.base_url to run it."
                 if self.hub.configured():
                     result = f"I staged {workflow} locally. Pair Synra with NodeSparkHub to run it from this monitor."
+                self.record_activity("Workflow staged", workflow, "warning", "workflow", self.hub_offline_detail())
                 self.state.apply_command({
                     "type": "speak",
                     "title": "Workflow Staged",
@@ -534,6 +579,7 @@ class SynraApp:
                     reply = f"I started {workflow}."
                     if run_id:
                         reply = f"I started {workflow}. Run ID {run_id}."
+                    self.record_activity("Workflow running", workflow, "workflow", "workflow", run_id or "NodeSparkHub accepted the run request")
                     self.state.apply_command({
                         "type": "speak",
                         "title": "Workflow Running",
@@ -547,6 +593,7 @@ class SynraApp:
                 except Exception as exc:
                     self.mark_hub_error(exc)
                     result = f"I staged {workflow}, but NodeSparkHub did not accept the run yet. I'll keep the request visible while the Hub comes back online."
+                    self.record_activity("Workflow staged", workflow, "warning", "workflow", str(exc))
                     self.state.apply_command({
                         "type": "speak",
                         "title": "Workflow Staged",
@@ -584,6 +631,7 @@ class SynraApp:
                 return None
             self.store.update_memory({"preferredName": name})
             reply = f"Nice to meet you, {name}. I’ll remember that."
+            self.record_activity("Memory saved", f"Preferred name: {name}", "success", "memory")
             self._speak_tool_reply(command_id, reply, "Memory", "bright", "Saved locally", "success")
             return reply
         if route.tool == "setup_status":
@@ -598,8 +646,16 @@ class SynraApp:
         if route.tool == "status":
             setup = self.setup_status()
             local = "ready" if self.local_ai.status().get("available") else "standby"
-            hub = "linked" if self.hub_ready_for_actions() else self.hub_offline_detail() or "local mode"
+            if self.hub_ready_for_actions():
+                hub = "linked"
+            elif not self.hub.configured():
+                hub = "waiting for a Hub URL"
+            elif not self.store.token:
+                hub = "waiting for pairing"
+            else:
+                hub = "temporarily offline"
             reply = f"Synra status: local AI is {local}, NodeSparkHub is {hub}, setup is {setup['complete']} of {setup['total']}."
+            self.record_activity("Status", reply, "info", "status")
             self._speak_tool_reply(command_id, reply, "Status", "attentive", "Local monitor status", "info")
             return reply
         if route.tool == "list_workflows":
@@ -607,6 +663,7 @@ class SynraApp:
             visible = ", ".join(workflows[:5]) if workflows else "no workflows yet"
             more = f" plus {len(workflows) - 5} more" if len(workflows) > 5 else ""
             reply = f"I found {visible}{more}."
+            self.record_activity("Workflows listed", visible, "workflow", "workflow")
             self._speak_tool_reply(command_id, reply, "Workflows", "focused", "NodeSparkHub workflow list", "workflow")
             return reply
         if route.tool == "run_workflow":
@@ -654,6 +711,7 @@ class SynraApp:
         try:
             local = self.local_ai.answer_vision(text or "What do you see?", image, self._local_context())
             reply = _synra_identity_reply(local.text)
+            self.record_activity("Vision", reply, "voice", "vision", f"Model: {local.model}")
             self.state.apply_command({
                 "type": "speak",
                 "title": "Synra Vision",
@@ -668,6 +726,7 @@ class SynraApp:
             return reply[:240]
         except Exception as exc:
             reply = "I tried to look, but my vision model is not ready yet. Install or pull the local vision model and I can use the camera."
+            self.record_activity("Vision unavailable", str(exc), "warning", "vision")
             self.state.apply_command({
                 "type": "speak",
                 "title": "Vision Unavailable",
@@ -753,6 +812,13 @@ class SynraApp:
             "assistantTurns": turns,
             "recentTurns": recent_turns[-6:],
         })
+        label = {
+            "hub": "Hub reply",
+            "local": "Local reply",
+            "fallback": "Fallback reply",
+        }.get(source, "Synra reply")
+        style = "voice" if source in {"hub", "local"} else "warning"
+        self.record_activity(label, assistant_reply, style, "assistant", user_text)
 
     def _fallback_assistant_reply(self, text: str, hub_configured: bool) -> tuple[str, str, str]:
         try:
