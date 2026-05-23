@@ -176,7 +176,7 @@ class SynraApp:
             "localAIAvailable": bool(local_status.get("available")),
             "visionLocal": bool(local_status.get("visionAvailable")),
             "voiceProvider": provider,
-            "voiceLocal": provider in {"browser", "kokoro", "voicebox"},
+            "voiceLocal": provider in {"browser", "kokoro", "qwen", "voicebox"},
             "hubRequiredForWorkflows": True,
             "memoryStoredLocally": True,
         }

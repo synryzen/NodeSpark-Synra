@@ -334,7 +334,7 @@ function populateVoiceSelect() {
 
 function syncVoiceOptions() {
   if (!voiceSelect) return;
-  const selected = storageGet(storageKeys.voice, voiceSelect.value || "voicebox:anime");
+  const selected = storageGet(storageKeys.voice, voiceSelect.value || "qwen:anime");
   const serverVoices = Array.isArray(ttsStatus.voices) ? ttsStatus.voices : [];
   if (ttsStatus.available && serverVoices.length) {
     voiceSelect.innerHTML = "";
@@ -444,6 +444,8 @@ function renderTtsStatus() {
   const selected = selectedVoiceName();
   const label = provider === "elevenlabs"
     ? `Natural voice ready: ${selected}`
+    : provider === "qwen"
+      ? `Expressive anime voice: ${selected}`
     : provider === "voicebox"
       ? `Expressive anime voice: ${selected}`
     : provider === "kokoro"
@@ -632,7 +634,7 @@ function renderCoreStatus(health = lastHealth) {
       status: visionReady ? "online" : "local"
     },
     {
-      label: voiceProvider === "voicebox" ? "Expressive anime voice" : voiceProvider === "kokoro" ? "Local natural voice" : voiceProvider === "elevenlabs" ? "ElevenLabs voice" : "Browser voice",
+      label: voiceProvider === "qwen" || voiceProvider === "voicebox" ? "Expressive anime voice" : voiceProvider === "kokoro" ? "Local natural voice" : voiceProvider === "elevenlabs" ? "ElevenLabs voice" : "Browser voice",
       detail: voiceProvider === "browser" ? "Fallback active" : "Natural speech ready",
       status: ttsStatus.available ? "online" : "local"
     },
@@ -714,7 +716,7 @@ function setupActionFor(step, health = lastHealth) {
   if (step.id === "pairing") return "Generate a pair code in NodeSparkHub, then enter it here.";
   if (step.id === "local_ai") return `Start Ollama and pull ${health?.localAI?.model || "the text model"}.`;
   if (step.id === "vision") return `Pull ${health?.localAI?.visionModel || "the vision model"} for camera awareness.`;
-  if (step.id === "voice") return "Enable Kokoro or ElevenLabs for natural speech.";
+  if (step.id === "voice") return "Enable Qwen, Voicebox, Kokoro, or ElevenLabs for natural speech.";
   return "Refresh workflows from NodeSparkHub.";
 }
 

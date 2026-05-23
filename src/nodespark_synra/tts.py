@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import io
 import json
+import threading
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
@@ -26,6 +27,9 @@ class TTSResult:
 class TTSService:
     def __init__(self, cfg: TTSConfig):
         self.cfg = cfg
+        self._qwen_model: Any | None = None
+        self._qwen_model_size: str = ""
+        self._qwen_lock = threading.Lock()
         self._kokoro_pipeline: Any | None = None
 
     def status(self) -> dict[str, Any]:
@@ -41,6 +45,8 @@ class TTSService:
     def synthesize(self, text: str, voice: str = "cute") -> TTSResult:
         text = self._clean_text(text)
         provider = self._selected_provider()
+        if provider == "qwen":
+            return self._qwen(text, voice)
         if provider == "voicebox":
             return self._voicebox(text, voice)
         if provider == "elevenlabs":
@@ -53,12 +59,16 @@ class TTSService:
         requested = (self.cfg.provider or "auto").strip().lower()
         if requested in {"browser", "off", "none"}:
             return ""
+        if requested == "qwen":
+            return "qwen" if self._qwen_available() else ""
         if requested == "voicebox":
             return "voicebox" if self._voicebox_available() else ""
         if requested == "elevenlabs":
             return "elevenlabs" if self.cfg.elevenlabs_api_key else ""
         if requested == "kokoro":
             return "kokoro" if self._kokoro_available() else ""
+        if self.cfg.qwen_enabled and self._qwen_available():
+            return "qwen"
         if self.cfg.voicebox_enabled and self._voicebox_available():
             return "voicebox"
         if self.cfg.elevenlabs_api_key:
@@ -68,12 +78,16 @@ class TTSService:
         return ""
 
     def _status_detail(self, provider: str) -> str:
+        if provider == "qwen":
+            return "Qwen CustomVoice expressive local anime voice is available."
         if provider == "voicebox":
             return "Voicebox expressive local voice server is available."
         if provider == "elevenlabs":
             return "ElevenLabs neural voice is configured."
         if provider == "kokoro":
             return "Kokoro local neural voice is available."
+        if (self.cfg.provider or "auto").strip().lower() == "qwen":
+            return "Install qwen-tts with working CUDA, or set NODESPARK_SYNRA_QWEN_TTS_ALLOW_CPU=true for slow CPU testing."
         if (self.cfg.provider or "auto").strip().lower() == "voicebox":
             return "Start Voicebox on the configured URL to enable Synra's expressive anime voice."
         if (self.cfg.provider or "auto").strip().lower() == "elevenlabs":
@@ -129,6 +143,141 @@ class TTSService:
         if voice.startswith("elevenlabs:"):
             return voice.split(":", 1)[1].strip()
         return self.cfg.elevenlabs_voice_id.strip()
+
+    def _qwen_available(self) -> bool:
+        if not self.cfg.qwen_enabled:
+            return False
+        try:
+            import qwen_tts  # noqa: F401
+            import soundfile  # noqa: F401
+            import torch
+        except Exception:
+            return False
+        if not self.cfg.qwen_allow_cpu and not torch.cuda.is_available():
+            return False
+        return True
+
+    def _qwen(self, text: str, voice: str) -> TTSResult:
+        try:
+            import soundfile as sf
+            import torch
+        except Exception as exc:
+            raise TTSError("Qwen TTS dependencies are not installed in the Synra virtualenv.") from exc
+
+        preset = self._qwen_preset_for(voice)
+        model = self._qwen_model_for_size(self.cfg.qwen_model_size or "0.6B")
+        language = self._qwen_language_name(preset["language"])
+        kwargs = {
+            "text": text,
+            "language": language,
+            "speaker": preset["preset_voice_id"],
+            "instruct": preset["instruct"],
+        }
+
+        with self._qwen_lock:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            wavs, sample_rate = model.generate_custom_voice(**kwargs)
+
+        audio = wavs[0] if isinstance(wavs, (list, tuple)) else wavs
+        buffer = io.BytesIO()
+        sf.write(buffer, audio, int(sample_rate or 24000), format="WAV")
+        return TTSResult(buffer.getvalue(), "audio/wav", "qwen", preset["id"])
+
+    def _qwen_model_for_size(self, model_size: str) -> Any:
+        normalized = model_size if model_size in {"0.6B", "1.7B"} else "0.6B"
+        if self._qwen_model is not None and self._qwen_model_size == normalized:
+            return self._qwen_model
+
+        with self._qwen_lock:
+            if self._qwen_model is not None and self._qwen_model_size == normalized:
+                return self._qwen_model
+
+            import torch
+            from qwen_tts import Qwen3TTSModel
+
+            repo = {
+                "0.6B": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+                "1.7B": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+            }[normalized]
+            if self._qwen_model is not None:
+                del self._qwen_model
+                self._qwen_model = None
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+            dtype = (self.cfg.qwen_torch_dtype or "auto").lower()
+            if dtype == "float32":
+                torch_dtype = torch.float32
+            elif dtype in {"float16", "fp16"}:
+                torch_dtype = torch.float16
+            elif dtype in {"bfloat16", "bf16"}:
+                torch_dtype = torch.bfloat16
+            else:
+                torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+            if torch.cuda.is_available():
+                self._qwen_model = Qwen3TTSModel.from_pretrained(repo, device_map="cuda", torch_dtype=torch_dtype)
+            else:
+                self._qwen_model = Qwen3TTSModel.from_pretrained(repo, torch_dtype=torch.float32, low_cpu_mem_usage=False)
+            self._qwen_model_size = normalized
+            return self._qwen_model
+
+    def _qwen_language_name(self, language: str) -> str:
+        mapping = {
+            "en": "English",
+            "ja": "Japanese",
+            "ko": "Korean",
+            "zh": "Chinese",
+            "es": "Spanish",
+            "fr": "French",
+            "de": "German",
+            "it": "Italian",
+            "pt": "Portuguese",
+            "ru": "Russian",
+        }
+        return mapping.get(language, "Auto")
+
+    def _qwen_preset_for(self, voice: str) -> dict[str, str]:
+        key = voice.split(":", 1)[1] if voice.startswith("qwen:") else voice
+        presets = {item["id"]: item for item in self._qwen_presets()}
+        return presets.get(key, presets["anime"])
+
+    def _qwen_presets(self) -> list[dict[str, str]]:
+        return [
+            {
+                "id": "anime",
+                "name": "Synra Anime",
+                "style": "playful realistic anime female",
+                "language": "en",
+                "preset_voice_id": "Ono_Anna",
+                "instruct": "Speak in English as a realistic anime girl: cute, bright, emotional, lively, and natural. Avoid a robotic or announcer tone.",
+            },
+            {
+                "id": "soft",
+                "name": "Synra Soft",
+                "style": "gentle emotional female",
+                "language": "en",
+                "preset_voice_id": "Serena",
+                "instruct": "Speak softly with warm emotion, natural breath, and a caring anime-assistant personality. Keep it realistic.",
+            },
+            {
+                "id": "bright",
+                "name": "Synra Bright",
+                "style": "bright energetic female",
+                "language": "en",
+                "preset_voice_id": "Vivian",
+                "instruct": "Speak with upbeat youthful energy, subtle anime charm, clear emotion, and natural pacing. Do not sound robotic.",
+            },
+            {
+                "id": "emotional",
+                "name": "Synra Emotional",
+                "style": "warm expressive female",
+                "language": "en",
+                "preset_voice_id": "Sohee",
+                "instruct": "Speak with rich feeling, gentle confidence, and realistic conversational timing. Keep the voice cute but human.",
+            },
+        ]
 
     def _voicebox_available(self) -> bool:
         if not self.cfg.voicebox_enabled:
@@ -335,6 +484,11 @@ class TTSService:
         return mapping.get(voice, self.cfg.kokoro_voice or "af_heart")
 
     def _voice_catalog(self, provider: str) -> list[dict[str, str]]:
+        if provider == "qwen":
+            return [
+                {"id": f"qwen:{preset['id']}", "name": preset["name"], "style": preset["style"], "provider": "qwen"}
+                for preset in self._qwen_presets()
+            ]
         if provider == "voicebox":
             return [
                 {"id": f"voicebox:{preset['id']}", "name": preset["name"], "style": preset["style"], "provider": "voicebox"}

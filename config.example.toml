@@ -16,10 +16,15 @@ port = 8788
 open_browser = false
 
 [tts]
-# auto uses Voicebox when reachable, then ElevenLabs when ELEVENLABS_API_KEY is
-# set, then Kokoro when installed, then falls back to the browser voice.
+# auto uses direct Qwen CustomVoice when installed, then Voicebox when
+# reachable, then ElevenLabs when ELEVENLABS_API_KEY is set, then Kokoro when
+# installed, then falls back to the browser voice.
 provider = "auto"
 max_text_chars = 900
+qwen_enabled = true
+qwen_model_size = "0.6B"
+qwen_torch_dtype = "auto"
+qwen_allow_cpu = false
 voicebox_enabled = true
 voicebox_base_url = "http://127.0.0.1:17493"
 voicebox_timeout_seconds = 90.0

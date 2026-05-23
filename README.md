@@ -15,9 +15,9 @@ daemon, and a full-screen kiosk UI for the Jetson Orin Nano developer kit.
   workflow_running, success, warning, error, approval_needed, and sleep.
 - Human-like idle motion: relaxed stance, small gaze shifts, weight shifts,
   subtle stretches, delayed yawn behavior, wave cues, and explanation gestures.
-- Natural TTS bridge with Voicebox, ElevenLabs, and local Kokoro support, plus
-  browser speech as the final fallback.
-- Expressive anime voice presets for Voicebox/Qwen CustomVoice, plus mouth
+- Natural TTS bridge with direct Qwen CustomVoice, Voicebox, ElevenLabs, and
+  local Kokoro support, plus browser speech as the final fallback.
+- Expressive anime voice presets for Qwen CustomVoice and Voicebox, plus mouth
   motion and speaking nods.
 - Browser microphone flow where permissions allow it.
 - Typed command bar for environments where the microphone is blocked.
@@ -129,16 +129,46 @@ renderer stays available on systems where GPU acceleration is inconsistent.
 
 Synra asks the local daemon for generated speech first. The daemon uses:
 
+- Direct Qwen CustomVoice when its Python package is installed.
 - Voicebox when its local REST server is reachable.
 - ElevenLabs when `ELEVENLABS_API_KEY` is set.
 - Kokoro when the optional local Kokoro stack is installed.
 - Browser speech only as a fallback.
 
-For the best free anime-style voice, run Voicebox as a separate local voice
-server and let Synra connect to it. Synra will auto-create four Qwen
-CustomVoice preset profiles the first time each one is used: Synra Anime,
-Synra Soft, Synra Bright, and Synra Emotional. These use delivery instructions
-so the voice is more expressive and less robotic.
+For the best free anime-style voice on Synra itself, install Qwen CustomVoice.
+It gives Synra four expressive female presets: Synra Anime, Synra Soft, Synra
+Bright, and Synra Emotional. These use delivery instructions so the voice is
+more expressive and less robotic.
+
+```bash
+bash /opt/nodespark-synra/scripts/install_qwen_tts.sh
+systemctl --user edit nodespark-synra
+```
+
+Add:
+
+```ini
+[Service]
+Environment=NODESPARK_SYNRA_TTS_PROVIDER=qwen
+Environment=NODESPARK_SYNRA_QWEN_TTS_MODEL_SIZE=0.6B
+```
+
+Then restart:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user restart nodespark-synra
+```
+
+The first voice test downloads the Qwen CustomVoice model, so it can take a
+while. Use `0.6B` first on small devices. Direct Qwen is only selected when
+CUDA is available; CPU mode is too slow for the kiosk experience on the current
+Jetson setup. For temporary CPU testing only, set
+`NODESPARK_SYNRA_QWEN_TTS_ALLOW_CPU=true`.
+
+Voicebox is still supported when you want to run a separate voice studio server
+on a stronger machine and let Synra connect to it. Synra will auto-create the
+same four Qwen CustomVoice preset profiles the first time each one is used.
 
 ```ini
 [Service]
