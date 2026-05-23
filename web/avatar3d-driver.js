@@ -788,7 +788,7 @@ class SynraAvatar3DController {
     if (name === "wave") {
       const progress = clamp(stateAge / 4.2, 0, 1);
       const envelope = Math.max(0.82, actionEnvelope(progress, 0.18, 0.22));
-      const wristWave = Math.sin(progress * Math.PI * 8.5) * envelope;
+      const forearmWave = Math.sin(progress * Math.PI * 7.5) * envelope;
       const friendlyBounce = Math.sin(progress * Math.PI * 2.2) * envelope;
       this.expressionTargets.happy = Math.max(this.expressionTargets.happy || 0, 0.72 * envelope);
       this.expressionTargets.joy = Math.max(this.expressionTargets.joy || 0, 0.52 * envelope);
@@ -806,7 +806,7 @@ class SynraAvatar3DController {
       this.poseTarget.leftArmFold += 0.04 * envelope;
       this.poseTarget.wave = envelope;
       this.poseTarget.rightPalmOut = envelope;
-      this.poseTarget.wristTwist += wristWave * 0.22;
+      this.poseTarget.wristTwist += forearmWave * 0.045;
       this.poseTarget.fingerCurl = 0.13 + 0.04 * (1 - envelope);
       this.poseTarget.thumbRelax = 0.12;
       this.poseTarget.fingerSpread = 0.11 * envelope;
@@ -1107,11 +1107,11 @@ class SynraAvatar3DController {
 	      const waveBeat = Math.sin(elapsed * 9.5) * wave;
 	      rightLowerArm.rotation.z = lerp(
 	        rightLowerArm.rotation.z,
-        -0.16 + this.pose.armOpen * 0.08 - this.pose.elbowBend - this.pose.rightArmFold * 0.34 + wave * 1.42 - explain * 0.2 + handToMouth * 1.72,
+        -0.16 + this.pose.armOpen * 0.08 - this.pose.elbowBend - this.pose.rightArmFold * 0.34 + wave * 1.5 + waveBeat * 0.08 - explain * 0.2 + handToMouth * 1.72,
 	        0.06
 	      );
 	      rightLowerArm.rotation.x = lerp(rightLowerArm.rotation.x, 0.035 - this.pose.rightArmRaise * 0.08 - handToMouth * 0.18 + wave * 0.18 + armForward * 0.24, 0.06);
-	      rightLowerArm.rotation.y = lerp(rightLowerArm.rotation.y, -0.04 - this.pose.rightArmFold * 0.12 + waveBeat * 0.1 + wave * 0.86 - explain * 0.08 + handToMouth * 0.82 + armForward * 0.16, 0.06);
+	      rightLowerArm.rotation.y = lerp(rightLowerArm.rotation.y, -0.04 - this.pose.rightArmFold * 0.12 + waveBeat * 0.16 + wave * 0.78 - explain * 0.08 + handToMouth * 0.82 + armForward * 0.16, 0.06);
 	    }
 	    if (leftHand) {
 	      const palmOut = this.pose.leftPalmOut || 0;
@@ -1125,9 +1125,9 @@ class SynraAvatar3DController {
 	      const palmOut = this.pose.rightPalmOut || 0;
 	      const coverMouth = this.pose.coverMouth || 0;
 	      const waveBeat = Math.sin(elapsed * 11.5) * wave;
-	      rightHand.rotation.z = lerp(rightHand.rotation.z, 0.09 - handToMouth * 0.22 - coverMouth * 0.08 + waveBeat * 0.1 - palmOut * 0.12, 0.08);
-	      rightHand.rotation.x = lerp(rightHand.rotation.x, -0.035 - handToMouth * 0.36 - coverMouth * 0.18 + palmOut * 0.24, 0.08);
-	      rightHand.rotation.y = lerp(rightHand.rotation.y, -this.pose.wristTwist + 0.035 + handToMouth * 0.28 + coverMouth * 0.16 - palmOut * 0.82 + waveBeat * 0.06, 0.08);
+	      rightHand.rotation.z = lerp(rightHand.rotation.z, 0.12 - handToMouth * 0.22 - coverMouth * 0.08 + waveBeat * 0.015, 0.08);
+	      rightHand.rotation.x = lerp(rightHand.rotation.x, -0.035 - handToMouth * 0.36 - coverMouth * 0.18 + palmOut * 0.18 - wave * 0.12, 0.08);
+	      rightHand.rotation.y = lerp(rightHand.rotation.y, -this.pose.wristTwist + 0.035 + handToMouth * 0.28 + coverMouth * 0.16 - palmOut * 0.52 + waveBeat * 0.015, 0.08);
 	    }
     this.applyRelaxedFingerPose(elapsed);
     if (this.vrm.expressionManager) {
