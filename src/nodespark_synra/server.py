@@ -34,6 +34,9 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/settings":
             self._json({"ok": True, "settings": self.server.app.store.ui_settings})
             return
+        if path == "/api/memory":
+            self._json({"ok": True, "memory": self.server.app.public_memory()})
+            return
         if path == "/api/workflows":
             self._json({"ok": True, "workflows": self.server.app.list_workflows()})
             return
@@ -64,6 +67,9 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/settings":
             settings = self.server.app.update_settings(payload)
             self._json({"ok": True, "settings": settings})
+            return
+        if path == "/api/memory":
+            self._json({"ok": True, "memory": self.server.app.update_memory_settings(payload)})
             return
         if path == "/api/connect":
             base_url = str(payload.get("baseUrl") or payload.get("hubUrl") or "")

@@ -41,6 +41,15 @@ const setupMeterLabel = document.getElementById("setupMeterLabel");
 const setupMeterValue = document.getElementById("setupMeterValue");
 const setupSteps = document.getElementById("setupSteps");
 const setupDiagnostics = document.getElementById("setupDiagnostics");
+const emotionBadge = document.getElementById("emotionBadge");
+const coreGrid = document.getElementById("coreGrid");
+const setupGuide = document.getElementById("setupGuide");
+const memoryForm = document.getElementById("memoryForm");
+const memoryNameInput = document.getElementById("memoryNameInput");
+const memoryNoteInput = document.getElementById("memoryNoteInput");
+const memorySaveButton = document.getElementById("memorySaveButton");
+const memoryClearButton = document.getElementById("memoryClearButton");
+const activityFeed = document.getElementById("activityFeed");
 
 let lastSpeechId = "";
 let recognition = null;
@@ -64,6 +73,7 @@ let activeSpeechAudio = null;
 let speechMouthTimer = null;
 let lastHealth = null;
 let ttsStatus = { available: false, provider: "browser" };
+let activityItems = [];
 const pageParams = new URLSearchParams(window.location.search);
 const serverTtsStartTimeoutMs = 3500;
 
@@ -376,6 +386,13 @@ async function fetchTtsStatus() {
   }
 }
 
+async function updateMemory(payload) {
+  const data = await postJson("/api/memory", payload);
+  renderMemory(data.memory || {});
+  await fetchHealth();
+  return data.memory || {};
+}
+
 function renderTtsStatus() {
   if (!voiceNote) return;
   const provider = ttsStatus.available ? ttsStatus.provider : "browser";
@@ -386,12 +403,26 @@ function renderTtsStatus() {
       : "Browser voice fallback";
   voiceNote.textContent = label;
   updateBrainBadges(lastHealth);
+  renderCoreStatus(lastHealth);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
 }
 
 function renderHealth(health) {
   lastHealth = health;
   updateBrainBadges(health);
   renderSetup(health.setup, health);
+  renderCoreStatus(health);
+  renderSetupGuide(health.setup, health);
+  renderMemory(health.memory || {});
   if (!hubStatus) return;
   if (!health.hubConfigured) {
     hubStatus.textContent = "Local mode";
@@ -432,6 +463,111 @@ function renderHealth(health) {
   if (hubUrlInput) hubUrlInput.value = health.hubUrl || "";
   if (hubSetup) hubSetup.open = !health.hubPaired;
   refreshWorkflowOptions(health.favoriteWorkflows || []);
+}
+
+function renderCoreStatus(health = lastHealth) {
+  if (!coreGrid) return;
+  const privacy = health?.privacy || {};
+  const localReady = Boolean(health?.localAI?.available);
+  const visionReady = Boolean(health?.localAI?.visionAvailable);
+  const hubReady = Boolean(health?.hubPaired && health?.hubCanTry !== false);
+  const voiceProvider = ttsStatus.available ? ttsStatus.provider : "browser";
+  const cards = [
+    {
+      label: localReady ? `Local AI ${health.localAI.model}` : "Local AI standby",
+      detail: localReady ? "Private general answers" : "Install/pull local model",
+      status: localReady ? "online" : "local"
+    },
+    {
+      label: visionReady ? `Vision ${health.localAI.visionModel}` : "Vision standby",
+      detail: privacy.visionLocal ? "Camera stays local" : "Pull vision model",
+      status: visionReady ? "online" : "local"
+    },
+    {
+      label: voiceProvider === "kokoro" ? "Local natural voice" : voiceProvider === "elevenlabs" ? "ElevenLabs voice" : "Browser voice",
+      detail: voiceProvider === "browser" ? "Fallback active" : "Natural speech ready",
+      status: ttsStatus.available ? "online" : "local"
+    },
+    {
+      label: hubReady ? "Hub linked" : health?.hubConfigured ? "Pair Hub" : "Hub URL needed",
+      detail: hubReady ? (health.assistantModel || "Hub default model") : (health?.hubLastError || "Workflows wait here"),
+      status: hubReady ? "online" : "warning"
+    },
+    {
+      label: "Memory local",
+      detail: `${health?.memory?.assistantTurns || 0} turns remembered`,
+      status: "online"
+    },
+    {
+      label: "NodeSpark only",
+      detail: "Synra routes actions through NodeSparkHub",
+      status: "online"
+    }
+  ];
+  coreGrid.innerHTML = "";
+  cards.forEach((card) => {
+    const item = document.createElement("span");
+    item.dataset.status = card.status;
+    item.innerHTML = `<strong>${escapeHtml(card.label)}</strong><small>${escapeHtml(card.detail)}</small>`;
+    coreGrid.append(item);
+  });
+}
+
+function renderMemory(memory = {}) {
+  if (memoryNameInput && document.activeElement !== memoryNameInput) {
+    memoryNameInput.value = memory.preferredName || "";
+  }
+  if (memoryNoteInput && document.activeElement !== memoryNoteInput) {
+    memoryNoteInput.value = memory.profileNote || "";
+  }
+}
+
+function renderSetupGuide(setup, health = lastHealth) {
+  if (!setupGuide || !setup) return;
+  const steps = setup.steps || [];
+  const next = steps.find((step) => !step.done);
+  const complete = Boolean(setup.ready);
+  const title = complete ? "Launch ready" : next?.label || "Setup";
+  const detail = complete
+    ? "Synra is ready for local AI, voice, vision, Hub AI, and workflows."
+    : setupActionFor(next, health);
+  setupGuide.innerHTML = "";
+  const lines = [
+    { label: complete ? title : `Next: ${title}`, detail, status: complete ? "online" : "todo" },
+    {
+      label: health?.hubPaired ? "Pairing linked" : "Pairing",
+      detail: health?.hubPaired ? "Workflow commands are unlocked." : "Enter a pair code from NodeSparkHub.",
+      status: health?.hubPaired ? "online" : "todo"
+    },
+    {
+      label: health?.privacy?.localFirst ? "Private by default" : "Privacy",
+      detail: health?.privacy?.localFirst ? "Memory and local AI stay on this device." : "Enable local AI for private answers.",
+      status: health?.privacy?.localFirst ? "online" : "todo"
+    }
+  ];
+  if (next?.id !== "hub_url") {
+    lines.splice(1, 0, {
+      label: health?.hubUrl ? "Hub URL saved" : "Hub URL",
+      detail: health?.hubUrl || "Use your NodeSparkHub address.",
+      status: health?.hubUrl ? "online" : "todo"
+    });
+  }
+  lines.forEach((line) => {
+    const item = document.createElement("span");
+    item.dataset.status = line.status;
+    item.innerHTML = `<strong>${escapeHtml(line.label)}</strong><small>${escapeHtml(line.detail)}</small>`;
+    setupGuide.append(item);
+  });
+}
+
+function setupActionFor(step, health = lastHealth) {
+  if (!step) return "Everything is ready.";
+  if (step.id === "hub_url") return "Save the NodeSparkHub URL for this monitor.";
+  if (step.id === "pairing") return "Generate a pair code in NodeSparkHub, then enter it here.";
+  if (step.id === "local_ai") return `Start Ollama and pull ${health?.localAI?.model || "the text model"}.`;
+  if (step.id === "vision") return `Pull ${health?.localAI?.visionModel || "the vision model"} for camera awareness.`;
+  if (step.id === "voice") return "Enable Kokoro or ElevenLabs for natural speech.";
+  return "Refresh workflows from NodeSparkHub.";
 }
 
 function updateBrainBadges(health) {
@@ -554,6 +690,8 @@ function renderState(state) {
     cardDetail.textContent = card.detail || "Waiting for your next command.";
     const progress = typeof card.progress === "number" ? Math.max(0, Math.min(1, card.progress)) : null;
     progressBar.style.width = progress === null ? "36%" : `${Math.round(progress * 100)}%`;
+    renderEmotionBadge(state, card);
+    pushActivity(state, card);
   }
 
   [...modeStrip.children].forEach((item) => {
@@ -563,6 +701,40 @@ function renderState(state) {
   });
 
   maybeSpeak(state);
+}
+
+function renderEmotionBadge(state, card = {}) {
+  if (!emotionBadge) return;
+  const expression = state.expression || "soft_smile";
+  const mode = state.mode || "idle";
+  const source = card.detail || state.subtitle || "local monitor";
+  emotionBadge.textContent = `${mode} / ${expression}`;
+  emotionBadge.title = source;
+  emotionBadge.dataset.mode = mode;
+}
+
+function pushActivity(state, card = {}) {
+  if (!activityFeed) return;
+  const label = state.subtitle || card.title || state.mode || "Synra";
+  const body = state.message || card.body || "";
+  const style = card.style || state.mode || "info";
+  const item = {
+    at: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+    label,
+    body,
+    style
+  };
+  const currentKey = `${label}:${body}:${style}`;
+  const lastKey = activityItems[0] ? `${activityItems[0].label}:${activityItems[0].body}:${activityItems[0].style}` : "";
+  if (currentKey !== lastKey) activityItems.unshift(item);
+  activityItems = activityItems.slice(0, 5);
+  activityFeed.innerHTML = "";
+  activityItems.forEach((entry) => {
+    const row = document.createElement("span");
+    row.dataset.status = entry.style;
+    row.innerHTML = `<strong>${escapeHtml(entry.at)} ${escapeHtml(entry.label)}</strong><small>${escapeHtml(entry.body)}</small>`;
+    activityFeed.append(row);
+  });
 }
 
 function visualStateFor(state) {
@@ -946,6 +1118,60 @@ async function pairHub(event) {
     if (hubDetail) hubDetail.textContent = String(error.message || error);
   } finally {
     if (hubPairButton) hubPairButton.disabled = false;
+  }
+}
+
+async function saveMemory(event) {
+  event.preventDefault();
+  if (memorySaveButton) memorySaveButton.disabled = true;
+  try {
+    const preferredName = (memoryNameInput?.value || "").trim();
+    const profileNote = (memoryNoteInput?.value || "").trim();
+    await updateMemory({ preferredName, profileNote });
+    pushActivity(
+      { mode: "success", expression: "bright", subtitle: "Memory", message: "Synra saved that locally." },
+      { title: "Memory", style: "success" }
+    );
+    await setRemoteState({
+      mode: "success",
+      expression: "bright",
+      message: preferredName ? `I’ll remember you as ${preferredName}.` : "I updated my local memory.",
+      subtitle: "Memory saved",
+      card: {
+        title: "Synra Memory",
+        body: profileNote || "Local memory updated.",
+        detail: "Stored on this Synra device",
+        style: "success"
+      }
+    });
+  } catch (error) {
+    await showPanelError("Memory Error", "I could not save that memory.", String(error.message || error));
+  } finally {
+    if (memorySaveButton) memorySaveButton.disabled = false;
+  }
+}
+
+async function clearMemory() {
+  if (memoryClearButton) memoryClearButton.disabled = true;
+  try {
+    await updateMemory({ clear: true });
+    renderMemory({});
+    await setRemoteState({
+      mode: "success",
+      expression: "soft_smile",
+      message: "I cleared my local memory for this monitor.",
+      subtitle: "Memory cleared",
+      card: {
+        title: "Synra Memory",
+        body: "Local memory cleared.",
+        detail: "Future conversations start fresh.",
+        style: "success"
+      }
+    });
+  } catch (error) {
+    await showPanelError("Memory Error", "I could not clear local memory.", String(error.message || error));
+  } finally {
+    if (memoryClearButton) memoryClearButton.disabled = false;
   }
 }
 
@@ -1341,6 +1567,8 @@ visionButton?.addEventListener("click", askWithVision);
 commandForm?.addEventListener("submit", submitTypedCommand);
 hubConnectForm?.addEventListener("submit", connectHub);
 hubPairForm?.addEventListener("submit", pairHub);
+memoryForm?.addEventListener("submit", saveMemory);
+memoryClearButton?.addEventListener("click", clearMemory);
 runWorkflowButton?.addEventListener("click", runSelectedWorkflow);
 backgroundSelect?.addEventListener("change", () => applyBackground(backgroundSelect.value));
 voiceSelect?.addEventListener("change", () => {

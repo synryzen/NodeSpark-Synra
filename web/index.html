@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NodeSpark Synra</title>
-    <link rel="stylesheet" href="/styles.css?v=20260523-premium-bg-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260523-appliance-1" />
     <script type="importmap">
       {
         "imports": {
@@ -109,6 +109,27 @@
           <div class="setup-diagnostics" id="setupDiagnostics" aria-live="polite"></div>
         </section>
 
+        <section class="synra-console" aria-label="Synra control center">
+          <div class="console-head">
+            <span>Synra Core</span>
+            <span id="emotionBadge">emotion: idle</span>
+          </div>
+          <div class="core-grid" id="coreGrid">
+            <span data-status="local">Local first</span>
+            <span data-status="local">Memory local</span>
+            <span data-status="local">Voice fallback</span>
+            <span data-status="local">Hub standby</span>
+          </div>
+          <div class="setup-guide" id="setupGuide"></div>
+          <form class="memory-form" id="memoryForm">
+            <input id="memoryNameInput" autocomplete="name" spellcheck="false" placeholder="Name Synra should remember" />
+            <input id="memoryNoteInput" autocomplete="off" spellcheck="true" placeholder="Preference or role note" />
+            <button id="memorySaveButton" type="submit">Save</button>
+            <button id="memoryClearButton" type="button">Forget</button>
+          </form>
+          <div class="activity-feed" id="activityFeed" aria-live="polite"></div>
+        </section>
+
         <div class="quick-actions">
           <button id="listenButton">Talk</button>
           <button id="cameraButton">Cam</button>
@@ -171,7 +192,7 @@
       </aside>
     </main>
 
-    <script type="module" src="/avatar3d-driver.js?v=20260523-premium-bg-1"></script>
-    <script src="/app.js?v=20260523-premium-bg-1"></script>
+    <script type="module" src="/avatar3d-driver.js?v=20260523-appliance-1"></script>
+    <script src="/app.js?v=20260523-appliance-1"></script>
   </body>
 </html>

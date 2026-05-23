@@ -125,6 +125,7 @@ class SynraApp:
             "setup": self.setup_status(),
             "memory": self.public_memory(),
             "uiSettings": self.store.ui_settings,
+            "privacy": self.privacy_snapshot(),
         }
 
     def public_memory(self) -> dict[str, Any]:
@@ -132,10 +133,26 @@ class SynraApp:
         recent_turns = memory.get("recentTurns", [])
         return {
             "preferredName": str(memory.get("preferredName", "")),
+            "profileNote": str(memory.get("profileNote", "")),
             "lastAssistantRoute": str(memory.get("lastAssistantRoute", "")),
             "lastReplySource": str(memory.get("lastReplySource", "")),
             "assistantTurns": int(memory.get("assistantTurns", 0) or 0),
             "recentTurns": recent_turns if isinstance(recent_turns, list) else [],
+        }
+
+    def privacy_snapshot(self) -> dict[str, Any]:
+        tts_status = self.tts.status()
+        local_status = self.local_ai.status()
+        provider = str(tts_status.get("provider") or "browser")
+        return {
+            "localFirst": bool(self.cfg.local_ai.enabled),
+            "localAIProvider": str(local_status.get("provider") or self.cfg.local_ai.provider),
+            "localAIAvailable": bool(local_status.get("available")),
+            "visionLocal": bool(local_status.get("visionAvailable")),
+            "voiceProvider": provider,
+            "voiceLocal": provider in {"browser", "kokoro"},
+            "hubRequiredForWorkflows": True,
+            "memoryStoredLocally": True,
         }
 
     def setup_status(self) -> dict[str, Any]:
@@ -283,6 +300,18 @@ class SynraApp:
 
     def update_settings(self, values: dict[str, Any]) -> dict[str, Any]:
         return self.store.update_ui_settings(values)
+
+    def update_memory_settings(self, values: dict[str, Any]) -> dict[str, Any]:
+        if values.get("clear") is True:
+            return self.store.clear_memory()
+        updates: dict[str, Any] = {}
+        if "preferredName" in values:
+            name = str(values.get("preferredName") or "").strip()[:80]
+            updates["preferredName"] = name or None
+        if "profileNote" in values:
+            note = str(values.get("profileNote") or "").strip()[:240]
+            updates["profileNote"] = note or None
+        return self.store.update_memory(updates)
 
     def handle_command(self, command: dict[str, Any], ack: bool = False) -> dict[str, Any]:
         command_id = str(command.get("id") or command.get("commandId") or "")
@@ -605,6 +634,9 @@ class SynraApp:
         parts = []
         if name:
             parts.append(f"The user's preferred name is {name}.")
+        profile_note = str(memory.get("profileNote") or "").strip()
+        if profile_note:
+            parts.append(f"User profile note: {profile_note}.")
         recent = memory.get("recentTurns", [])
         if isinstance(recent, list) and recent:
             compact = []

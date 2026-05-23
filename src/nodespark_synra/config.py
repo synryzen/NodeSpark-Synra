@@ -240,6 +240,11 @@ class StateStore:
         self.save()
         return memory
 
+    def clear_memory(self) -> dict:
+        self.data["memory"] = {}
+        self.save()
+        return {}
+
     @property
     def ui_settings(self) -> dict:
         value = self.data.get("ui_settings", {})

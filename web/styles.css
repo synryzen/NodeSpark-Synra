@@ -922,6 +922,7 @@ body {
 .hub-setup,
 .assistant-strip,
 .setup-meter,
+.synra-console,
 .quick-actions,
 .command-bar,
 .settings-row,
@@ -1228,6 +1229,162 @@ h1 {
   border-color: rgba(255, 209, 102, 0.34);
   color: #ffe5a3;
   background: rgba(255, 209, 102, 0.07);
+}
+
+.synra-console {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(64, 240, 160, 0.22);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(64, 240, 160, 0.055), transparent 42%),
+    rgba(255,255,255,0.032);
+}
+
+.console-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+#emotionBadge {
+  min-width: 0;
+  max-width: 54%;
+  padding: 4px 7px;
+  overflow: hidden;
+  border: 1px solid rgba(76, 201, 255, 0.24);
+  border-radius: 7px;
+  color: #c8f1ff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#emotionBadge[data-mode="workflow_running"],
+#emotionBadge[data-mode="thinking"] {
+  border-color: rgba(255, 209, 102, 0.34);
+  color: #ffe5a3;
+}
+
+#emotionBadge[data-mode="error"],
+#emotionBadge[data-mode="warning"] {
+  border-color: rgba(255, 77, 109, 0.35);
+  color: #ffcad4;
+}
+
+.core-grid,
+.setup-guide {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.core-grid span,
+.setup-guide span,
+.activity-feed span {
+  min-width: 0;
+  min-height: 36px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 7px 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+}
+
+.core-grid strong,
+.setup-guide strong,
+.activity-feed strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-grid small,
+.setup-guide small,
+.activity-feed small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-grid span[data-status="online"],
+.setup-guide span[data-status="online"] {
+  border-color: rgba(64, 240, 160, 0.34);
+  background: rgba(64, 240, 160, 0.065);
+}
+
+.core-grid span[data-status="warning"],
+.setup-guide span[data-status="todo"] {
+  border-color: rgba(255, 209, 102, 0.32);
+  background: rgba(255, 209, 102, 0.06);
+}
+
+.memory-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 58px 58px;
+  gap: 6px;
+}
+
+.memory-form input,
+.memory-form button {
+  min-width: 0;
+  min-height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.055);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.memory-form input {
+  padding: 0 9px;
+  outline: none;
+}
+
+.memory-form button {
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.memory-form input:focus {
+  border-color: rgba(76, 201, 255, 0.86);
+  box-shadow: 0 0 0 3px rgba(76, 201, 255, 0.12);
+}
+
+.activity-feed {
+  display: grid;
+  gap: 5px;
+  max-height: 126px;
+  overflow: hidden;
+}
+
+.activity-feed span[data-status="success"] {
+  border-color: rgba(64, 240, 160, 0.32);
+}
+
+.activity-feed span[data-status="warning"],
+.activity-feed span[data-status="error"] {
+  border-color: rgba(255, 77, 109, 0.28);
+}
+
+.activity-feed span[data-status="workflow"] {
+  border-color: rgba(255, 209, 102, 0.32);
 }
 
 .progress-track {
@@ -1596,6 +1753,12 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  .core-grid,
+  .setup-guide,
+  .memory-form {
+    grid-template-columns: 1fr;
+  }
+
   .status-zone {
     justify-content: flex-start;
   }
@@ -1677,6 +1840,23 @@ h1 {
 
   .settings-row select {
     min-height: 32px;
+  }
+
+  .synra-console {
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .core-grid span,
+  .setup-guide span,
+  .activity-feed span {
+    min-height: 31px;
+    padding: 6px 7px;
+  }
+
+  .memory-form input,
+  .memory-form button {
+    min-height: 31px;
   }
 
   .device-strip span {
