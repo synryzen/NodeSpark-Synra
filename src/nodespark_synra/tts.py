@@ -33,11 +33,7 @@ class TTSService:
             "provider": provider or "browser",
             "available": bool(provider),
             "fallback": "browser",
-            "voices": [
-                {"id": "cute", "name": "Synra natural", "style": "bright female"},
-                {"id": "soft", "name": "Soft anime", "style": "gentle female"},
-                {"id": "calm", "name": "Calm assistant", "style": "warm female"},
-            ],
+            "voices": self._voice_catalog(provider),
             "detail": self._status_detail(provider),
         }
 
@@ -84,7 +80,7 @@ class TTSService:
 
     def _elevenlabs(self, text: str, voice: str) -> TTSResult:
         api_key = self.cfg.elevenlabs_api_key.strip()
-        voice_id = self.cfg.elevenlabs_voice_id.strip()
+        voice_id = self._elevenlabs_voice_for(voice)
         if not api_key or not voice_id:
             raise TTSError("ElevenLabs API key or voice id is missing.")
         payload = {
@@ -117,6 +113,11 @@ class TTSService:
             raise TTSError(f"ElevenLabs HTTP {exc.code}: {detail}") from exc
         except URLError as exc:
             raise TTSError(f"Could not reach ElevenLabs: {exc}") from exc
+
+    def _elevenlabs_voice_for(self, voice: str) -> str:
+        if voice.startswith("elevenlabs:"):
+            return voice.split(":", 1)[1].strip()
+        return self.cfg.elevenlabs_voice_id.strip()
 
     def _kokoro_available(self) -> bool:
         try:
@@ -154,9 +155,34 @@ class TTSService:
         return TTSResult(buffer.getvalue(), "audio/wav", "kokoro", selected_voice)
 
     def _kokoro_voice_for(self, voice: str) -> str:
+        if voice.startswith("kokoro:"):
+            return voice.split(":", 1)[1].strip()
+        if voice.startswith("af_") or voice.startswith("bf_"):
+            return voice.strip()
         mapping = {
             "cute": self.cfg.kokoro_voice or "af_heart",
-            "soft": "af_bella",
-            "calm": "af_sarah",
+            "soft": self.cfg.kokoro_voice_soft or "af_nicole",
+            "bright": self.cfg.kokoro_voice_bright or "af_bella",
+            "calm": self.cfg.kokoro_voice_calm or "af_sarah",
         }
         return mapping.get(voice, self.cfg.kokoro_voice or "af_heart")
+
+    def _voice_catalog(self, provider: str) -> list[dict[str, str]]:
+        if provider == "kokoro":
+            return [
+                {"id": "kokoro:af_heart", "name": "Synra Heart", "style": "warm natural female", "provider": "kokoro"},
+                {"id": "kokoro:af_nicole", "name": "Synra Nicole", "style": "soft realistic female", "provider": "kokoro"},
+                {"id": "kokoro:af_bella", "name": "Synra Bella", "style": "bright anime female", "provider": "kokoro"},
+                {"id": "kokoro:af_sarah", "name": "Synra Sarah", "style": "calm assistant female", "provider": "kokoro"},
+                {"id": "kokoro:af_sky", "name": "Synra Sky", "style": "light natural female", "provider": "kokoro"},
+                {"id": "kokoro:af_nova", "name": "Synra Nova", "style": "confident female", "provider": "kokoro"},
+            ]
+        if provider == "elevenlabs":
+            return [
+                {"id": "cute", "name": "ElevenLabs natural", "style": "configured neural female", "provider": "elevenlabs"},
+            ]
+        return [
+            {"id": "cute", "name": "Browser natural", "style": "filtered female browser voice", "provider": "browser"},
+            {"id": "soft", "name": "Browser soft", "style": "filtered female browser voice", "provider": "browser"},
+            {"id": "calm", "name": "Browser calm", "style": "filtered female browser voice", "provider": "browser"},
+        ]

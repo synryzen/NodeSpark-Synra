@@ -21,6 +21,7 @@ const commandSubmit = document.getElementById("commandSubmit");
 const hubStatus = document.getElementById("hubStatus");
 const backgroundSelect = document.getElementById("backgroundSelect");
 const voiceSelect = document.getElementById("voiceSelect");
+const voiceTestButton = document.getElementById("voiceTestButton");
 const personalitySelect = document.getElementById("personalitySelect");
 const motionSelect = document.getElementById("motionSelect");
 const hubSetup = document.getElementById("hubSetup");
@@ -306,6 +307,10 @@ function isNaturalFemaleVoice(voice) {
 
 function populateVoiceSelect() {
   if (!voiceSelect) return;
+  if (ttsStatus.available) {
+    syncVoiceOptions();
+    return;
+  }
   const selected = storageGet(storageKeys.voice, "cute");
   [...voiceSelect.options].forEach((option) => {
     if (option.value.startsWith("voice:")) option.remove();
@@ -325,6 +330,34 @@ function populateVoiceSelect() {
     });
   voiceSelect.value = [...voiceSelect.options].some((option) => option.value === selected) ? selected : "cute";
   if (voiceSelect.value !== selected) storageSet(storageKeys.voice, voiceSelect.value);
+}
+
+function syncVoiceOptions() {
+  if (!voiceSelect) return;
+  const selected = storageGet(storageKeys.voice, voiceSelect.value || "kokoro:af_heart");
+  const serverVoices = Array.isArray(ttsStatus.voices) ? ttsStatus.voices : [];
+  if (ttsStatus.available && serverVoices.length) {
+    voiceSelect.innerHTML = "";
+    serverVoices.forEach((voice) => {
+      const option = document.createElement("option");
+      option.value = voice.id;
+      option.textContent = `${voice.name}${voice.style ? ` - ${voice.style}` : ""}`;
+      voiceSelect.append(option);
+    });
+    const hasSelected = [...voiceSelect.options].some((option) => option.value === selected);
+    voiceSelect.value = hasSelected && !selected.startsWith("voice:") ? selected : serverVoices[0].id;
+    storageSet(storageKeys.voice, voiceSelect.value);
+    return;
+  }
+  if (![...voiceSelect.options].length) {
+    ["cute", "soft", "calm"].forEach((value) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value === "cute" ? "Browser natural" : value === "soft" ? "Browser soft" : "Browser calm";
+      voiceSelect.append(option);
+    });
+  }
+  populateVoiceSelect();
 }
 
 function currentVoicePreference() {
@@ -389,10 +422,12 @@ async function fetchTtsStatus() {
     const data = await response.json();
     if (data.ok) {
       ttsStatus = data;
+      syncVoiceOptions();
       renderTtsStatus();
     }
   } catch {
     ttsStatus = { available: false, provider: "browser" };
+    syncVoiceOptions();
     renderTtsStatus();
   }
 }
@@ -407,14 +442,20 @@ async function updateMemory(payload) {
 function renderTtsStatus() {
   if (!voiceNote) return;
   const provider = ttsStatus.available ? ttsStatus.provider : "browser";
+  const selected = selectedVoiceName();
   const label = provider === "elevenlabs"
-    ? "Natural voice ready"
+    ? `Natural voice ready: ${selected}`
     : provider === "kokoro"
-      ? "Local neural voice ready"
-      : "Browser voice fallback";
+      ? `Local neural voice: ${selected}`
+      : `Browser voice fallback: ${selected}`;
   voiceNote.textContent = label;
   updateBrainBadges(lastHealth);
   renderCoreStatus(lastHealth);
+}
+
+function selectedVoiceName() {
+  if (!voiceSelect) return "Synra";
+  return voiceSelect.selectedOptions?.[0]?.textContent || voiceSelect.value || "Synra";
 }
 
 function escapeHtml(value) {
@@ -934,6 +975,7 @@ function endSpeechVisuals(speechId) {
 }
 
 async function playServerTts(text, speechId, state) {
+  if (currentVoicePreference().startsWith("voice:")) return false;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), serverTtsStartTimeoutMs);
   try {
@@ -973,6 +1015,26 @@ async function playServerTts(text, speechId, state) {
   } catch {
     window.clearTimeout(timeout);
     return false;
+  }
+}
+
+async function testSelectedVoice() {
+  if (voiceTestButton) voiceTestButton.disabled = true;
+  const text = "Hi, I'm Synra. This is how this voice sounds.";
+  const state = {
+    mode: "speaking",
+    expression: "bright",
+    speech_id: `voice-test-${Date.now()}`
+  };
+  try {
+    stopActiveSpeechAudio();
+    window.speechSynthesis?.cancel?.();
+    const usedServer = await playServerTts(text, state.speech_id, state);
+    if (!usedServer) speakWithBrowserVoice(text, state.speech_id, state);
+  } finally {
+    window.setTimeout(() => {
+      if (voiceTestButton) voiceTestButton.disabled = false;
+    }, 600);
   }
 }
 
@@ -1805,6 +1867,7 @@ voiceSelect?.addEventListener("change", () => {
   applyVoice(voiceSelect.value);
   renderTtsStatus();
 });
+voiceTestButton?.addEventListener("click", testSelectedVoice);
 personalitySelect?.addEventListener("change", () => applyPersonality(personalitySelect.value));
 motionSelect?.addEventListener("change", () => applyMotion(motionSelect.value));
 window.speechSynthesis?.addEventListener?.("voiceschanged", populateVoiceSelect);

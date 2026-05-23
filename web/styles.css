@@ -1598,11 +1598,12 @@ h1 {
 
 .settings-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 84px minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
 }
 
-.settings-row select {
+.settings-row select,
+.settings-row button {
   min-width: 0;
   min-height: 34px;
   padding: 0 10px;
@@ -1616,7 +1617,18 @@ h1 {
   outline: none;
 }
 
-.settings-row select:focus {
+.settings-row button {
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.settings-row button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.settings-row select:focus,
+.settings-row button:focus {
   border-color: rgba(76, 201, 255, 0.9);
   box-shadow: 0 0 0 3px rgba(76, 201, 255, 0.13);
 }
@@ -2022,7 +2034,8 @@ h1 {
     min-height: 34px;
   }
 
-  .settings-row select {
+  .settings-row select,
+  .settings-row button {
     min-height: 32px;
   }
 

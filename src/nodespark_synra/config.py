@@ -62,6 +62,9 @@ class TTSConfig:
     elevenlabs_similarity_boost: float = 0.82
     elevenlabs_style: float = 0.35
     kokoro_voice: str = "af_heart"
+    kokoro_voice_soft: str = "af_nicole"
+    kokoro_voice_bright: str = "af_bella"
+    kokoro_voice_calm: str = "af_sarah"
     kokoro_lang_code: str = "a"
 
 
