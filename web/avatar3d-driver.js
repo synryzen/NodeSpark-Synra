@@ -445,6 +445,8 @@ class SynraAvatar3DController {
       this.idleAction = { name: "none", startedAt: 0, duration: 0 };
       this.nextIdleActionAt = this.stateChangedAt + 8 + Math.random() * 8;
       this.blinkUntil = this.stateChangedAt + 0.11;
+      if (this.expression === "yawn") this.idleAction = { name: "yawn", startedAt: this.stateChangedAt, duration: 5.2 };
+      if (this.expression === "stretch") this.idleAction = { name: "stretch", startedAt: this.stateChangedAt, duration: 4.4 };
     }
     this.updateBehaviorTargets(this.clock.elapsedTime);
   }
@@ -639,6 +641,29 @@ class SynraAvatar3DController {
     if (cue.includes("look_down")) {
       this.poseTarget.headX = 0.18;
       this.gazeTarget.y = 0.12;
+    }
+    if (cue.includes("wave")) {
+      this.expressionTargets.happy = Math.max(this.expressionTargets.happy || 0, 0.66);
+      this.expressionTargets.fun = Math.max(this.expressionTargets.fun || 0, 0.48);
+      this.poseTarget.headZ = 0.035;
+      this.poseTarget.chestY = 0.025;
+      this.poseTarget.rightArmRaise = 0.84;
+      this.poseTarget.rightArmFold = -0.24;
+      this.poseTarget.armOpen = 0.12;
+      this.poseTarget.wristTwist = Math.sin(elapsed * 7.5) * 0.14;
+      this.poseTarget.fingerCurl = 0.2;
+      this.poseTarget.fingerSpread = 0.09;
+    }
+    if (cue.includes("explain")) {
+      this.expressionTargets.happy = Math.max(this.expressionTargets.happy || 0, 0.32);
+      this.expressionTargets.fun = Math.max(this.expressionTargets.fun || 0, 0.22);
+      this.poseTarget.headX = -0.025 + Math.sin(elapsed * 3.6) * 0.018;
+      this.poseTarget.chestY = Math.sin(elapsed * 2.4) * 0.025;
+      this.poseTarget.armOpen = 0.12;
+      this.poseTarget.leftArmFold = 0.08 + Math.sin(elapsed * 4.1) * 0.05;
+      this.poseTarget.rightArmFold = 0.1 + Math.cos(elapsed * 4.3) * 0.05;
+      this.poseTarget.fingerCurl = 0.24;
+      this.poseTarget.fingerSpread = 0.08;
     }
     if (arrival > 0) {
       this.expressionTargets.surprised = Math.max(this.expressionTargets.surprised || 0, arrival * 0.06);

@@ -93,7 +93,7 @@ class HubClient:
         encoded = quote(workflow, safe="")
         return self._request("POST", f"/workflows/{encoded}/run?async=1", json=payload)
 
-    def ask_assistant(self, text: str) -> dict[str, Any]:
+    def ask_assistant(self, text: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
         payload = {
             "deviceId": self.device_id,
             "deviceName": self.device_name,
@@ -128,6 +128,7 @@ class HubClient:
                 "behavior": "Answer ordinary questions naturally. When the user asks to automate, build, configure, or run a workflow, help clarify inputs and route actions through NodeSparkHub.",
                 "avoid": "Do not identify as NodeSpark Wisp, Wisp, ChatGPT, or a generic hub. You are Synra.",
             },
+            "synraContext": context or {},
         }
         return self._request("POST", "/wisp/assistant", json=payload, timeout=self.assistant_timeout)
 

@@ -221,6 +221,41 @@ class StateStore:
         self.data["hub_base_url"] = value.rstrip("/")
         self.save()
 
+    @property
+    def memory(self) -> dict:
+        value = self.data.get("memory", {})
+        return value if isinstance(value, dict) else {}
+
+    def update_memory(self, values: dict) -> dict:
+        memory = {**self.memory}
+        for key, value in values.items():
+            if value is None:
+                memory.pop(str(key), None)
+            elif isinstance(value, (str, int, float, bool, list, dict)):
+                memory[str(key)] = value
+        self.data["memory"] = memory
+        self.save()
+        return memory
+
+    @property
+    def ui_settings(self) -> dict:
+        value = self.data.get("ui_settings", {})
+        return value if isinstance(value, dict) else {}
+
+    def update_ui_settings(self, values: dict) -> dict:
+        allowed = {"background", "voice", "voiceOutput", "autoMedia", "kioskMode"}
+        settings = {**self.ui_settings}
+        for key, value in values.items():
+            if key not in allowed:
+                continue
+            if value is None:
+                settings.pop(key, None)
+            elif isinstance(value, (str, int, float, bool)):
+                settings[key] = value
+        self.data["ui_settings"] = settings
+        self.save()
+        return settings
+
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(self.data, indent=2, sort_keys=True) + "\n")

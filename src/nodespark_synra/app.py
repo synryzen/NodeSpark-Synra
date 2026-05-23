@@ -5,6 +5,7 @@ import time
 from typing import Any
 from urllib.parse import urlparse
 
+from .assistant_router import classify_assistant_request, extract_preferred_name
 from .config import AppConfig, StateStore
 from .hub import HubClient
 from .local_ai import LocalAIService
@@ -109,6 +110,59 @@ class SynraApp:
             "assistantModel": selected_model or "NodeSparkHub default",
             "usesHubDefaultModel": True,
             "localAI": self.local_ai.status(),
+            "setup": self.setup_status(),
+            "memory": self.public_memory(),
+            "uiSettings": self.store.ui_settings,
+        }
+
+    def public_memory(self) -> dict[str, Any]:
+        memory = self.store.memory
+        return {
+            "preferredName": str(memory.get("preferredName", "")),
+            "lastAssistantRoute": str(memory.get("lastAssistantRoute", "")),
+        }
+
+    def setup_status(self) -> dict[str, Any]:
+        local_status = self.local_ai.status()
+        tts_status = self.tts.status()
+        steps = [
+            {
+                "id": "hub_url",
+                "label": "Hub URL",
+                "done": self.hub.configured(),
+                "detail": self.cfg.hub.base_url or "Not set",
+            },
+            {
+                "id": "pairing",
+                "label": "Pairing",
+                "done": bool(self.store.token),
+                "detail": "Linked" if self.store.token else "Waiting for pair code",
+            },
+            {
+                "id": "local_ai",
+                "label": "Local AI",
+                "done": bool(local_status.get("available")),
+                "detail": str(local_status.get("model") or local_status.get("detail") or "Ollama"),
+            },
+            {
+                "id": "voice",
+                "label": "Voice",
+                "done": bool(tts_status.get("available")) or tts_status.get("provider") == "browser",
+                "detail": str(tts_status.get("provider") or "browser"),
+            },
+            {
+                "id": "workflows",
+                "label": "Workflows",
+                "done": bool(self._workflow_cache or self.cfg.hub.favorite_workflows),
+                "detail": self.cfg.hub.default_workflow,
+            },
+        ]
+        complete = sum(1 for step in steps if step["done"])
+        return {
+            "complete": complete,
+            "total": len(steps),
+            "ready": complete == len(steps),
+            "steps": steps,
         }
 
     def connect_hub(self, base_url: str) -> dict[str, Any]:
@@ -205,29 +259,46 @@ class SynraApp:
                 print(f"[hub] workflow list failed: {exc}")
         return list(self._workflow_cache or self.cfg.hub.favorite_workflows)
 
+    def update_settings(self, values: dict[str, Any]) -> dict[str, Any]:
+        return self.store.update_ui_settings(values)
+
     def handle_command(self, command: dict[str, Any], ack: bool = False) -> dict[str, Any]:
         command_id = str(command.get("id") or command.get("commandId") or "")
         kind = str(command.get("type", "showCard")).strip().lower()
 
         if kind in {"assistant", "ask", "askai"}:
             text = str(command.get("text") or command.get("body") or "Help me from NodeSpark Synra.")
-            local_candidate = self.local_ai.should_answer_locally(text)
+            route = classify_assistant_request(text, self.cfg.hub.default_workflow)
+            self.store.update_memory({"lastAssistantRoute": route.route if not route.tool else f"{route.route}:{route.tool}"})
+            tool_result = self._try_tool_route(text, route, command_id)
+            if tool_result is not None:
+                result = tool_result
+                if ack and command_id and self.hub_can_try():
+                    try:
+                        self.hub.ack_command(command_id, "completed", result)
+                        self.mark_hub_ok()
+                    except Exception as exc:
+                        self.mark_hub_error(exc)
+                        print(f"[hub] command ack failed: {exc}")
+                return {"ok": True, "result": result, "state": self.state.snapshot()}
+
+            local_candidate = route.route == "local" and self.local_ai.should_answer_locally(text)
             self.state.set_state({
                 "mode": "thinking",
-                "expression": "focused",
+                "expression": route.expression or "focused",
                 "message": f"Thinking about: {text}",
                 "subtitle": "Synra Local AI" if local_candidate else "Synra Assistant",
                 "card": {
                     "title": "Voice Request",
                     "body": text,
-                    "detail": "Thinking locally" if local_candidate else "Sending to NodeSparkHub",
+                    "detail": route.detail or ("Thinking locally" if local_candidate else "Sending to NodeSparkHub"),
                     "style": "thinking",
                 },
             })
             local_answered = False
             if local_candidate:
                 try:
-                    local = self.local_ai.answer(text)
+                    local = self.local_ai.answer(text, self._local_context())
                     reply = _synra_identity_reply(local.text)
                     self.state.apply_command({
                         "type": "speak",
@@ -270,7 +341,7 @@ class SynraApp:
                 result = reply[:240]
             else:
                 try:
-                    response = self.hub.ask_assistant(text)
+                    response = self.hub.ask_assistant(text, self._hub_context(route.route, route.tool))
                     self.mark_hub_ok()
                     reply = str(response.get("displayText") or response.get("reply") or response.get("message") or "No assistant reply.")
                     reply = _synra_identity_reply(reply)
@@ -354,6 +425,94 @@ class SynraApp:
                 print(f"[hub] command ack failed: {exc}")
 
         return {"ok": True, "result": result, "state": self.state.snapshot()}
+
+    def _try_tool_route(self, text: str, route, command_id: str) -> str | None:
+        if route.route != "tool":
+            return None
+        if route.tool == "remember_user":
+            name = extract_preferred_name(text)
+            if not name:
+                return None
+            self.store.update_memory({"preferredName": name})
+            reply = f"Nice to meet you, {name}. I’ll remember that."
+            self._speak_tool_reply(command_id, reply, "Memory", "bright", "Saved locally", "success")
+            return reply
+        if route.tool == "setup_status":
+            setup = self.setup_status()
+            missing = [step["label"] for step in setup["steps"] if not step["done"]]
+            if missing:
+                reply = f"Setup is {setup['complete']} of {setup['total']} ready. Next: {', '.join(missing[:2])}."
+            else:
+                reply = "Setup is complete. Local AI, voice, Hub pairing, and workflows are ready."
+            self._speak_tool_reply(command_id, reply, "Setup", "attentive", "Synra readiness", "info")
+            return reply
+        if route.tool == "status":
+            setup = self.setup_status()
+            local = "ready" if self.local_ai.status().get("available") else "standby"
+            hub = "linked" if self.hub_ready_for_actions() else self.hub_offline_detail() or "local mode"
+            reply = f"Synra status: local AI is {local}, NodeSparkHub is {hub}, setup is {setup['complete']} of {setup['total']}."
+            self._speak_tool_reply(command_id, reply, "Status", "attentive", "Local monitor status", "info")
+            return reply
+        if route.tool == "list_workflows":
+            workflows = self.list_workflows()
+            visible = ", ".join(workflows[:5]) if workflows else "no workflows yet"
+            more = f" plus {len(workflows) - 5} more" if len(workflows) > 5 else ""
+            reply = f"I found {visible}{more}."
+            self._speak_tool_reply(command_id, reply, "Workflows", "focused", "NodeSparkHub workflow list", "workflow")
+            return reply
+        if route.tool == "run_workflow":
+            workflow = route.workflow_name or self.cfg.hub.default_workflow
+            result = self.handle_command({
+                "id": command_id,
+                "type": "runWorkflow",
+                "workflowName": workflow,
+                "text": f"Running {workflow}.",
+            }, ack=False)
+            state = result.get("state", {})
+            if state.get("mode") == "workflow_running":
+                reply = f"I started {workflow}."
+                self.state.apply_command({
+                    "type": "speak",
+                    "title": "Workflow Running",
+                    "text": reply,
+                    "subtitle": workflow,
+                    "expression": "focused",
+                    "detail": "NodeSparkHub accepted the run request",
+                    "style": "workflow",
+                    "id": command_id,
+                })
+                return reply
+            return str(result.get("result", "Workflow request staged."))
+        return None
+
+    def _speak_tool_reply(self, command_id: str, reply: str, subtitle: str, expression: str, detail: str, style: str) -> None:
+        self.state.apply_command({
+            "type": "speak",
+            "title": "Synra",
+            "text": reply,
+            "subtitle": subtitle,
+            "expression": expression,
+            "detail": detail,
+            "style": style,
+            "id": command_id,
+        })
+
+    def _local_context(self) -> str:
+        memory = self.store.memory
+        name = str(memory.get("preferredName") or "").strip()
+        if not name:
+            return ""
+        return f"The user's preferred name is {name}."
+
+    def _hub_context(self, route: str, tool: str) -> dict[str, Any]:
+        return {
+            "route": route,
+            "tool": tool,
+            "memory": self.public_memory(),
+            "setup": self.setup_status(),
+            "favoriteWorkflows": list(self._workflow_cache or self.cfg.hub.favorite_workflows),
+            "defaultWorkflow": self.cfg.hub.default_workflow,
+        }
 
     def _loop(self) -> None:
         next_checkin = 0.0

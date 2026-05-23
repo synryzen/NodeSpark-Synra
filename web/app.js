@@ -31,6 +31,12 @@ const hubPairButton = document.getElementById("hubPairButton");
 const workflowSelect = document.getElementById("workflowSelect");
 const runWorkflowButton = document.getElementById("runWorkflowButton");
 const hubDetail = document.getElementById("hubDetail");
+const localBrainBadge = document.getElementById("localBrainBadge");
+const hubBrainBadge = document.getElementById("hubBrainBadge");
+const voiceBrainBadge = document.getElementById("voiceBrainBadge");
+const setupMeterLabel = document.getElementById("setupMeterLabel");
+const setupMeterValue = document.getElementById("setupMeterValue");
+const setupSteps = document.getElementById("setupSteps");
 
 let lastSpeechId = "";
 let recognition = null;
@@ -98,7 +104,11 @@ const demoText = {
   look_left: "Checking the left side.",
   look_right: "Checking the right side.",
   look_up: "Looking up at the next signal.",
-  look_down: "Looking down at the task details."
+  look_down: "Looking down at the task details.",
+  wave: "Hi. I’m here and ready.",
+  yawn: "I’m taking a tiny idle reset.",
+  stretch: "One second. Re-centering.",
+  explain: "I’ll walk through it clearly."
 };
 
 const demoStates = {
@@ -112,7 +122,11 @@ const demoStates = {
   look_left: { mode: "idle", expression: "look_left", title: "Focus Left", style: "info" },
   look_right: { mode: "idle", expression: "look_right", title: "Focus Right", style: "info" },
   look_up: { mode: "idle", expression: "look_up", title: "Focus Up", style: "info" },
-  look_down: { mode: "idle", expression: "look_down", title: "Focus Down", style: "info" }
+  look_down: { mode: "idle", expression: "look_down", title: "Focus Down", style: "info" },
+  wave: { mode: "success", expression: "wave", title: "Greeting", style: "success" },
+  yawn: { mode: "idle", expression: "yawn", title: "Idle Reset", style: "info" },
+  stretch: { mode: "idle", expression: "stretch", title: "Idle Motion", style: "info" },
+  explain: { mode: "speaking", expression: "explain", title: "Explanation", style: "voice" }
 };
 
 function hasLocalMediaOrigin() {
@@ -142,11 +156,50 @@ function storageSet(key, value) {
   }
 }
 
-function applyBackground(value) {
+function applyBackground(value, options = {}) {
+  const persist = options.persist !== false;
   const background = value || "grid";
   document.documentElement.dataset.background = background;
   if (backgroundSelect) backgroundSelect.value = background;
   storageSet(storageKeys.background, background);
+  if (persist) postSettings({ background });
+}
+
+function applyVoice(value) {
+  const voice = value || "cute";
+  if (voiceSelect) voiceSelect.value = voice;
+  storageSet(storageKeys.voice, voice);
+  postSettings({ voice });
+}
+
+async function postSettings(settings) {
+  try {
+    await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings)
+    });
+  } catch {
+    // Settings still persist locally when the API is unavailable.
+  }
+}
+
+async function fetchSettings() {
+  try {
+    const response = await fetch("/api/settings", { cache: "no-store" });
+    const data = await response.json();
+    if (!data.ok) return;
+    const settings = data.settings || {};
+    if (settings.background) {
+      applyBackground(settings.background, { persist: false });
+    }
+    if (settings.voice) {
+      storageSet(storageKeys.voice, settings.voice);
+      if (voiceSelect) voiceSelect.value = settings.voice;
+    }
+  } catch {
+    // Local storage covers offline sessions.
+  }
 }
 
 function availableVoices() {
@@ -269,10 +322,13 @@ function renderTtsStatus() {
       ? "Local neural voice ready"
       : "Browser voice fallback";
   voiceNote.textContent = label;
+  updateBrainBadges(lastHealth);
 }
 
 function renderHealth(health) {
   lastHealth = health;
+  updateBrainBadges(health);
+  renderSetup(health.setup);
   if (!hubStatus) return;
   if (!health.hubConfigured) {
     hubStatus.textContent = "Local mode";
@@ -313,6 +369,38 @@ function renderHealth(health) {
   if (hubUrlInput) hubUrlInput.value = health.hubUrl || "";
   if (hubSetup) hubSetup.open = !health.hubPaired;
   refreshWorkflowOptions(health.favoriteWorkflows || []);
+}
+
+function updateBrainBadges(health) {
+  if (localBrainBadge) {
+    const ready = Boolean(health?.localAI?.available);
+    localBrainBadge.textContent = ready ? `Local ${health.localAI.model}` : "Local standby";
+    localBrainBadge.dataset.status = ready ? "online" : "local";
+  }
+  if (hubBrainBadge) {
+    const ready = Boolean(health?.hubPaired && health?.hubCanTry !== false);
+    hubBrainBadge.textContent = ready ? `Hub ${health.assistantModel || "default"}` : "Hub standby";
+    hubBrainBadge.dataset.status = ready ? "online" : "local";
+  }
+  if (voiceBrainBadge) {
+    const ready = Boolean(ttsStatus.available);
+    voiceBrainBadge.textContent = ready ? `${ttsStatus.provider} voice` : "Browser voice";
+    voiceBrainBadge.dataset.status = ready ? "online" : "local";
+  }
+}
+
+function renderSetup(setup) {
+  if (!setup || !setupSteps) return;
+  if (setupMeterValue) setupMeterValue.textContent = `${setup.complete || 0}/${setup.total || 0}`;
+  if (setupMeterLabel) setupMeterLabel.textContent = setup.ready ? "Ready" : "Setup";
+  setupSteps.innerHTML = "";
+  (setup.steps || []).forEach((step) => {
+    const item = document.createElement("span");
+    item.dataset.done = step.done ? "true" : "false";
+    item.textContent = step.label || step.id || "Step";
+    item.title = step.detail || "";
+    setupSteps.append(item);
+  });
 }
 
 function refreshWorkflowOptions(workflows = []) {
@@ -450,7 +538,7 @@ async function playServerTts(text, speechId, state) {
       method: "POST",
       signal: controller.signal,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voice: getVoicePreference() })
+      body: JSON.stringify({ text, voice: currentVoicePreference() })
     });
     window.clearTimeout(timeout);
     if (!response.ok) return false;
@@ -1024,7 +1112,7 @@ hubPairForm?.addEventListener("submit", pairHub);
 runWorkflowButton?.addEventListener("click", runSelectedWorkflow);
 backgroundSelect?.addEventListener("change", () => applyBackground(backgroundSelect.value));
 voiceSelect?.addEventListener("change", () => {
-  storageSet(storageKeys.voice, voiceSelect.value);
+  applyVoice(voiceSelect.value);
   renderTtsStatus();
 });
 window.speechSynthesis?.addEventListener?.("voiceschanged", populateVoiceSelect);
@@ -1033,8 +1121,9 @@ navigator.mediaDevices?.addEventListener?.("devicechange", enumerateDevices);
 
 speechOutputEnabled = shouldEnableSpeechOutput();
 if (!speechOutputEnabled && voiceNote) voiceNote.textContent = "Voice muted for this view";
-applyBackground(storageGet(storageKeys.background, "grid"));
+applyBackground(storageGet(storageKeys.background, "grid"), { persist: false });
 populateVoiceSelect();
+fetchSettings();
 enumerateDevices();
 updateMotion();
 fetchState();

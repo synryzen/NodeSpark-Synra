@@ -145,13 +145,16 @@ class SynraStateMachine:
             return "expression-updated", self.snapshot()
 
         if normalized in {"setstate", "state", "mode"}:
-            self.state.update({
+            values = {
                 "mode": str(command.get("mode") or command.get("state") or text or "idle"),
                 "expression": str(command.get("expression") or self.state.expression),
                 "message": str(command.get("message") or text or self.state.message),
                 "subtitle": str(command.get("subtitle") or self.state.subtitle),
                 "last_command": command_id or kind,
-            })
+            }
+            if isinstance(command.get("card"), dict):
+                values["card"] = command["card"]
+            self.state.update(values)
             return "state-updated", self.snapshot()
 
         if normalized in {"approval", "approve", "decision"}:

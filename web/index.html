@@ -230,6 +230,20 @@
           </div>
         </details>
 
+        <section class="assistant-strip" aria-label="Synra readiness">
+          <span id="localBrainBadge">Local AI</span>
+          <span id="hubBrainBadge">Hub AI</span>
+          <span id="voiceBrainBadge">Voice</span>
+        </section>
+
+        <section class="setup-meter" aria-label="Setup status">
+          <div class="setup-meter-head">
+            <span id="setupMeterLabel">Setup</span>
+            <span id="setupMeterValue">0/5</span>
+          </div>
+          <div class="setup-steps" id="setupSteps"></div>
+        </section>
+
         <div class="quick-actions">
           <button id="listenButton">Talk</button>
           <button id="cameraButton">Cam</button>
@@ -243,6 +257,10 @@
           <button data-demo="look_right">→</button>
           <button data-demo="look_up">↑</button>
           <button data-demo="look_down">↓</button>
+          <button data-demo="wave">Wave</button>
+          <button data-demo="yawn">Yawn</button>
+          <button data-demo="stretch">Stretch</button>
+          <button data-demo="explain">Explain</button>
         </div>
         <form class="command-bar" id="commandForm">
           <input id="commandInput" autocomplete="off" spellcheck="true" placeholder="Ask Synra" />
@@ -256,6 +274,8 @@
             <option value="city">Night city</option>
             <option value="aurora">Aurora</option>
             <option value="deck">Command deck</option>
+            <option value="server">Server room</option>
+            <option value="workbench">Workbench</option>
           </select>
           <select id="voiceSelect" aria-label="Voice">
             <option value="cute">Synra natural</option>
@@ -272,7 +292,7 @@
       </aside>
     </main>
 
-    <script type="module" src="/avatar3d-driver.js?v=20260522-local-brain-1"></script>
-    <script src="/app.js?v=20260522-local-brain-1"></script>
+    <script type="module" src="/avatar3d-driver.js?v=20260522-next-level-1"></script>
+    <script src="/app.js?v=20260522-next-level-1"></script>
   </body>
 </html>

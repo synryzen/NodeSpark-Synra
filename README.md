@@ -14,7 +14,7 @@ daemon, and a full-screen kiosk UI for the Jetson Orin Nano developer kit.
 - State-driven expressions: idle, listening, thinking, speaking,
   workflow_running, success, warning, error, approval_needed, and sleep.
 - Human-like idle motion: relaxed stance, small gaze shifts, weight shifts,
-  subtle stretches, and delayed yawn behavior.
+  subtle stretches, delayed yawn behavior, wave cues, and explanation gestures.
 - Natural TTS bridge with ElevenLabs and local Kokoro support, plus browser
   speech as the final fallback.
 - Synra natural, soft anime, and calm assistant voice presets with mouth motion
@@ -22,7 +22,7 @@ daemon, and a full-screen kiosk UI for the Jetson Orin Nano developer kit.
 - Browser microphone flow where permissions allow it.
 - Typed command bar for environments where the microphone is blocked.
 - Selectable monitor backgrounds: none, node grid, studio, night city, aurora,
-  and command deck.
+  command deck, server room, and workbench.
 - Local fallback assistant mode when NodeSparkHub is offline.
 - Hub client for pairing, check-in, command polling, workflow runs, assistant
   calls, and acknowledgements.
@@ -33,6 +33,9 @@ daemon, and a full-screen kiosk UI for the Jetson Orin Nano developer kit.
 - Hybrid local brain: short greetings, personality chat, and lightweight
   general prompts can run locally through Ollama while Hub/workflow actions stay
   routed to NodeSparkHub.
+- Tool-aware assistant router for setup status, local memory, workflow lists,
+  workflow launches, Hub questions, and local chat.
+- Persistent monitor preferences for background and voice selection.
 
 ## Project Layout
 
@@ -189,6 +192,11 @@ base_url = "http://127.0.0.1:11434"
 model = "qwen2.5:1.5b"
 ```
 
+The assistant router keeps fast general chat local while sending NodeSparkHub
+questions, workflow setup, device status, and workflow actions to the Hub. It
+also handles local tools directly, such as remembering a preferred name,
+reporting setup readiness, listing workflows, and launching a selected workflow.
+
 ## Local API
 
 Set the avatar state:
@@ -227,6 +235,20 @@ Check health:
 
 ```bash
 curl http://localhost:8788/api/health
+```
+
+Check setup readiness:
+
+```bash
+curl http://localhost:8788/api/setup
+```
+
+Save monitor UI preferences:
+
+```bash
+curl -X POST http://localhost:8788/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{"background":"server","voice":"cute"}'
 ```
 
 Connect to NodeSparkHub from the local API:

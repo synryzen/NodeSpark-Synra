@@ -70,7 +70,7 @@ class LocalAIService:
             return True
         return self.cfg.route_general_locally
 
-    def answer(self, text: str) -> LocalAIReply:
+    def answer(self, text: str, context: str = "") -> LocalAIReply:
         if self.cfg.provider != "ollama":
             raise LocalAIError(f"Unsupported local AI provider: {self.cfg.provider}")
         prompt = " ".join(text.split())[: max(80, int(self.cfg.max_prompt_chars))]
@@ -79,7 +79,7 @@ class LocalAIService:
             "stream": False,
             "options": {
                 "temperature": 0.55,
-                "num_predict": 140,
+                "num_predict": 96,
                 "top_p": 0.9,
             },
             "messages": [
@@ -88,7 +88,9 @@ class LocalAIService:
                     "content": (
                         "You are Synra, a warm anime AI assistant on a NodeSparkHub monitor. "
                         "Answer quick greetings, simple questions, personality chat, and basic planning directly. "
-                        "Be concise, friendly, and never call yourself Wisp. "
+                        "Be concise, friendly, and keep replies to two short sentences unless the user asks for depth. "
+                        "Never call yourself Wisp. "
+                        f"{context} "
                         "If the user asks to run, change, save, inspect, or operate NodeSparkHub workflows/devices, "
                         "tell them you will hand that action to NodeSparkHub."
                     ),
@@ -98,7 +100,7 @@ class LocalAIService:
         }
         response = self._request("POST", "/api/chat", payload)
         message = response.get("message") if isinstance(response.get("message"), dict) else {}
-        reply = str(message.get("content") or response.get("response") or "").strip()
+        reply = _limit_reply(str(message.get("content") or response.get("response") or "").strip())
         if not reply:
             raise LocalAIError("Local model returned an empty reply.")
         return LocalAIReply(reply, self.cfg.model, self.cfg.provider)
@@ -161,3 +163,22 @@ def _is_hub_action(lowered: str) -> bool:
 
 def _looks_like_workflow_request(lowered: str) -> bool:
     return any(word in lowered for word in ("workflow", "automation", "integration", "trigger", "nodesparkhub", "device"))
+
+
+def _limit_reply(text: str, max_chars: int = 380) -> str:
+    clean = " ".join(text.split())
+    if len(clean) <= max_chars:
+        return clean
+    sentences = []
+    for sentence in clean.replace("? ", "?|").replace("! ", "!|").replace(". ", ".|").split("|"):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        if sum(len(item) + 1 for item in sentences) + len(sentence) > max_chars:
+            break
+        sentences.append(sentence)
+        if len(sentences) >= 2:
+            break
+    if sentences:
+        return " ".join(sentences)
+    return clean[: max_chars - 1].rstrip() + "..."

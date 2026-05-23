@@ -28,6 +28,12 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/health":
             self._json({"ok": True, **self.server.app.health_snapshot()})
             return
+        if path == "/api/setup":
+            self._json({"ok": True, "setup": self.server.app.setup_status()})
+            return
+        if path == "/api/settings":
+            self._json({"ok": True, "settings": self.server.app.store.ui_settings})
+            return
         if path == "/api/workflows":
             self._json({"ok": True, "workflows": self.server.app.list_workflows()})
             return
@@ -51,6 +57,10 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
             return
         if path == "/api/command":
             self._json(self.server.app.handle_command(payload, ack=False))
+            return
+        if path == "/api/settings":
+            settings = self.server.app.update_settings(payload)
+            self._json({"ok": True, "settings": settings})
             return
         if path == "/api/connect":
             base_url = str(payload.get("baseUrl") or payload.get("hubUrl") or "")
