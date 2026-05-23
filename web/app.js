@@ -185,6 +185,35 @@ async function postSettings(settings) {
   }
 }
 
+async function postJson(path, payload) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  const contentType = response.headers.get("content-type") || "";
+  const data = contentType.includes("application/json") ? await response.json() : {};
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.error || `${path} failed`);
+  }
+  return data;
+}
+
+async function showPanelError(title, body, detail = "Synra kept the session alive.") {
+  await setRemoteState({
+    mode: "error",
+    expression: "concerned",
+    message: body,
+    subtitle: title,
+    card: {
+      title,
+      body,
+      detail,
+      style: "error"
+    }
+  });
+}
+
 async function fetchSettings() {
   try {
     const response = await fetch("/api/settings", { cache: "no-store" });
@@ -601,16 +630,16 @@ function speakWithBrowserVoice(speechText, speechId, state) {
 }
 
 async function sendDemo(mode) {
-  const demo = demoStates[mode] || { mode, expression: "bright", title: "Synra Demo", style: mode };
+  const demo = demoStates[mode] || { mode, expression: "bright", title: "Synra Control", style: mode };
   const payload = {
     mode: demo.mode,
     expression: demo.expression,
     message: demoText[mode] || "Synra is ready.",
-    subtitle: "Local demo",
+    subtitle: "Manual control",
     card: {
       title: demo.title,
       body: demoText[mode] || "State changed.",
-      detail: "Local monitor command",
+      detail: "Synra monitor control",
       style: demo.style,
       progress: demo.progress ?? null
     }
@@ -619,12 +648,31 @@ async function sendDemo(mode) {
 }
 
 async function setRemoteState(payload) {
-  await fetch("/api/state", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  fetchState();
+  try {
+    const response = await fetch("/api/state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) throw new Error(`State update failed: ${response.status}`);
+    await fetchState();
+    return true;
+  } catch (error) {
+    console.warn(error);
+    renderState({
+      mode: "error",
+      expression: "concerned",
+      message: "Synra cannot reach her local service.",
+      subtitle: "Local API offline",
+      card: {
+        title: "Local API Offline",
+        body: "Check the nodespark-synra service.",
+        detail: "The monitor UI is still running.",
+        style: "error"
+      }
+    });
+    return false;
+  }
 }
 
 async function askAssistant(text) {
@@ -658,19 +706,25 @@ async function askAssistant(text) {
     }
   });
 
-  const image = shouldAttachVision(trimmed) ? captureCameraFrame() : "";
-  await fetch("/api/command", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  try {
+    const image = shouldAttachVision(trimmed) ? captureCameraFrame() : "";
+    const data = await postJson("/api/command", {
       id: `voice-${Date.now()}`,
       type: "assistant",
       text: trimmed,
       ...(image ? { image } : {})
-    })
-  });
-  fetchState();
-  fetchHealth();
+    });
+    if (data.state) renderState(data.state);
+    else await fetchState();
+    await fetchHealth();
+  } catch (error) {
+    await showPanelError(
+      "Assistant Error",
+      "I could not complete that request.",
+      String(error.message || error)
+    );
+    await fetchHealth();
+  }
 }
 
 function shouldAttachVision(text) {
@@ -727,17 +781,23 @@ async function askWithVision() {
       style: "thinking"
     }
   });
-  await fetch("/api/vision", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  try {
+    const data = await postJson("/api/vision", {
       id: `vision-${Date.now()}`,
       text: prompt,
       image
-    })
-  });
-  fetchState();
-  fetchHealth();
+    });
+    if (data.state) renderState(data.state);
+    else await fetchState();
+    await fetchHealth();
+  } catch (error) {
+    await showPanelError(
+      "Vision Error",
+      "I could not read the camera frame.",
+      String(error.message || error)
+    );
+    await fetchHealth();
+  }
 }
 
 async function submitTypedCommand(event) {
@@ -822,17 +882,21 @@ async function runSelectedWorkflow() {
   if (!workflowName) return;
   if (runWorkflowButton) runWorkflowButton.disabled = true;
   try {
-    await fetch("/api/command", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: `workflow-${Date.now()}`,
-        type: "runWorkflow",
-        workflowName,
-        text: `Running ${workflowName}.`
-      })
+    const data = await postJson("/api/command", {
+      id: `workflow-${Date.now()}`,
+      type: "runWorkflow",
+      workflowName,
+      text: `Running ${workflowName}.`
     });
-    await fetchState();
+    if (data.state) renderState(data.state);
+    else await fetchState();
+    await fetchHealth();
+  } catch (error) {
+    await showPanelError(
+      "Workflow Error",
+      `I could not run ${workflowName}.`,
+      String(error.message || error)
+    );
     await fetchHealth();
   } finally {
     if (runWorkflowButton) runWorkflowButton.disabled = false;
@@ -1057,11 +1121,11 @@ async function watchPresence() {
   requestAnimationFrame(watchPresence);
 }
 
-function startVoiceLoop() {
+async function startVoiceLoop() {
   if (isListening) return;
   if (!hasLocalMediaOrigin()) {
     voiceNote.textContent = "Voice input requires kiosk or HTTPS";
-    setRemoteState({
+    await setRemoteState({
       mode: "idle",
       expression: "soft_smile",
       message: "Voice input is available on the Synra kiosk.",
@@ -1077,8 +1141,20 @@ function startVoiceLoop() {
   }
   const Recognition = speechRecognitionConstructor();
   if (!Recognition) {
-    const fallback = window.prompt("Ask Synra");
-    if (fallback) askAssistant(fallback);
+    voiceNote.textContent = "Type your request below";
+    await setRemoteState({
+      mode: "idle",
+      expression: "attentive",
+      message: "Speech recognition is not available in this browser.",
+      subtitle: "Typed input ready",
+      card: {
+        title: "Typed Input",
+        body: "Use the Ask Synra box for this session.",
+        detail: "The kiosk voice loop is still available when Chromium exposes speech recognition.",
+        style: "info"
+      }
+    });
+    commandInput?.focus();
     return;
   }
 
@@ -1098,7 +1174,7 @@ function startVoiceLoop() {
   let latestTranscript = "";
   let hadError = false;
 
-  setRemoteState({
+  await setRemoteState({
     mode: "listening",
     expression: "attentive",
     message: "I’m listening.",
@@ -1167,7 +1243,20 @@ function startVoiceLoop() {
     askAssistant(transcript);
   };
 
-  recognition.start();
+  try {
+    recognition.start();
+  } catch (error) {
+    isListening = false;
+    listenButton.classList.remove("active");
+    listenButton.textContent = "Talk";
+    voiceNote.textContent = "Voice loop ready";
+    targetMotion.mouth = 0;
+    await showPanelError(
+      "Voice Input Error",
+      "I could not start the microphone listener.",
+      String(error.message || error)
+    );
+  }
 }
 
 document.querySelectorAll("[data-demo]").forEach((button) => {

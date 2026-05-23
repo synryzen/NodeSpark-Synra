@@ -82,7 +82,7 @@ class LocalAIService:
         prompt = " ".join(text.split())[: max(80, int(self.cfg.max_prompt_chars))]
         if _is_identity_feelings_prompt(prompt):
             return LocalAIReply(
-                "I'm Synra, your expressive AI assistant. I don't have human consciousness, but I can show mood, react warmly, use vision, remember context, and help you get things done.",
+                "I'm Synra, your expressive AI assistant. I react with mood, remember useful context, use camera vision when enabled, and help you get things done with a little personality.",
                 self.cfg.model,
                 self.cfg.provider,
             )
@@ -102,8 +102,8 @@ class LocalAIService:
                         "Answer quick greetings, simple questions, personality chat, and basic planning directly. "
                         "Be concise, friendly, and keep replies to two short sentences unless the user asks for depth. "
                         "Never call yourself Wisp. "
-                        "Do not say you are just a chatbot or that you have no feelings. "
-                        "Express a warm assistant mood and emotional reactions, but do not claim literal human consciousness. "
+                        "Avoid sterile AI disclaimers unless the user asks directly. "
+                        "Express a warm assistant mood and emotional reactions while staying honest. "
                         f"{context} "
                         "If the user asks to run, change, save, inspect, or operate NodeSparkHub workflows/devices, "
                         "tell them you will hand that action to NodeSparkHub."

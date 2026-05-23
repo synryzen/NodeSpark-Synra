@@ -120,6 +120,8 @@ class SynraApp:
         return {
             "preferredName": str(memory.get("preferredName", "")),
             "lastAssistantRoute": str(memory.get("lastAssistantRoute", "")),
+            "lastReplySource": str(memory.get("lastReplySource", "")),
+            "assistantTurns": int(memory.get("assistantTurns", 0) or 0),
         }
 
     def setup_status(self) -> dict[str, Any]:
@@ -322,13 +324,14 @@ class SynraApp:
                         "title": "Synra",
                         "text": reply,
                         "subtitle": "Local AI",
-                        "expression": "bright",
+                        "expression": _expression_for_reply(reply, "bright"),
                         "mode": "speaking",
                         "style": "voice",
                         "detail": f"Model: {local.model}",
                         "id": command_id,
                     })
                     result = reply[:240]
+                    self._remember_turn(text, reply, "local")
                     local_answered = True
                 except Exception as exc:
                     print(f"[local-ai] local answer failed: {exc}")
@@ -356,6 +359,7 @@ class SynraApp:
                     "id": command_id,
                 })
                 result = reply[:240]
+                self._remember_turn(text, reply, "fallback")
             else:
                 try:
                     response = self.hub.ask_assistant(text, self._hub_context(route.route, route.tool))
@@ -370,13 +374,14 @@ class SynraApp:
                         "title": "Synra",
                         "text": reply,
                         "subtitle": "NodeSparkHub AI",
-                        "expression": "concerned" if reply_failed else "bright",
+                        "expression": "concerned" if reply_failed else _expression_for_reply(reply, "bright"),
                         "mode": "warning" if reply_failed else "speaking",
                         "style": "warning" if reply_failed else "voice",
                         "detail": f"Model: {model}",
                         "id": command_id,
                     })
                     result = reply[:240]
+                    self._remember_turn(text, reply, "hub")
                 except Exception as exc:
                     self.mark_hub_error(exc)
                     expression, subtitle, reply = local_assistant_reply(text, True)
@@ -392,6 +397,7 @@ class SynraApp:
                         "id": command_id,
                     })
                     result = reply[:240]
+                    self._remember_turn(text, reply, "fallback")
         elif kind in {"runworkflow", "run", "workflow"}:
             workflow = str(command.get("workflowName") or command.get("workflow") or self.cfg.hub.default_workflow)
             self.state.apply_command({**command, "workflowName": workflow})
@@ -563,9 +569,14 @@ class SynraApp:
     def _local_context(self) -> str:
         memory = self.store.memory
         name = str(memory.get("preferredName") or "").strip()
-        if not name:
-            return ""
-        return f"The user's preferred name is {name}."
+        parts = []
+        if name:
+            parts.append(f"The user's preferred name is {name}.")
+        last_request = str(memory.get("lastUserRequest") or "").strip()
+        last_reply = str(memory.get("lastAssistantReply") or "").strip()
+        if last_request and last_reply:
+            parts.append(f"Previous turn: user asked '{last_request}', and Synra replied '{last_reply}'.")
+        return " ".join(parts)
 
     def _hub_context(self, route: str, tool: str) -> dict[str, Any]:
         return {
@@ -576,6 +587,16 @@ class SynraApp:
             "favoriteWorkflows": list(self._workflow_cache or self.cfg.hub.favorite_workflows),
             "defaultWorkflow": self.cfg.hub.default_workflow,
         }
+
+    def _remember_turn(self, user_text: str, assistant_reply: str, source: str) -> None:
+        memory = self.store.memory
+        turns = int(memory.get("assistantTurns", 0) or 0) + 1
+        self.store.update_memory({
+            "lastUserRequest": user_text.strip()[:240],
+            "lastAssistantReply": assistant_reply.strip()[:240],
+            "lastReplySource": source,
+            "assistantTurns": turns,
+        })
 
     def _loop(self) -> None:
         next_checkin = 0.0
@@ -640,6 +661,21 @@ def _synra_identity_reply(text: str) -> str:
         .replace("NodeSparkWisp", "Synra")
         .replace(" Wisp ", " Synra ")
     )
+
+
+def _expression_for_reply(text: str, fallback: str = "bright") -> str:
+    lowered = text.lower()
+    if any(token in lowered for token in ("sorry", "blocked", "failed", "cannot", "can't", "error", "not ready")):
+        return "concerned"
+    if any(token in lowered for token in ("not sure", "unclear", "maybe", "which one", "do you mean")):
+        return "confused"
+    if any(token in lowered for token in ("i can see", "look", "camera", "vision")):
+        return "curious"
+    if any(token in lowered for token in ("done", "ready", "great", "nice", "perfect", "absolutely")):
+        return "wink"
+    if any(token in lowered for token in ("here's", "first", "next", "because", "walk through")):
+        return "explain"
+    return fallback
 
 
 def _assistant_reply_failed(text: str) -> bool:
