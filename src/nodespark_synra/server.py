@@ -97,6 +97,9 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 self._json({"ok": False, "error": str(exc)}, status=400)
             return
+        if path == "/api/staged-workflows/clear":
+            self._json({"ok": True, **self.server.app.clear_staged_workflows()})
+            return
         if path == "/api/pair":
             code = str(payload.get("code") or "")
             try:

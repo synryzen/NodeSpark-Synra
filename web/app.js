@@ -54,6 +54,7 @@ const setupGuide = document.getElementById("setupGuide");
 const opsBoard = document.getElementById("opsBoard");
 const stagedQueue = document.getElementById("stagedQueue");
 const runStagedButton = document.getElementById("runStagedButton");
+const clearStagedButton = document.getElementById("clearStagedButton");
 const memoryForm = document.getElementById("memoryForm");
 const memoryNameInput = document.getElementById("memoryNameInput");
 const memoryNoteInput = document.getElementById("memoryNoteInput");
@@ -562,6 +563,11 @@ function renderStagedQueue(health = lastHealth) {
     runStagedButton.dataset.workflowId = next.id || "";
     runStagedButton.textContent = count ? "Run next" : "Run";
     runStagedButton.title = canRun ? `Run ${next.workflowName || "staged workflow"}` : "Pair NodeSparkHub before running staged workflows.";
+  }
+  if (clearStagedButton) {
+    clearStagedButton.disabled = count === 0;
+    clearStagedButton.textContent = count ? "Clear" : "Clear";
+    clearStagedButton.title = count ? "Clear staged workflow requests." : "No staged workflows to clear.";
   }
 }
 
@@ -1401,6 +1407,25 @@ async function runNextStagedWorkflow() {
   }
 }
 
+async function clearStagedWorkflows() {
+  if (clearStagedButton) clearStagedButton.disabled = true;
+  try {
+    const data = await postJson("/api/staged-workflows/clear", {});
+    if (data.state) renderState(data.state);
+    if (data.health) renderHealth(data.health);
+    else await fetchHealth();
+  } catch (error) {
+    await showPanelError(
+      "Workflow Queue",
+      "I could not clear the staged workflow queue.",
+      String(error.message || error)
+    );
+    await fetchHealth();
+  } finally {
+    renderStagedQueue(lastHealth);
+  }
+}
+
 function speechRecognitionConstructor() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
@@ -1774,6 +1799,7 @@ memoryForm?.addEventListener("submit", saveMemory);
 memoryClearButton?.addEventListener("click", clearMemory);
 runWorkflowButton?.addEventListener("click", runSelectedWorkflow);
 runStagedButton?.addEventListener("click", runNextStagedWorkflow);
+clearStagedButton?.addEventListener("click", clearStagedWorkflows);
 backgroundSelect?.addEventListener("change", () => applyBackground(backgroundSelect.value));
 voiceSelect?.addEventListener("change", () => {
   applyVoice(voiceSelect.value);

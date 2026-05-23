@@ -1452,7 +1452,7 @@ h1 {
 
 .staged-queue {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 78px;
+  grid-template-columns: minmax(0, 1fr) 78px 62px;
   align-items: center;
   gap: 7px;
   min-height: 42px;

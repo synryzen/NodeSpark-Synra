@@ -262,6 +262,21 @@ class SynraApp:
         self.record_activity("Staged workflow sent", workflow, "workflow", "workflow", "Sent to NodeSparkHub.")
         return {"result": result, "stagedWorkflows": self.public_staged_workflows(), "health": self.health_snapshot()}
 
+    def clear_staged_workflows(self) -> dict[str, Any]:
+        count = len(self.store.staged_workflows)
+        self.store.clear_staged_workflows()
+        self.record_activity("Queue cleared", f"Cleared {count} staged workflow request{'s' if count != 1 else ''}.", "success", "workflow")
+        self.state.apply_command({
+            "type": "speak",
+            "title": "Queue Cleared",
+            "text": f"Cleared {count} staged workflow request{'s' if count != 1 else ''}.",
+            "subtitle": "Workflow queue",
+            "expression": "soft_smile",
+            "detail": "Staged workflow queue",
+            "style": "success",
+        })
+        return {"stagedWorkflows": self.public_staged_workflows(), "health": self.health_snapshot(), "state": self.state.snapshot()}
+
     def hub_diagnostics(self) -> dict[str, Any]:
         snapshot = self.health_snapshot()
         result: dict[str, Any] = {
@@ -411,15 +426,17 @@ class SynraApp:
         if token:
             self.store.set_pairing(str(response.get("hubId", "")), token, response.get("expiresAt"))
             self.hub.token = token
+            queued = len(self.store.staged_workflows)
+            queue_message = f" I also found {queued} staged workflow request{'s' if queued != 1 else ''} ready to run." if queued else ""
             self.state.set_state({
                 "mode": "success",
                 "expression": "bright",
-                "message": "NodeSparkHub is linked. I can use the Hub AI and workflows now.",
+                "message": f"NodeSparkHub is linked. I can use the Hub AI and workflows now.{queue_message}",
                 "subtitle": "Paired",
                 "card": {
                     "title": "NodeSparkHub Linked",
                     "body": "Synra is connected.",
-                    "detail": "Assistant requests use the Hub default AI model.",
+                    "detail": "Use Run next for staged workflows." if queued else "Assistant requests use the Hub default AI model.",
                     "style": "success",
                     "progress": 1,
                 },
