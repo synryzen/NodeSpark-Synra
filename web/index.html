@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NodeSpark Synra</title>
-    <link rel="stylesheet" href="/styles.css?v=20260523-human-product-2" />
+    <link rel="stylesheet" href="/styles.css?v=20260523-premium-bg-1" />
     <script type="importmap">
       {
         "imports": {
@@ -19,6 +19,16 @@
     <main class="synra-stage" data-mode="idle" data-expression="soft_smile" data-presence="sleeping">
       <section class="avatar-zone" aria-label="NodeSpark Synra">
         <div class="avatar-shell">
+          <div class="stage-scene" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
           <div class="avatar3d-layer" id="avatar3dLayer" aria-label="NodeSpark Synra 3D avatar">
             <canvas id="synraAvatar3DCanvas"></canvas>
             <div class="avatar3d-status-pill" id="avatar3dStatus">3D avatar starting</div>
@@ -127,13 +137,13 @@
         <div class="settings-row">
           <select id="backgroundSelect" aria-label="Background">
             <option value="none">No background</option>
-            <option value="grid">Node grid</option>
-            <option value="studio">Studio</option>
-            <option value="city">Night city</option>
-            <option value="aurora">Aurora</option>
-            <option value="deck">Command deck</option>
-            <option value="server">Server room</option>
-            <option value="workbench">Workbench</option>
+            <option value="grid">NodeSpark command</option>
+            <option value="studio">Synra studio</option>
+            <option value="city">Hub skyline</option>
+            <option value="aurora">Signal aurora</option>
+            <option value="deck">Workflow deck</option>
+            <option value="server">Server core</option>
+            <option value="workbench">Build lab</option>
           </select>
           <select id="voiceSelect" aria-label="Voice">
             <option value="cute">Synra natural</option>
@@ -161,7 +171,7 @@
       </aside>
     </main>
 
-    <script type="module" src="/avatar3d-driver.js?v=20260523-human-product-2"></script>
-    <script src="/app.js?v=20260523-human-product-2"></script>
+    <script type="module" src="/avatar3d-driver.js?v=20260523-premium-bg-1"></script>
+    <script src="/app.js?v=20260523-premium-bg-1"></script>
   </body>
 </html>
