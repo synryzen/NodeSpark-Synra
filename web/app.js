@@ -107,7 +107,6 @@ const demoText = {
   look_up: "Looking up at the next signal.",
   look_down: "Looking down at the task details.",
   wave: "Hi. I’m here and ready.",
-  yawn: "I’m taking a tiny idle reset.",
   stretch: "One second. Re-centering.",
   explain: "I’ll walk through it clearly."
 };
@@ -125,7 +124,6 @@ const demoStates = {
   look_up: { mode: "idle", expression: "look_up", title: "Focus Up", style: "info" },
   look_down: { mode: "idle", expression: "look_down", title: "Focus Down", style: "info" },
   wave: { mode: "success", expression: "wave", title: "Greeting", style: "success" },
-  yawn: { mode: "idle", expression: "yawn", title: "Idle Reset", style: "info" },
   stretch: { mode: "idle", expression: "stretch", title: "Idle Motion", style: "info" },
   explain: { mode: "speaking", expression: "explain", title: "Explanation", style: "voice" }
 };
