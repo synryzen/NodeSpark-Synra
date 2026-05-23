@@ -585,6 +585,21 @@ class SynraAvatar3DController {
       this.poseTarget.wristTwist = 0.035;
       this.poseTarget.fingerCurl = 0.42;
     }
+    if (cue.includes("determined")) {
+      const pulse = Math.sin(elapsed * 3.8) * 0.012;
+      this.expressionTargets.angry = 0.2;
+      this.expressionTargets.happy = 0.16;
+      this.expressionTargets.fun = 0.08;
+      this.poseTarget.headX = 0.06 + pulse;
+      this.poseTarget.headY = 0.02;
+      this.poseTarget.chestX = -0.012;
+      this.poseTarget.upperChestX = -0.008;
+      this.poseTarget.shoulderLift = 0.045;
+      this.poseTarget.armOpen = 0.04;
+      this.poseTarget.elbowBend = 0.018;
+      this.poseTarget.fingerCurl = 0.34;
+      this.poseTarget.fingerSpread = 0.045;
+    }
     if (this.mode === "speaking") {
       this.expressionTargets.happy = this.expression === "bright" ? 0.38 : 0.18;
       this.expressionTargets.joy = this.expression === "bright" ? 0.36 : 0.16;
@@ -597,6 +612,24 @@ class SynraAvatar3DController {
       this.poseTarget.wristTwist = Math.sin(elapsed * 4.2) * 0.018;
       this.poseTarget.fingerCurl = 0.26 + Math.sin(elapsed * 3.4) * 0.035;
       this.poseTarget.fingerSpread = 0.06;
+    }
+    if (cue.includes("playful")) {
+      const sway = Math.sin(elapsed * 2.4);
+      this.expressionTargets.happy = Math.max(this.expressionTargets.happy || 0, 0.58);
+      this.expressionTargets.joy = Math.max(this.expressionTargets.joy || 0, 0.44);
+      this.expressionTargets.fun = Math.max(this.expressionTargets.fun || 0, 0.72);
+      this.expressionTargets.blinkLeft = stateAge < 0.75 ? 0.72 : 0;
+      this.expressionTargets.blink_l = stateAge < 0.75 ? 0.72 : 0;
+      this.poseTarget.headX = -0.035;
+      this.poseTarget.headY = 0.08 + sway * 0.018;
+      this.poseTarget.headZ = -0.075 + sway * 0.018;
+      this.poseTarget.chestY = -0.035;
+      this.poseTarget.upperChestY = -0.025;
+      this.poseTarget.armOpen = 0.08;
+      this.poseTarget.leftArmFold = Math.max(this.poseTarget.leftArmFold, 0.24);
+      this.poseTarget.rightArmFold = Math.max(this.poseTarget.rightArmFold, 0.16);
+      this.poseTarget.fingerCurl = 0.22;
+      this.poseTarget.fingerSpread = 0.085;
     }
     if (this.mode === "success" || this.expression === "bright" || this.expression === "wink") {
       this.expressionTargets.happy = this.expression === "wink" ? 0.78 : 0.58;
@@ -613,6 +646,24 @@ class SynraAvatar3DController {
       this.poseTarget.fingerCurl = 0.25;
       this.poseTarget.fingerSpread = 0.07;
     }
+    if (cue.includes("delighted") || cue.includes("proud")) {
+      const bounce = Math.sin(stateAge * Math.PI * 2.4) * Math.max(0, 1 - stateAge / 2.4);
+      this.expressionTargets.happy = Math.max(this.expressionTargets.happy || 0, 0.84);
+      this.expressionTargets.joy = Math.max(this.expressionTargets.joy || 0, 0.82);
+      this.expressionTargets.fun = Math.max(this.expressionTargets.fun || 0, 0.5);
+      this.poseTarget.headX = -0.05 + bounce * 0.012;
+      this.poseTarget.headZ = 0.055;
+      this.poseTarget.chestX = -0.052;
+      this.poseTarget.upperChestX = -0.048;
+      this.poseTarget.shoulderLift = 0.02;
+      this.poseTarget.armOpen = 0.14;
+      this.poseTarget.leftArmRaise = Math.max(this.poseTarget.leftArmRaise, 0.18);
+      this.poseTarget.rightArmRaise = Math.max(this.poseTarget.rightArmRaise, 0.18);
+      this.poseTarget.leftArmFold = Math.max(this.poseTarget.leftArmFold, 0.12);
+      this.poseTarget.rightArmFold = Math.max(this.poseTarget.rightArmFold, 0.12);
+      this.poseTarget.fingerCurl = 0.18;
+      this.poseTarget.fingerSpread = 0.11;
+    }
     if (this.mode === "approval_needed" || cue.includes("raised_brow") || cue.includes("curious")) {
       this.expressionTargets.surprised = 0.28;
       this.poseTarget.headY = -0.12;
@@ -621,6 +672,18 @@ class SynraAvatar3DController {
       this.poseTarget.armOpen = 0.045;
       this.poseTarget.elbowBend = 0.02;
       this.poseTarget.fingerCurl = 0.38;
+    }
+    if (cue.includes("curious")) {
+      this.expressionTargets.relaxed = 0.1;
+      this.expressionTargets.surprised = Math.max(this.expressionTargets.surprised || 0, 0.38);
+      this.poseTarget.headX = -0.015;
+      this.poseTarget.headY = -0.16;
+      this.poseTarget.headZ = 0.09;
+      this.poseTarget.chestY = -0.04;
+      this.poseTarget.leftArmFold = Math.max(this.poseTarget.leftArmFold, 0.18);
+      this.poseTarget.rightArmFold = Math.max(this.poseTarget.rightArmFold, 0.22);
+      this.poseTarget.handToMouth = Math.max(this.poseTarget.handToMouth, 0.12);
+      this.poseTarget.fingerCurl = 0.32;
     }
     if (cue.includes("confused") || cue.includes("unclear") || cue.includes("unknown")) {
       this.expressionTargets.surprised = 0.2;

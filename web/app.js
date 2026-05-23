@@ -108,7 +108,11 @@ const demoText = {
   look_down: "Looking down at the task details.",
   wave: "Hi. I’m here and ready.",
   stretch: "One second. Re-centering.",
-  explain: "I’ll walk through it clearly."
+  explain: "I’ll walk through it clearly.",
+  delighted: "That landed beautifully.",
+  playful: "I like where this is going.",
+  curious: "Let me look at that from another angle.",
+  determined: "I’m on it. Let’s make this work."
 };
 
 const demoStates = {
@@ -125,7 +129,11 @@ const demoStates = {
   look_down: { mode: "idle", expression: "look_down", title: "Focus Down", style: "info" },
   wave: { mode: "success", expression: "wave", title: "Greeting", style: "success" },
   stretch: { mode: "idle", expression: "stretch", title: "Idle Motion", style: "info" },
-  explain: { mode: "speaking", expression: "explain", title: "Explanation", style: "voice" }
+  explain: { mode: "speaking", expression: "explain", title: "Explanation", style: "voice" },
+  delighted: { mode: "success", expression: "delighted", title: "Delighted", style: "success", progress: 1 },
+  playful: { mode: "speaking", expression: "playful", title: "Playful", style: "voice" },
+  curious: { mode: "warning", expression: "curious", title: "Curious", style: "info" },
+  determined: { mode: "workflow_running", expression: "determined", title: "Determined", style: "workflow", progress: 0.64 }
 };
 
 function hasLocalMediaOrigin() {

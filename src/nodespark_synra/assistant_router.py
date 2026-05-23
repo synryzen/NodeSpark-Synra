@@ -21,6 +21,14 @@ HUB_TERMS = {
     "wisp",
 }
 
+GREETING_TERMS = {
+    "hello",
+    "hey",
+    "hi",
+    "morning",
+    "yo",
+}
+
 ACTION_TERMS = {
     "build",
     "configure",
@@ -58,6 +66,8 @@ def classify_assistant_request(text: str, default_workflow: str = "Synra Assista
 
     if not clean:
         return AssistantRoute("local", "empty", "concerned", "No input.", confidence=1.0)
+    if _looks_like_greeting(lowered):
+        return AssistantRoute("local", "greeting", "wave", "Warm greeting.", confidence=0.88)
     if _matches_name_memory(lowered):
         return AssistantRoute("tool", "remember_user", "bright", "Remember the user's preferred name.", confidence=0.92)
     if _looks_like_setup(lowered):
@@ -77,6 +87,10 @@ def classify_assistant_request(text: str, default_workflow: str = "Synra Assista
 
 
 def infer_route_expression(lowered: str) -> str:
+    if any(token in lowered for token in ("haha", "funny", "joke", "play", "silly")):
+        return "playful"
+    if any(token in lowered for token in ("excited", "amazing", "best ever", "awesome", "love", "cute", "nice")):
+        return "delighted"
     if any(token in lowered for token in ("sad", "upset", "failed", "broken", "bad", "angry", "worried")):
         return "concerned"
     if any(token in lowered for token in ("why", "how", "what", "explain", "teach", "help")):
@@ -107,11 +121,20 @@ def extract_workflow_name(text: str) -> str:
 
     clean = " ".join(text.strip().split())
     lowered = clean.lower()
-    for marker in (" workflow called ", " workflow named ", " workflow ", " automation called ", " automation named "):
+    for marker in (
+        " workflow called ",
+        " workflow named ",
+        " workflow ",
+        " automation called ",
+        " automation named ",
+        " automation ",
+    ):
         index = lowered.find(marker)
         if index >= 0:
             candidate = clean[index + len(marker):]
-            return _clean_workflow(candidate)
+            workflow = _clean_workflow(candidate)
+            if workflow:
+                return workflow
     for verb in ("run ", "start ", "launch ", "execute "):
         if lowered.startswith(verb):
             return _clean_workflow(clean[len(verb):])
@@ -135,6 +158,13 @@ def _clean_workflow(value: str) -> str:
 
 def _matches_name_memory(lowered: str) -> bool:
     return any(token in lowered for token in ("my name is ", "call me ", "i am ", "i'm "))
+
+
+def _looks_like_greeting(lowered: str) -> bool:
+    words = re.findall(r"[a-z0-9'-]+", lowered)
+    if not words or len(words) > 5:
+        return False
+    return bool(set(words) & GREETING_TERMS)
 
 
 def _looks_like_setup(lowered: str) -> bool:
@@ -172,9 +202,11 @@ def _looks_like_workflow_list(lowered: str) -> bool:
 
 
 def _looks_like_workflow_run(lowered: str) -> bool:
-    return any(token in lowered for token in ("run", "start", "launch", "execute")) and any(
+    if any(token in lowered for token in ("run", "start", "launch", "execute")) and any(
         token in lowered for token in ("workflow", "automation", "daily-summary", "synra assistant")
-    )
+    ):
+        return True
+    return bool(re.match(r"^(run|start|launch|execute)\s+['\"]?[\w][\w ._-]{2,80}", lowered))
 
 
 def _hub_related(lowered: str) -> bool:

@@ -21,6 +21,10 @@ VALID_MODES = {
 
 def infer_expression(text: str, default: str = "bright") -> str:
     value = text.lower()
+    if any(token in value for token in ("haha", "funny", "playful", "joke")):
+        return "playful"
+    if any(token in value for token in ("awesome", "love", "amazing", "excited", "perfect")):
+        return "delighted"
     if any(token in value for token in ("failed", "error", "blocked", "denied", "can't", "cannot", "sorry")):
         return "concerned"
     if any(token in value for token in ("not sure", "unclear", "clarify", "question", "which one", "what do you mean")):
@@ -39,6 +43,8 @@ def expression_mode(expression: str, fallback: str = "speaking") -> str:
         return "warning"
     if expression in {"confused", "curious", "raised_brow"}:
         return "approval_needed" if expression == "raised_brow" else "warning"
+    if expression in {"determined"}:
+        return "workflow_running"
     return fallback
 
 

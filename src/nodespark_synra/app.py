@@ -16,6 +16,18 @@ from .tts import TTSService
 def local_assistant_reply(text: str, hub_configured: bool) -> tuple[str, str, str]:
     request = text.strip()
     lowered = request.lower()
+    if any(word == lowered for word in ("hi", "hello", "hey", "yo")):
+        return (
+            "wave",
+            "Synra",
+            "Hi. I’m here, awake, and ready to help with NodeSparkHub or anything else you want to think through."
+        )
+    if any(word in lowered for word in ("thanks", "thank you", "appreciate")):
+        return (
+            "delighted",
+            "Synra",
+            "You’re welcome. I’m glad I could help, and I’m ready for the next move."
+        )
     if any(word in lowered for word in ("run", "start", "workflow", "automate", "automation")):
         if hub_configured:
             return (
@@ -117,11 +129,13 @@ class SynraApp:
 
     def public_memory(self) -> dict[str, Any]:
         memory = self.store.memory
+        recent_turns = memory.get("recentTurns", [])
         return {
             "preferredName": str(memory.get("preferredName", "")),
             "lastAssistantRoute": str(memory.get("lastAssistantRoute", "")),
             "lastReplySource": str(memory.get("lastReplySource", "")),
             "assistantTurns": int(memory.get("assistantTurns", 0) or 0),
+            "recentTurns": recent_turns if isinstance(recent_turns, list) else [],
         }
 
     def setup_status(self) -> dict[str, Any]:
@@ -384,8 +398,8 @@ class SynraApp:
                     self._remember_turn(text, reply, "hub")
                 except Exception as exc:
                     self.mark_hub_error(exc)
-                    expression, subtitle, reply = local_assistant_reply(text, True)
-                    reply = f"{reply} I could not reach NodeSparkHub yet, so I'm staying in local mode."
+                    expression, subtitle, reply = self._fallback_assistant_reply(text, True)
+                    reply = f"{reply} I could not reach NodeSparkHub yet, so I’m staying useful in local mode."
                     self.state.apply_command({
                         "type": "speak",
                         "title": "Synra",
@@ -423,6 +437,20 @@ class SynraApp:
                     response = self.hub.run_workflow_async(workflow, payload)
                     self.mark_hub_ok()
                     result = f"runId={response.get('runId', '')}"
+                    run_id = str(response.get("runId", "")).strip()
+                    reply = f"I started {workflow}."
+                    if run_id:
+                        reply = f"I started {workflow}. Run ID {run_id}."
+                    self.state.apply_command({
+                        "type": "speak",
+                        "title": "Workflow Running",
+                        "text": reply,
+                        "subtitle": workflow,
+                        "expression": "determined",
+                        "detail": "NodeSparkHub accepted the run request",
+                        "style": "workflow",
+                        "id": command_id,
+                    })
                 except Exception as exc:
                     self.mark_hub_error(exc)
                     result = f"I staged {workflow}, but NodeSparkHub did not accept the run yet. I'll keep the request visible while the Hub comes back online."
@@ -450,6 +478,11 @@ class SynraApp:
         return {"ok": True, "result": result, "state": self.state.snapshot()}
 
     def _try_tool_route(self, text: str, route, command_id: str) -> str | None:
+        if route.tool == "greeting":
+            expression, subtitle, reply = local_assistant_reply(text, self.hub.configured())
+            self._speak_tool_reply(command_id, reply, subtitle, expression, "Synra greeting", "voice")
+            self._remember_turn(text, reply, "local")
+            return reply
         if route.route != "tool":
             return None
         if route.tool == "remember_user":
@@ -464,9 +497,9 @@ class SynraApp:
             setup = self.setup_status()
             missing = [step["label"] for step in setup["steps"] if not step["done"]]
             if missing:
-                reply = f"Setup is {setup['complete']} of {setup['total']} ready. Next: {', '.join(missing[:2])}."
+                reply = f"Setup is {setup['complete']} of {setup['total']} ready. Next I’d fix {', '.join(missing[:2])}."
             else:
-                reply = "Setup is complete. Local AI, voice, Hub pairing, and workflows are ready."
+                reply = "Setup is complete. Local AI, voice, Hub pairing, vision, and workflows are ready."
             self._speak_tool_reply(command_id, reply, "Setup", "attentive", "Synra readiness", "info")
             return reply
         if route.tool == "status":
@@ -499,7 +532,7 @@ class SynraApp:
                     "title": "Workflow Running",
                     "text": reply,
                     "subtitle": workflow,
-                    "expression": "focused",
+                    "expression": "determined",
                     "detail": "NodeSparkHub accepted the run request",
                     "style": "workflow",
                     "id": command_id,
@@ -572,6 +605,18 @@ class SynraApp:
         parts = []
         if name:
             parts.append(f"The user's preferred name is {name}.")
+        recent = memory.get("recentTurns", [])
+        if isinstance(recent, list) and recent:
+            compact = []
+            for item in recent[-3:]:
+                if not isinstance(item, dict):
+                    continue
+                user = str(item.get("user") or "").strip()
+                assistant = str(item.get("assistant") or "").strip()
+                if user and assistant:
+                    compact.append(f"User: {user} / Synra: {assistant}")
+            if compact:
+                parts.append("Recent conversation: " + " | ".join(compact))
         last_request = str(memory.get("lastUserRequest") or "").strip()
         last_reply = str(memory.get("lastAssistantReply") or "").strip()
         if last_request and last_reply:
@@ -583,6 +628,7 @@ class SynraApp:
             "route": route,
             "tool": tool,
             "memory": self.public_memory(),
+            "localContext": self._local_context(),
             "setup": self.setup_status(),
             "favoriteWorkflows": list(self._workflow_cache or self.cfg.hub.favorite_workflows),
             "defaultWorkflow": self.cfg.hub.default_workflow,
@@ -591,12 +637,36 @@ class SynraApp:
     def _remember_turn(self, user_text: str, assistant_reply: str, source: str) -> None:
         memory = self.store.memory
         turns = int(memory.get("assistantTurns", 0) or 0) + 1
+        recent_turns = memory.get("recentTurns", [])
+        if not isinstance(recent_turns, list):
+            recent_turns = []
+        recent_turns = [
+            item for item in recent_turns[-5:]
+            if isinstance(item, dict) and (item.get("user") or item.get("assistant"))
+        ]
+        recent_turns.append({
+            "user": user_text.strip()[:180],
+            "assistant": assistant_reply.strip()[:220],
+            "source": source,
+            "at": int(time.time()),
+        })
         self.store.update_memory({
             "lastUserRequest": user_text.strip()[:240],
             "lastAssistantReply": assistant_reply.strip()[:240],
             "lastReplySource": source,
             "assistantTurns": turns,
+            "recentTurns": recent_turns[-6:],
         })
+
+    def _fallback_assistant_reply(self, text: str, hub_configured: bool) -> tuple[str, str, str]:
+        try:
+            if self.local_ai.available():
+                local = self.local_ai.answer(text, self._local_context())
+                reply = _synra_identity_reply(local.text)
+                return _expression_for_reply(reply, "bright"), "Local AI", reply
+        except Exception as exc:
+            print(f"[local-ai] fallback failed: {exc}")
+        return local_assistant_reply(text, hub_configured)
 
     def _loop(self) -> None:
         next_checkin = 0.0
@@ -665,6 +735,12 @@ def _synra_identity_reply(text: str) -> str:
 
 def _expression_for_reply(text: str, fallback: str = "bright") -> str:
     lowered = text.lower()
+    if any(token in lowered for token in ("haha", "fun", "joke", "playful", "little grin")):
+        return "playful"
+    if any(token in lowered for token in ("awesome", "love", "amazing", "excited", "perfect", "beautiful")):
+        return "delighted"
+    if any(token in lowered for token in ("started", "running", "workflow", "automating", "accepted the run")):
+        return "determined"
     if any(token in lowered for token in ("sorry", "blocked", "failed", "cannot", "can't", "error", "not ready")):
         return "concerned"
     if any(token in lowered for token in ("not sure", "unclear", "maybe", "which one", "do you mean")):

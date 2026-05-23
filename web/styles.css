@@ -1116,6 +1116,29 @@ h1 {
   animation: characterBreathe 2.6s ease-in-out infinite, speakingGlow 900ms ease-in-out infinite;
 }
 
+[data-expression="delighted"] {
+  --mood-glow: rgba(64, 240, 160, 0.44);
+}
+
+[data-expression="playful"] {
+  --mood-glow: rgba(255, 209, 102, 0.36);
+}
+
+[data-expression="curious"] {
+  --mood-glow: rgba(76, 201, 255, 0.42);
+}
+
+[data-expression="determined"] {
+  --mood-glow: rgba(155, 92, 255, 0.5);
+}
+
+[data-expression="delighted"] .avatar3d-layer,
+[data-expression="playful"] .avatar3d-layer,
+[data-expression="curious"] .avatar3d-layer,
+[data-expression="determined"] .avatar3d-layer {
+  filter: drop-shadow(0 0 34px var(--mood-glow));
+}
+
 [data-mode="success"] .synra-art {
   --mood-glow: rgba(64, 240, 160, 0.36);
   filter:

@@ -87,7 +87,18 @@ class HubClient:
         workflows = response.get("workflows", [])
         if not isinstance(workflows, list):
             raise HubError("Hub returned an unexpected workflows response.")
-        return [str(item) for item in workflows]
+        names: list[str] = []
+        for item in workflows:
+            if isinstance(item, str) and item.strip():
+                names.append(item.strip())
+                continue
+            if isinstance(item, dict):
+                for key in ("name", "title", "id", "workflowName"):
+                    value = item.get(key)
+                    if isinstance(value, str) and value.strip():
+                        names.append(value.strip())
+                        break
+        return names
 
     def run_workflow_async(self, workflow: str, payload: dict[str, Any]) -> dict[str, Any]:
         encoded = quote(workflow, safe="")
