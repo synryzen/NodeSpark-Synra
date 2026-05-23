@@ -264,6 +264,44 @@ class StateStore:
         return self.activity
 
     @property
+    def staged_workflows(self) -> list:
+        value = self.data.get("staged_workflows", [])
+        return value if isinstance(value, list) else []
+
+    def append_staged_workflow(self, values: dict, limit: int = 12) -> list:
+        workflow = {}
+        for key in ("id", "workflowName", "reason", "status", "createdAt", "payload"):
+            value = values.get(key)
+            if isinstance(value, (str, int, float, bool, dict)):
+                workflow[key] = value
+        if not workflow.get("id"):
+            workflow["id"] = str(uuid.uuid4())
+        if not workflow.get("createdAt"):
+            workflow["createdAt"] = 0
+        if not workflow.get("status"):
+            workflow["status"] = "staged"
+        workflows = [workflow, *[item for item in self.staged_workflows if isinstance(item, dict)]]
+        self.data["staged_workflows"] = workflows[: max(3, int(limit))]
+        self.save()
+        return self.staged_workflows
+
+    def remove_staged_workflow(self, workflow_id: str) -> dict | None:
+        remaining = []
+        removed = None
+        for item in self.staged_workflows:
+            if isinstance(item, dict) and str(item.get("id")) == workflow_id and removed is None:
+                removed = item
+                continue
+            remaining.append(item)
+        self.data["staged_workflows"] = remaining
+        self.save()
+        return removed
+
+    def clear_staged_workflows(self) -> None:
+        self.data["staged_workflows"] = []
+        self.save()
+
+    @property
     def ui_settings(self) -> dict:
         value = self.data.get("ui_settings", {})
         return value if isinstance(value, dict) else {}

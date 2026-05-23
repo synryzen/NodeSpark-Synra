@@ -1450,6 +1450,71 @@ h1 {
   background: rgba(255, 209, 102, 0.06);
 }
 
+.staged-queue {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 78px;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 7px 8px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+}
+
+.staged-queue[data-status="waiting"] {
+  border-color: rgba(255, 209, 102, 0.32);
+  background: rgba(255, 209, 102, 0.06);
+}
+
+.staged-queue[data-status="ready"] {
+  border-color: rgba(76, 201, 255, 0.38);
+  background: rgba(76, 201, 255, 0.075);
+}
+
+.staged-queue div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.staged-queue strong,
+.staged-queue small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staged-queue strong {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.staged-queue small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.staged-queue button {
+  min-width: 0;
+  min-height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.055);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.staged-queue button:disabled {
+  cursor: wait;
+  opacity: 0.56;
+}
+
 .memory-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 58px 58px;
@@ -1872,6 +1937,7 @@ h1 {
   .core-grid,
   .ops-board,
   .setup-guide,
+  .staged-queue,
   .memory-form {
     grid-template-columns: 1fr;
   }

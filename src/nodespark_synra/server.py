@@ -40,6 +40,9 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/activity":
             self._json({"ok": True, "activity": self.server.app.public_activity()})
             return
+        if path == "/api/staged-workflows":
+            self._json({"ok": True, "stagedWorkflows": self.server.app.public_staged_workflows()})
+            return
         if path == "/api/pairing":
             self._json({"ok": True, "pairing": self.server.app.pairing_snapshot()})
             return
@@ -87,6 +90,12 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
             return
         if path == "/api/hub/check":
             self._json({"ok": True, "diagnostics": self.server.app.hub_diagnostics()})
+            return
+        if path == "/api/staged-workflows/run":
+            try:
+                self._json({"ok": True, **self.server.app.run_staged_workflow(str(payload.get("id") or ""))})
+            except Exception as exc:
+                self._json({"ok": False, "error": str(exc)}, status=400)
             return
         if path == "/api/pair":
             code = str(payload.get("code") or "")

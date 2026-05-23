@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NodeSpark Synra</title>
-    <link rel="stylesheet" href="/styles.css?v=20260523-ops-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260523-queue-1" />
     <script type="importmap">
       {
         "imports": {
@@ -143,6 +143,13 @@
             <span data-status="local"><strong>Route</strong><small>Local first</small></span>
             <span data-status="local"><strong>Turns</strong><small>0 remembered</small></span>
           </div>
+          <div class="staged-queue" id="stagedQueue" aria-label="Staged workflows">
+            <div>
+              <strong>No staged workflows</strong>
+              <small>Synra will hold workflow requests here while the Hub is unavailable.</small>
+            </div>
+            <button id="runStagedButton" type="button" disabled>Run next</button>
+          </div>
           <form class="memory-form" id="memoryForm">
             <input id="memoryNameInput" autocomplete="name" spellcheck="false" placeholder="Name Synra should remember" />
             <input id="memoryNoteInput" autocomplete="off" spellcheck="true" placeholder="Preference or role note" />
@@ -214,7 +221,7 @@
       </aside>
     </main>
 
-    <script type="module" src="/avatar3d-driver.js?v=20260523-ops-1"></script>
-    <script src="/app.js?v=20260523-ops-1"></script>
+    <script type="module" src="/avatar3d-driver.js?v=20260523-queue-1"></script>
+    <script src="/app.js?v=20260523-queue-1"></script>
   </body>
 </html>

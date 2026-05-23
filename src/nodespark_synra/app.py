@@ -129,6 +129,7 @@ class SynraApp:
             "pairing": self.pairing_snapshot(),
             "operations": self.operations_snapshot(),
             "activity": self.public_activity(),
+            "stagedWorkflows": self.public_staged_workflows(),
         }
 
     def public_memory(self) -> dict[str, Any]:
@@ -146,6 +147,12 @@ class SynraApp:
     def public_activity(self) -> list[dict[str, Any]]:
         return [
             item for item in self.store.activity[:12]
+            if isinstance(item, dict)
+        ]
+
+    def public_staged_workflows(self) -> list[dict[str, Any]]:
+        return [
+            item for item in self.store.staged_workflows[:8]
             if isinstance(item, dict)
         ]
 
@@ -220,7 +227,40 @@ class SynraApp:
             "lastReplySource": str(memory.get("lastReplySource", "")),
             "assistantTurns": int(memory.get("assistantTurns", 0) or 0),
             "activityCount": len(self.store.activity),
+            "stagedWorkflowCount": len(self.store.staged_workflows),
         }
+
+    def stage_workflow(self, workflow: str, payload: dict[str, Any] | None = None, reason: str = "") -> dict[str, Any]:
+        item = {
+            "id": f"stage-{int(time.time() * 1000)}",
+            "workflowName": workflow,
+            "payload": payload or {},
+            "reason": reason or self.hub_offline_detail() or "Waiting for NodeSparkHub.",
+            "status": "staged",
+            "createdAt": int(time.time()),
+        }
+        self.store.append_staged_workflow(item)
+        return item
+
+    def run_staged_workflow(self, workflow_id: str = "") -> dict[str, Any]:
+        staged = self.public_staged_workflows()
+        item = next((entry for entry in staged if str(entry.get("id")) == workflow_id), None) if workflow_id else (staged[0] if staged else None)
+        if not item:
+            raise ValueError("No staged workflow is waiting.")
+        if not self.hub_ready_for_actions():
+            raise RuntimeError(self.hub_offline_detail() or "NodeSparkHub is not ready yet.")
+        workflow = str(item.get("workflowName") or self.cfg.hub.default_workflow)
+        payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
+        result = self.handle_command({
+            "id": f"staged-{item.get('id')}",
+            "type": "runWorkflow",
+            "workflowName": workflow,
+            "payload": payload,
+            "text": f"Running staged workflow {workflow}.",
+        }, ack=False)
+        self.store.remove_staged_workflow(str(item.get("id")))
+        self.record_activity("Staged workflow sent", workflow, "workflow", "workflow", "Sent to NodeSparkHub.")
+        return {"result": result, "stagedWorkflows": self.public_staged_workflows(), "health": self.health_snapshot()}
 
     def hub_diagnostics(self) -> dict[str, Any]:
         snapshot = self.health_snapshot()
@@ -559,6 +599,7 @@ class SynraApp:
                 result = f"Workflow staged locally: {workflow}. Configure hub.base_url to run it."
                 if self.hub.configured():
                     result = f"I staged {workflow} locally. Pair Synra with NodeSparkHub to run it from this monitor."
+                staged = self.stage_workflow(workflow, payload, self.hub_offline_detail())
                 self.record_activity("Workflow staged", workflow, "warning", "workflow", self.hub_offline_detail())
                 self.state.apply_command({
                     "type": "speak",
@@ -566,7 +607,7 @@ class SynraApp:
                     "text": result,
                     "subtitle": workflow,
                     "expression": "raised_brow",
-                    "detail": self.hub_offline_detail(),
+                    "detail": f"Queued as {staged.get('id')}",
                     "style": "warning" if self.hub.configured() else "voice",
                     "id": command_id,
                 })
@@ -593,6 +634,7 @@ class SynraApp:
                 except Exception as exc:
                     self.mark_hub_error(exc)
                     result = f"I staged {workflow}, but NodeSparkHub did not accept the run yet. I'll keep the request visible while the Hub comes back online."
+                    staged = self.stage_workflow(workflow, payload, str(exc))
                     self.record_activity("Workflow staged", workflow, "warning", "workflow", str(exc))
                     self.state.apply_command({
                         "type": "speak",
@@ -600,7 +642,7 @@ class SynraApp:
                         "text": result,
                         "subtitle": workflow,
                         "expression": "concerned",
-                        "detail": str(exc),
+                        "detail": f"Queued as {staged.get('id')}",
                         "style": "warning",
                         "id": command_id,
                     })

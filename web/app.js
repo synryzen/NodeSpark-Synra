@@ -52,6 +52,8 @@ const emotionBadge = document.getElementById("emotionBadge");
 const coreGrid = document.getElementById("coreGrid");
 const setupGuide = document.getElementById("setupGuide");
 const opsBoard = document.getElementById("opsBoard");
+const stagedQueue = document.getElementById("stagedQueue");
+const runStagedButton = document.getElementById("runStagedButton");
 const memoryForm = document.getElementById("memoryForm");
 const memoryNameInput = document.getElementById("memoryNameInput");
 const memoryNoteInput = document.getElementById("memoryNoteInput");
@@ -432,6 +434,7 @@ function renderHealth(health) {
   renderSetupGuide(health.setup, health);
   renderPairingStation(health);
   renderOperations(health);
+  renderStagedQueue(health);
   renderActivityFeed(health.activity || []);
   renderMemory(health.memory || {});
   if (!hubStatus) return;
@@ -525,9 +528,9 @@ function renderOperations(health = lastHealth) {
       status: source === "fallback" ? "warning" : "online"
     },
     {
-      label: ops.activeWorkflow ? "Workflow" : "Turns",
-      detail: ops.activeWorkflow || `${ops.assistantTurns || 0} remembered locally`,
-      status: ops.activeWorkflow ? "workflow" : "online"
+      label: ops.activeWorkflow ? "Workflow" : "Queue",
+      detail: ops.activeWorkflow || `${ops.stagedWorkflowCount || 0} staged / ${ops.assistantTurns || 0} turns`,
+      status: ops.activeWorkflow || ops.stagedWorkflowCount ? "workflow" : "online"
     }
   ];
   opsBoard.innerHTML = "";
@@ -537,6 +540,29 @@ function renderOperations(health = lastHealth) {
     item.innerHTML = `<strong>${escapeHtml(card.label)}</strong><small>${escapeHtml(card.detail)}</small>`;
     opsBoard.append(item);
   });
+}
+
+function renderStagedQueue(health = lastHealth) {
+  if (!stagedQueue) return;
+  const staged = health?.stagedWorkflows || [];
+  const next = staged[0] || {};
+  const count = staged.length;
+  const canRun = count > 0 && Boolean(health?.hubPaired && health?.hubCanTry !== false);
+  stagedQueue.dataset.status = count ? (canRun ? "ready" : "waiting") : "empty";
+  const label = count ? `${count} staged workflow${count === 1 ? "" : "s"}` : "No staged workflows";
+  const detail = count
+    ? `${next.workflowName || "Workflow"} waits for ${canRun ? "launch" : "Hub pairing"}`
+    : "Synra will hold workflow requests here while the Hub is unavailable.";
+  const body = stagedQueue.querySelector("div");
+  if (body) {
+    body.innerHTML = `<strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small>`;
+  }
+  if (runStagedButton) {
+    runStagedButton.disabled = !canRun;
+    runStagedButton.dataset.workflowId = next.id || "";
+    runStagedButton.textContent = count ? "Run next" : "Run";
+    runStagedButton.title = canRun ? `Run ${next.workflowName || "staged workflow"}` : "Pair NodeSparkHub before running staged workflows.";
+  }
 }
 
 function renderCoreStatus(health = lastHealth) {
@@ -1353,6 +1379,28 @@ async function runSelectedWorkflow() {
   }
 }
 
+async function runNextStagedWorkflow() {
+  const id = runStagedButton?.dataset.workflowId || "";
+  if (!id) return;
+  if (runStagedButton) runStagedButton.disabled = true;
+  try {
+    const data = await postJson("/api/staged-workflows/run", { id });
+    if (data.result?.state) renderState(data.result.state);
+    if (data.health) renderHealth(data.health);
+    else await fetchHealth();
+    await fetchWorkflows();
+  } catch (error) {
+    await showPanelError(
+      "Staged Workflow",
+      "I could not run the staged workflow yet.",
+      String(error.message || error)
+    );
+    await fetchHealth();
+  } finally {
+    renderStagedQueue(lastHealth);
+  }
+}
+
 function speechRecognitionConstructor() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
@@ -1725,6 +1773,7 @@ pairingCopyButton?.addEventListener("click", copyPairingId);
 memoryForm?.addEventListener("submit", saveMemory);
 memoryClearButton?.addEventListener("click", clearMemory);
 runWorkflowButton?.addEventListener("click", runSelectedWorkflow);
+runStagedButton?.addEventListener("click", runNextStagedWorkflow);
 backgroundSelect?.addEventListener("change", () => applyBackground(backgroundSelect.value));
 voiceSelect?.addEventListener("change", () => {
   applyVoice(voiceSelect.value);
