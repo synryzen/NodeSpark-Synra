@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
 
-const DEFAULT_SYNRA_VRM_URL = "/assets/avatars/synra.vrm";
+const DEFAULT_SYNRA_VRM_URL = "/assets/avatars/synra.vrm?v=20260523-ear-size-1";
 const EXPRESSION_NAMES = [
   "neutral",
   "happy",
