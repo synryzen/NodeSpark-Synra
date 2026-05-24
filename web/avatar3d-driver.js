@@ -267,8 +267,9 @@ class SynraAvatar3DController {
       { match: /hair/i, color: 0x05050b, emissive: 0x1d1235, emissiveIntensity: 0.28 },
       { match: /eyeiris/i, color: 0x8e55ff, emissive: 0x5b2dff, emissiveIntensity: 0.2 },
       { match: /eyehighlight/i, color: 0xf8f3ff, emissive: 0xd5c2ff, emissiveIntensity: 0.24 },
-      { match: /tops/i, color: 0x030308, emissive: 0x1d0c30, emissiveIntensity: 0.12 },
-      { match: /bottoms|shoes/i, color: 0x05060b, emissive: 0x11091d, emissiveIntensity: 0.08 },
+      { match: /tops/i, color: 0x07112f, emissive: 0x102a5c, emissiveIntensity: 0.16 },
+      { match: /bottoms/i, color: 0x050b2b, emissive: 0x0e1f4d, emissiveIntensity: 0.12 },
+      { match: /shoes/i, color: 0x05060b, emissive: 0x11091d, emissiveIntensity: 0.08 },
       { match: /accessoryneck/i, color: 0x090912, opacity: 0, emissive: 0x000000, emissiveIntensity: 0 },
       { match: /brow|eyeline/i, color: 0x070710, emissive: 0x11091d, emissiveIntensity: 0.12 },
       { match: /mouth/i, color: 0xff7aa8, emissive: 0x3d0922, emissiveIntensity: 0.1 }
@@ -352,84 +353,220 @@ class SynraAvatar3DController {
   addSynraShirtDetail() {
     if (!this.vrm?.scene) return;
     const upperChest = this.vrm.humanoid?.getNormalizedBoneNode?.("upperChest") || this.vrm.scene;
+    const chest = this.vrm.humanoid?.getNormalizedBoneNode?.("chest") || upperChest;
+    const hips = this.vrm.humanoid?.getNormalizedBoneNode?.("hips") || this.vrm.scene;
+
+    const makeMat = (color, options = {}) =>
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: options.opacity ?? 0.96,
+        side: THREE.DoubleSide,
+        depthTest: false,
+        depthWrite: false
+      });
+
+    const makePanel = (name, points, material, parent, position, rotation = {}) => {
+      const shape = new THREE.Shape();
+      points.forEach(([x, y], index) => {
+        if (index === 0) shape.moveTo(x, y);
+        else shape.lineTo(x, y);
+      });
+      shape.closePath();
+      const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), material);
+      mesh.name = name;
+      mesh.position.set(position.x, position.y, position.z);
+      mesh.rotation.set(rotation.x || 0, rotation.y || 0, rotation.z || 0);
+      mesh.renderOrder = position.renderOrder || 48;
+      parent.add(mesh);
+      return mesh;
+    };
+
+    const blue = makeMat(0x255ec7, { opacity: 0.96 });
+    const blueDark = makeMat(0x061642, { opacity: 0.98 });
+    const blueLight = makeMat(0x75bdff, { opacity: 0.9 });
+    const white = makeMat(0xfff6ff, { opacity: 0.96 });
+    const ribbon = makeMat(0x071a5c, { opacity: 0.98 });
+    const sparkle = makeMat(0xccecff, { opacity: 0.82 });
 
     const bodiceShape = new THREE.Shape();
-    bodiceShape.moveTo(-0.118, 0.052);
-    bodiceShape.bezierCurveTo(-0.088, 0.006, -0.052, -0.036, -0.016, -0.052);
-    bodiceShape.bezierCurveTo(-0.006, -0.057, 0.006, -0.057, 0.016, -0.052);
-    bodiceShape.bezierCurveTo(0.052, -0.036, 0.088, 0.006, 0.118, 0.052);
-    bodiceShape.lineTo(0.098, -0.17);
-    bodiceShape.bezierCurveTo(0.052, -0.19, -0.052, -0.19, -0.098, -0.17);
+    bodiceShape.moveTo(-0.126, 0.07);
+    bodiceShape.bezierCurveTo(-0.092, 0.01, -0.052, -0.036, -0.018, -0.055);
+    bodiceShape.bezierCurveTo(-0.006, -0.062, 0.006, -0.062, 0.018, -0.055);
+    bodiceShape.bezierCurveTo(0.052, -0.036, 0.092, 0.01, 0.126, 0.07);
+    bodiceShape.lineTo(0.108, -0.19);
+    bodiceShape.bezierCurveTo(0.052, -0.215, -0.052, -0.215, -0.108, -0.19);
     bodiceShape.closePath();
 
     const bodice = new THREE.Mesh(
       new THREE.ShapeGeometry(bodiceShape),
-      new THREE.MeshBasicMaterial({
-        color: 0x07050e,
-        transparent: true,
-        opacity: 0.96,
-        side: THREE.DoubleSide,
-        depthTest: false,
-        depthWrite: false
-      })
+      blue
     );
-    bodice.name = "SynraSoftBlousePanel";
-    bodice.position.set(0, -0.032, -0.112);
+    bodice.name = "SynraStarlightDressBodice";
+    bodice.position.set(0, -0.034, -0.114);
     bodice.rotation.x = -0.09;
-    bodice.renderOrder = 40;
+    bodice.renderOrder = 48;
     upperChest.add(bodice);
 
+    const bustPanelShape = new THREE.Shape();
+    bustPanelShape.moveTo(-0.092, 0.047);
+    bustPanelShape.bezierCurveTo(-0.066, 0.02, -0.038, 0.006, -0.012, -0.016);
+    bustPanelShape.bezierCurveTo(-0.004, -0.022, 0.004, -0.022, 0.012, -0.016);
+    bustPanelShape.bezierCurveTo(0.038, 0.006, 0.066, 0.02, 0.092, 0.047);
+    bustPanelShape.lineTo(0.063, -0.085);
+    bustPanelShape.bezierCurveTo(0.028, -0.102, -0.028, -0.102, -0.063, -0.085);
+    bustPanelShape.closePath();
+    const bustPanel = new THREE.Mesh(new THREE.ShapeGeometry(bustPanelShape), white);
+    bustPanel.name = "SynraStarlightDressWhiteBust";
+    bustPanel.position.set(0, -0.018, -0.118);
+    bustPanel.rotation.x = -0.1;
+    bustPanel.renderOrder = 51;
+    upperChest.add(bustPanel);
+
     const neckline = [
-      new THREE.Vector3(-0.11, 0.02, -0.096),
-      new THREE.Vector3(-0.078, -0.018, -0.097),
-      new THREE.Vector3(-0.034, -0.05, -0.098),
-      new THREE.Vector3(0, -0.058, -0.098),
-      new THREE.Vector3(0.034, -0.05, -0.098),
-      new THREE.Vector3(0.078, -0.018, -0.097),
-      new THREE.Vector3(0.11, 0.02, -0.096)
+      new THREE.Vector3(-0.105, 0.038, -0.101),
+      new THREE.Vector3(-0.07, 0.008, -0.102),
+      new THREE.Vector3(-0.034, -0.02, -0.103),
+      new THREE.Vector3(0, -0.028, -0.103),
+      new THREE.Vector3(0.034, -0.02, -0.103),
+      new THREE.Vector3(0.07, 0.008, -0.102),
+      new THREE.Vector3(0.105, 0.038, -0.101)
     ];
     const necklineTrim = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(new THREE.CatmullRomCurve3(neckline).getPoints(30)),
       new THREE.LineBasicMaterial({
-        color: 0x9b5cff,
+        color: 0xe9f7ff,
         transparent: true,
-        opacity: 0.78,
+        opacity: 0.95,
         depthTest: false,
         depthWrite: false
       })
     );
-    necklineTrim.name = "SynraSoftBlouseNeckline";
-    necklineTrim.position.set(0, -0.032, -0.006);
-    necklineTrim.renderOrder = 41;
+    necklineTrim.name = "SynraStarlightDressNeckline";
+    necklineTrim.position.set(0, -0.025, -0.018);
+    necklineTrim.renderOrder = 52;
     upperChest.add(necklineTrim);
 
-    const sideSeamMaterial = new THREE.LineBasicMaterial({
-      color: 0xffd166,
-      transparent: true,
-      opacity: 0.36,
-      depthTest: false,
-      depthWrite: false
-    });
+    makePanel("SynraStarlightNeckRibbonLeft", [[0, 0.024], [-0.05, -0.002], [-0.008, -0.044]], ribbon, upperChest, { x: -0.016, y: 0.026, z: -0.124, renderOrder: 54 }, { x: -0.08, z: 0.1 });
+    makePanel("SynraStarlightNeckRibbonRight", [[0, 0.024], [0.05, -0.002], [0.008, -0.044]], ribbon, upperChest, { x: 0.016, y: 0.026, z: -0.124, renderOrder: 54 }, { x: -0.08, z: -0.1 });
+    const neckGem = new THREE.Mesh(new THREE.CircleGeometry(0.007, 14), blueLight);
+    neckGem.name = "SynraStarlightNeckGem";
+    neckGem.position.set(0, 0.02, -0.128);
+    neckGem.renderOrder = 55;
+    upperChest.add(neckGem);
+
+    const waistBand = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.018, 0.01), ribbon);
+    waistBand.name = "SynraStarlightWaistRibbon";
+    waistBand.position.set(0, -0.214, -0.116);
+    waistBand.rotation.x = -0.08;
+    waistBand.renderOrder = 55;
+    chest.add(waistBand);
+
+    makePanel("SynraStarlightWaistBowLeft", [[0, 0.024], [-0.054, -0.002], [-0.008, -0.034]], blueLight, chest, { x: -0.013, y: -0.214, z: -0.125, renderOrder: 56 }, { x: -0.08, z: 0.06 });
+    makePanel("SynraStarlightWaistBowRight", [[0, 0.024], [0.054, -0.002], [0.008, -0.034]], blueLight, chest, { x: 0.013, y: -0.214, z: -0.125, renderOrder: 56 }, { x: -0.08, z: -0.06 });
     [
       [
-        new THREE.Vector3(-0.098, 0.012, -0.097),
-        new THREE.Vector3(-0.09, -0.056, -0.099),
-        new THREE.Vector3(-0.064, -0.158, -0.1)
+        new THREE.Vector3(-0.112, 0.04, -0.111),
+        new THREE.Vector3(-0.088, -0.046, -0.115),
+        new THREE.Vector3(-0.074, -0.17, -0.118)
       ],
       [
-        new THREE.Vector3(0.098, 0.012, -0.097),
-        new THREE.Vector3(0.09, -0.056, -0.099),
-        new THREE.Vector3(0.064, -0.158, -0.1)
+        new THREE.Vector3(0.112, 0.04, -0.111),
+        new THREE.Vector3(0.088, -0.046, -0.115),
+        new THREE.Vector3(0.074, -0.17, -0.118)
       ]
     ].forEach((points, index) => {
       const seam = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(new THREE.CatmullRomCurve3(points).getPoints(18)),
-        sideSeamMaterial.clone()
+        new THREE.BufferGeometry().setFromPoints(new THREE.CatmullRomCurve3(points).getPoints(20)),
+        new THREE.LineBasicMaterial({
+          color: 0xa8dcff,
+          transparent: true,
+          opacity: 0.72,
+          depthTest: false,
+          depthWrite: false
+        })
       );
-      seam.name = `SynraSoftBlouseSideSeam${index + 1}`;
-      seam.position.set(0, -0.032, -0.006);
-      seam.renderOrder = 42;
+      seam.name = `SynraStarlightBodiceCurve${index + 1}`;
+      seam.position.set(0, -0.026, -0.01);
+      seam.renderOrder = 57;
       upperChest.add(seam);
+    });
+
+    const skirtPanels = [
+      { x: -0.108, z: 0.16, w: 0.09, h: 0.26, color: blueDark, order: 43 },
+      { x: -0.054, z: 0.08, w: 0.105, h: 0.29, color: blue, order: 44 },
+      { x: 0, z: 0, w: 0.115, h: 0.31, color: blueDark, order: 45 },
+      { x: 0.054, z: -0.08, w: 0.105, h: 0.29, color: blue, order: 44 },
+      { x: 0.108, z: -0.16, w: 0.09, h: 0.26, color: blueDark, order: 43 }
+    ];
+    skirtPanels.forEach((panel, index) => {
+      const mat = panel.color === blue ? blue : blueDark;
+      makePanel(
+        `SynraStarlightSkirtPanel${index + 1}`,
+        [[-panel.w * 0.42, 0.02], [panel.w * 0.42, 0.02], [panel.w, -panel.h], [-panel.w, -panel.h]],
+        mat,
+        hips,
+        { x: panel.x, y: 0.052, z: -0.19, renderOrder: panel.order },
+        { x: -0.18, z: panel.z }
+      );
+    });
+
+    for (let index = 0; index < 11; index += 1) {
+      const x = -0.18 + index * 0.036;
+      const frill = new THREE.Mesh(new THREE.CircleGeometry(0.022, 18, 0, Math.PI), white);
+      frill.name = `SynraStarlightSkirtFrill${index + 1}`;
+      frill.position.set(x, -0.235 - Math.sin(index * 0.8) * 0.006, -0.205);
+      frill.rotation.set(-0.2, 0, Math.PI);
+      frill.renderOrder = 58;
+      hips.add(frill);
+    }
+
+    [-1, 1].forEach((side) => {
+      const sleeveShape = new THREE.Shape();
+      sleeveShape.moveTo(0, 0.03);
+      sleeveShape.bezierCurveTo(side * 0.028, 0.042, side * 0.068, 0.034, side * 0.085, 0.004);
+      sleeveShape.bezierCurveTo(side * 0.076, -0.028, side * 0.024, -0.046, 0, -0.032);
+      sleeveShape.bezierCurveTo(-side * 0.014, -0.014, -side * 0.014, 0.014, 0, 0.03);
+      sleeveShape.closePath();
+      const sleeve = new THREE.Mesh(new THREE.ShapeGeometry(sleeveShape), blueLight);
+      sleeve.name = side < 0 ? "SynraStarlightLeftFrillSleeve" : "SynraStarlightRightFrillSleeve";
+      sleeve.position.set(side * 0.094, -0.006, -0.12);
+      sleeve.rotation.set(-0.1, 0, side * -0.08);
+      sleeve.renderOrder = 49;
+      upperChest.add(sleeve);
+
+      const cuff = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0, -0.032, -0.006),
+          new THREE.Vector3(side * 0.03, -0.044, -0.006),
+          new THREE.Vector3(side * 0.065, -0.03, -0.006)
+        ]),
+        new THREE.LineBasicMaterial({
+          color: 0xfff6ff,
+          transparent: true,
+          opacity: 0.88,
+          depthTest: false,
+          depthWrite: false
+        })
+      );
+      cuff.name = side < 0 ? "SynraStarlightLeftSleeveFrill" : "SynraStarlightRightSleeveFrill";
+      cuff.position.set(side * 0.094, -0.006, -0.12);
+      cuff.renderOrder = 60;
+      upperChest.add(cuff);
+    });
+
+    [
+      [-0.09, -0.08],
+      [-0.026, -0.145],
+      [0.072, -0.12],
+      [0.132, -0.2],
+      [-0.142, -0.19]
+    ].forEach(([x, y], index) => {
+      const star = new THREE.Mesh(new THREE.CircleGeometry(index % 2 ? 0.004 : 0.005, 8), sparkle);
+      star.name = `SynraStarlightDressSparkle${index + 1}`;
+      star.position.set(x, y, -0.226);
+      star.renderOrder = 60;
+      hips.add(star);
     });
   }
 
