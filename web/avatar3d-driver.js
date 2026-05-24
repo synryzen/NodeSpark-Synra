@@ -1189,9 +1189,9 @@ class SynraAvatar3DController {
     blendRotation(bones.spine, { x: 0.012, y: -0.018 }, 0.1, weight);
     blendRotation(bones.hips, { x: -0.006, y: -0.028, z: 0.012 }, 0.08, weight);
 
-    blendRotation(bones.rightUpperArm, { x: -0.15, y: 0.08 + flutter * 0.01, z: -0.96 + flutter * 0.018 }, 0.18, weight);
-    blendRotation(bones.rightLowerArm, { x: -0.39, y: 0.28, z: 2.62 + flutter * 0.08 }, 0.18, weight);
-    blendRotation(bones.rightHand, { x: 0.08, y: 0.18, z: 0.24 + flutter * 0.05 }, 0.2, weight);
+    blendRotation(bones.rightUpperArm, { x: -0.11, y: 0.22 + flutter * 0.008, z: -0.9 + flutter * 0.014 }, 0.2, weight);
+    blendRotation(bones.rightLowerArm, { x: -0.27, y: 0.14, z: 2.32 + flutter * 0.06 }, 0.2, weight);
+    blendRotation(bones.rightHand, { x: 0.055, y: 0.18, z: 0.29 + flutter * 0.04 }, 0.22, weight);
 
     blendRotation(bones.leftUpperArm, { x: -0.04, y: 0.11, z: 1.28 }, 0.1, weight);
     blendRotation(bones.leftLowerArm, { x: 0.03, y: 0.04, z: 0.2 }, 0.1, weight);
