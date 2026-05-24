@@ -37,16 +37,27 @@
 ## Expressions
 
 - [ ] neutral
+- [ ] soft_smile
 - [ ] happy
 - [ ] attentive
 - [ ] focused
 - [ ] curious
 - [ ] concerned
 - [ ] wink
+- [ ] confused
+- [ ] sad
+- [ ] delighted
+- [ ] playful
+- [ ] determined
+- [ ] look_left
+- [ ] look_right
+- [ ] look_up
+- [ ] look_down
 
 ## Motions
 
 - [ ] idle
+- [ ] idle_shift
 - [ ] listen
 - [ ] think
 - [ ] talk
@@ -56,6 +67,18 @@
 - [ ] wave
 - [ ] explain
 - [ ] stretch
+- [ ] delighted
+- [ ] playful
+- [ ] curious
+- [ ] confused
+- [ ] sad
+- [ ] determined
+- [ ] look_left
+- [ ] look_right
+- [ ] look_up
+- [ ] look_down
+- [ ] soft_nod
+- [ ] hair_tuck
 
 ## App Integration
 
@@ -66,5 +89,8 @@
 - [ ] Thinking mode changes expression/motion.
 - [ ] Success mode changes expression/motion.
 - [ ] Error/warning mode changes expression/motion.
+- [ ] Idle mode occasionally plays subtle idle_shift, soft_nod, hair_tuck, or
+      stretch motion without interrupting active work.
+- [ ] Speech combines mouth motion with expression and body movement.
 - [ ] Model remains centered on the Jetson display.
 - [ ] Model runs smoothly enough for the Jetson Orin Nano.

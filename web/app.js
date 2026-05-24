@@ -143,7 +143,10 @@ const demoText = {
   delighted: "That landed beautifully.",
   playful: "I like where this is going.",
   curious: "Let me look at that from another angle.",
-  determined: "I’m on it. Let’s make this work."
+  determined: "I’m on it. Let’s make this work.",
+  soft_nod: "Yes. I’m with you.",
+  hair_tuck: "Just a tiny reset.",
+  idle_shift: "I’m still here."
 };
 
 const demoStates = {
@@ -164,7 +167,10 @@ const demoStates = {
   delighted: { mode: "success", expression: "delighted", title: "Delighted", style: "success", progress: 1 },
   playful: { mode: "speaking", expression: "playful", title: "Playful", style: "voice" },
   curious: { mode: "warning", expression: "curious", title: "Curious", style: "info" },
-  determined: { mode: "workflow_running", expression: "determined", title: "Determined", style: "workflow", progress: 0.64 }
+  determined: { mode: "workflow_running", expression: "determined", title: "Determined", style: "workflow", progress: 0.64 },
+  soft_nod: { mode: "idle", expression: "soft_nod", title: "Soft Nod", style: "info" },
+  hair_tuck: { mode: "idle", expression: "hair_tuck", title: "Hair Tuck", style: "info" },
+  idle_shift: { mode: "idle", expression: "idle_shift", title: "Idle Shift", style: "info" }
 };
 
 function hasLocalMediaOrigin() {

@@ -22,7 +22,8 @@ Synra should remain close to the supplied reference image:
 - Adult anime woman.
 - Long black hair with layered strands and physics-ready movement.
 - Violet eyes, confident expression, soft but sharp personality.
-- Black NodeSparkHub outfit with purple accents, jewelry, and branded details.
+- Blue-and-white fantasy-idol dress with NodeSpark accents, jewelry, and
+  polished layered details.
 - Premium developer-studio atmosphere instead of a generic sci-fi assistant.
 
 The Live2D model must be rigged for real facial and body animation. PNG motion is
@@ -62,9 +63,17 @@ Minimum Live2D behavior:
 - Natural blinking and eye tracking.
 - Mouth shapes driven by speech.
 - Hair and accessory physics.
-- Expression changes for neutral, attentive, focused, happy, concerned, curious,
-  and wink.
-- Motion groups for idle, listen, think, talk, success, concerned, and approval.
+- Expression changes for neutral, soft smile, attentive, focused, happy,
+  concerned, curious, confused, sad, delighted, playful, determined, wink, and
+  directional gaze.
+- Motion groups for idle, idle shift, listen, think, talk, success, concerned,
+  approval, wave, explain, stretch, delighted, playful, curious, confused, sad,
+  determined, directional look, soft nod, and hair tuck.
+- Idle life: Synra should occasionally shift weight, softly nod, tuck hair, or
+  stretch without interrupting user work.
+- State blending: speech should combine mouth movement, expression, body
+  posture, and subtle hair/dress motion instead of replacing everything with a
+  single canned clip.
 
 Future behavior:
 

@@ -9,12 +9,22 @@ from pathlib import Path
 
 REQUIRED_EXPRESSIONS = {
     "neutral",
+    "soft_smile",
     "happy",
     "attentive",
     "focused",
     "curious",
     "concerned",
     "wink",
+    "confused",
+    "sad",
+    "delighted",
+    "playful",
+    "determined",
+    "look_left",
+    "look_right",
+    "look_up",
+    "look_down",
 }
 
 REQUIRED_MOTION_GROUPS = {
@@ -28,6 +38,19 @@ REQUIRED_MOTION_GROUPS = {
     "wave",
     "explain",
     "stretch",
+    "delighted",
+    "playful",
+    "curious",
+    "confused",
+    "sad",
+    "determined",
+    "look_left",
+    "look_right",
+    "look_up",
+    "look_down",
+    "idle_shift",
+    "soft_nod",
+    "hair_tuck",
 }
 
 

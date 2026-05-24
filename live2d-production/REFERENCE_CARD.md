@@ -32,7 +32,9 @@ sources. The final Live2D model must be redrawn or reconstructed as layered art.
 - Cleaner Live2D-friendly hair segmentation.
 - More readable NodeSparkHub logo patch.
 - Better separated hands and arms for expressive gestures.
-- Full-body motion support for wave, talk, explain, stretch, idle, and listen.
+- Full-body motion support for wave, talk, explain, stretch, idle, listen,
+  delighted, playful, curious, confused, sad, determined, directional gaze,
+  soft nod, and hair tuck.
 - Cleaner mouth shapes for speaking.
 - More intentional expression set.
 

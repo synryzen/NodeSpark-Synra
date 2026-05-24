@@ -93,6 +93,12 @@ Synra needs expressions that read clearly at monitor distance:
 - Curious: raised brow, small smile.
 - Concerned: worried brows, restrained mouth.
 - Wink: playful success moment.
+- Confused: uncertain eyes, slight head tilt.
+- Sad: softened brows, restrained downturned mouth.
+- Delighted: bright joyful success expression.
+- Playful: teasing smile, light blush, lively eyes.
+- Determined: focused confidence for workflow execution.
+- Directional gaze: look left, right, up, and down without freezing the body.
 
 ## Notes For Artist
 
@@ -114,3 +120,35 @@ The wave must match the supplied two-palms-forward reference:
 - Fingers are spread evenly and readable.
 - Thumb side and pinky side must look anatomically correct; no twisted wrists.
 - Shoulder, chest, head, and hair should move subtly with the gesture.
+
+## Required Motion Set
+
+Synra must not feel like a chatbot with one idle loop. The runtime will call
+these motion groups directly:
+
+- idle
+- idle_shift
+- listen
+- think
+- talk
+- success
+- concerned
+- approval
+- wave
+- explain
+- stretch
+- delighted
+- playful
+- curious
+- confused
+- sad
+- determined
+- look_left
+- look_right
+- look_up
+- look_down
+- soft_nod
+- hair_tuck
+
+Each motion should involve more than a single arm or face part. Head, shoulders,
+chest, hair, dress, and hands should participate where appropriate.
