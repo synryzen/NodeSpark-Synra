@@ -25,6 +25,9 @@ REQUIRED_MOTION_GROUPS = {
     "success",
     "concerned",
     "approval",
+    "wave",
+    "explain",
+    "stretch",
 }
 
 

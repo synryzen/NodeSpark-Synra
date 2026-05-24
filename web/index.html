@@ -29,6 +29,9 @@
             <span></span>
             <span></span>
           </div>
+          <div class="live2d-layer" id="live2dLayer" aria-label="NodeSpark Synra Live2D avatar">
+            <canvas id="synraLive2DCanvas"></canvas>
+          </div>
           <div class="avatar3d-layer" id="avatar3dLayer" aria-label="NodeSpark Synra 3D avatar">
             <canvas id="synraAvatar3DCanvas"></canvas>
             <div class="avatar3d-status-pill" id="avatar3dStatus">3D avatar starting</div>
@@ -223,7 +226,11 @@
       </aside>
     </main>
 
-    <script type="module" src="/avatar3d-driver.js?v=20260524-wave-elbow-1"></script>
-    <script src="/app.js?v=20260524-wave-elbow-1"></script>
+    <script src="/assets/vendor/live2d/live2dcubismcore.min.js?v=20260524-live2d-1"></script>
+    <script src="/assets/vendor/live2d/pixi.min.js?v=20260524-live2d-1"></script>
+    <script src="/assets/vendor/live2d/pixi-live2d-display.min.js?v=20260524-live2d-1"></script>
+    <script src="/live2d-driver.js?v=20260524-live2d-1"></script>
+    <script type="module" src="/avatar3d-driver.js?v=20260524-live2d-1"></script>
+    <script src="/app.js?v=20260524-live2d-1"></script>
   </body>
 </html>

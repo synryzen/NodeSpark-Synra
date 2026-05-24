@@ -5,6 +5,12 @@
 - [ ] Character still matches the supplied Synra reference.
 - [ ] Adult anime proportions and polished rendering are preserved.
 - [ ] Hair, eyes, outfit, jewelry, and NodeSpark branding are clear.
+- [ ] Dress matches the supplied blue-and-white reference silhouette.
+- [ ] Dress has a white sweetheart bust panel, blue bodice, off-shoulder frilled
+      sleeves, layered blue skirt, dark underskirt, white ruffled petticoat,
+      center bow, and sparkle/gem detail.
+- [ ] Dress does not read as an apron, flat overlay, boxy panel, or simple
+      shirt-and-skirt recolor.
 - [ ] No important part clips during head or body movement.
 - [ ] Texture quality holds up on a full-size monitor.
 
@@ -20,6 +26,13 @@
 - [ ] Hair physics feel soft and layered.
 - [ ] Jewelry physics react without jitter.
 - [ ] Clothing movement is subtle and premium.
+- [ ] Wave motion matches the two-palms-forward reference.
+- [ ] Wave elbows sit slightly out from the body with forearms in front of the
+      upper arms.
+- [ ] Wave palms face the screen with straight relaxed wrists and evenly spread
+      fingers.
+- [ ] No elbow cracks, forearms behind biceps, twisted wrists, or sideways palms
+      during the wave.
 
 ## Expressions
 
@@ -40,6 +53,9 @@
 - [ ] success
 - [ ] concerned
 - [ ] approval
+- [ ] wave
+- [ ] explain
+- [ ] stretch
 
 ## App Integration
 

@@ -1,13 +1,15 @@
 # NodeSpark Synra Reference Card
 
-Primary visual reference:
+Primary visual references:
 
 ```text
 reference/synra-character.png
+reference/synra-dress-reference.png
+reference/synra-two-palms-wave-reference.png
 ```
 
-Use this as the character direction, not as a direct flat-rig source. The final
-Live2D model must be redrawn or reconstructed as layered art.
+Use these as character, dress, and motion direction, not as direct flat-rig
+sources. The final Live2D model must be redrawn or reconstructed as layered art.
 
 ## Must Preserve
 
@@ -15,15 +17,22 @@ Live2D model must be redrawn or reconstructed as layered art.
 - Long black hair with layered strand movement.
 - Violet eyes.
 - Soft confident face.
-- Black outfit with NodeSparkHub identity.
+- Blue-and-white fantasy dress silhouette from the supplied reference.
+- White sweetheart bust panel, blue bodice, off-shoulder frilled sleeves,
+  flared layered skirt, navy underskirt, white petticoat frills, small center
+  bow, and subtle sparkle details.
+- NodeSpark identity as a tasteful gem/charm/embroidered mark.
 - Purple jewelry and accent lighting.
 - Premium developer-studio mood.
+- Two-palms-forward wave: forearms in front of biceps, vertical wrists, palms
+  facing camera, fingers evenly spread.
 
 ## May Improve
 
 - Cleaner Live2D-friendly hair segmentation.
 - More readable NodeSparkHub logo patch.
-- Better separated hands and arms for subtle gestures.
+- Better separated hands and arms for expressive gestures.
+- Full-body motion support for wave, talk, explain, stretch, idle, and listen.
 - Cleaner mouth shapes for speaking.
 - More intentional expression set.
 
@@ -34,3 +43,8 @@ Live2D model must be redrawn or reconstructed as layered art.
 - Hardware-cube replacement.
 - Hologram-only look.
 - Static PNG animation.
+- Apron-shaped dress overlays.
+- Blocky sleeve shapes.
+- Forearms disappearing behind biceps during waves.
+- Twisted wrists or palms facing sideways when the motion calls for palms
+  forward.

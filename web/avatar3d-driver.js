@@ -167,6 +167,17 @@ class SynraAvatar3DController {
 
   async boot() {
     if (!this.canvas || !this.container) return;
+    if (window.synraLive2DReadyCheck) {
+      try {
+        const live2dPreferred = await window.synraLive2DReadyCheck;
+        if (live2dPreferred) {
+          setAvatar3DStatus("standby", "Live2D avatar active");
+          return;
+        }
+      } catch {
+        // If the Live2D check fails, keep the temporary VRM fallback available.
+      }
+    }
     setAvatar3DStatus("checking", "Checking for Synra VRM");
 
     const hasVrm = await urlExists(this.modelUrl);

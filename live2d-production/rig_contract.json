@@ -28,7 +28,10 @@
     "talk",
     "success",
     "concerned",
-    "approval"
+    "approval",
+    "wave",
+    "explain",
+    "stretch"
   ],
   "stateMap": {
     "idle": { "motion": "idle", "expression": "neutral" },
@@ -39,7 +42,30 @@
     "success": { "motion": "success", "expression": "happy" },
     "warning": { "motion": "concerned", "expression": "concerned" },
     "error": { "motion": "concerned", "expression": "concerned" },
-    "approval_needed": { "motion": "approval", "expression": "curious" }
+    "approval_needed": { "motion": "approval", "expression": "curious" },
+    "wave": { "motion": "wave", "expression": "happy" },
+    "explain": { "motion": "explain", "expression": "attentive" },
+    "stretch": { "motion": "stretch", "expression": "neutral" }
+  },
+  "motionAcceptance": {
+    "wave": [
+      "two palms face the screen",
+      "forearms remain in front of upper arms",
+      "elbows sit slightly away from the body",
+      "wrists are straight and not twisted",
+      "fingers are separated and readable",
+      "head, shoulders, chest, hair, and skirt follow through subtly"
+    ],
+    "explain": [
+      "arms support speech naturally without broken elbows",
+      "hands stay anatomically correct from front view",
+      "body, head, eyes, and mouth all participate"
+    ],
+    "stretch": [
+      "arms reach visibly upward or outward",
+      "torso, shoulders, head, hair, and dress move with the stretch",
+      "motion eases in and out without snapping"
+    ]
   },
   "performanceBudget": {
     "targetDevice": "NVIDIA Jetson Orin Nano",

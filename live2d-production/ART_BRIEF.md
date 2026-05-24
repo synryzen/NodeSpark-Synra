@@ -6,15 +6,39 @@ NodeSpark Synra is the embodied operator for NodeSparkHub. She should feel like
 an intelligent adult anime character who belongs in a premium developer studio:
 confident, warm, sharp, attractive, capable, and slightly playful.
 
-The supplied reference image is the visual anchor:
+The supplied references are the visual anchor:
 
 - Adult anime woman.
-- Long black hair with individual strand movement.
+- Long dark hair for Synra, with individual strand movement.
 - Violet eyes.
 - Soft confident expression.
-- Black outfit with NodeSparkHub branding.
-- Purple gem jewelry and violet accent light.
+- A pretty fantasy-idol dress inspired by the supplied blue-and-white dress
+  reference, adapted for NodeSpark Synra.
+- Purple/blue gem jewelry and violet/cyan accent light.
 - Premium studio/desk mood, not a generic sci-fi hologram.
+
+## Required Dress Direction
+
+The dress must look like a polished Live2D character outfit, not a flat sticker
+or apron. It should clearly follow the supplied dress reference:
+
+- Blue fitted bodice with curved waist shaping.
+- White sweetheart bust/chest panel with soft fabric highlights and lace edge.
+- Small dark neck ribbon with a gem or gold center.
+- Off-shoulder blue frilled sleeves with visible ruffle edges and bow ties.
+- Layered flared skirt with a dark navy underskirt.
+- Blue outer skirt panels with star/sparkle detail.
+- Pale blue triangular folded panels along the front skirt.
+- White ruffled petticoat/hem visible beneath the skirt.
+- Small white waist bow at center front.
+- Asymmetrical leg detail: one thigh garter/ribbon and one white striped thigh
+  stocking, unless the final model framing makes full legs unnecessary.
+- Dark shoes with bow or strap detail if legs are included.
+- NodeSpark identity should be subtle: a small gem, logo charm, or tiny
+  embroidered mark, not a large corporate patch.
+
+Avoid boxy overlays, apron shapes, flat rectangles, block sleeves, or any
+element that looks pasted on top of the body.
 
 ## Art Style
 
@@ -53,8 +77,10 @@ Important independent movement:
 - Brows.
 - Mouth shapes and inner mouth.
 - Neck, head, torso, shoulders, arms, and hand.
-- Shirt panels, collar, lace, folds, and logo.
-- Earrings, choker gem, necklace, and pendant.
+- Bodice panels, white bust panel, lace, neck ribbon, sleeve ruffles, sleeve
+  bows, waist bow, skirt panels, underskirt, petticoat frills, garter, stocking
+  stripes, shoes, jewelry, and subtle NodeSpark gem/logo detail.
+- Earrings, choker gem, necklace, pendant, ribbon tails, and skirt/frill tips.
 
 ## Expression Goals
 
@@ -74,3 +100,17 @@ The final PSD should be organized, named, and grouped for rigging. Use the
 included `layer_manifest.json` as the naming target. If a layer must be split
 further for clean deformation, split it rather than forcing the rigger to paint
 repairs later.
+
+## Required Wave Pose Reference
+
+The wave must match the supplied two-palms-forward reference:
+
+- Both elbows slightly away from the body.
+- Upper arms angle naturally down from the shoulder.
+- Forearms are in front of the upper arms, not tucked behind the biceps.
+- Forearms are near vertical.
+- Wrists are straight and relaxed.
+- Palms face the screen clearly.
+- Fingers are spread evenly and readable.
+- Thumb side and pinky side must look anatomically correct; no twisted wrists.
+- Shoulder, chest, head, and hair should move subtly with the gesture.

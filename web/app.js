@@ -217,6 +217,7 @@ function applyPersonality(value, options = {}) {
   if (personalitySelect) personalitySelect.value = personality;
   storageSet(storageKeys.personality, personality);
   window.synraAvatar3D?.setPersonality?.(personality);
+  window.synraLive2D?.setPersonality?.(personality);
   if (persist) postSettings({ personality });
 }
 
@@ -227,6 +228,7 @@ function applyMotion(value, options = {}) {
   if (motionSelect) motionSelect.value = motion;
   storageSet(storageKeys.motion, motion);
   window.synraAvatar3D?.setMotionLevel?.(motion);
+  window.synraLive2D?.setMotionLevel?.(motion);
   if (persist) postSettings({ motion });
 }
 
@@ -940,6 +942,7 @@ function applyVisualState(state) {
   stage.dataset.mode = state.mode || "idle";
   stage.dataset.expression = state.expression || "soft_smile";
   window.synraAvatar3D?.setState(state);
+  window.synraLive2D?.setState(state);
 }
 
 function syncStageVisualDataset() {
@@ -968,12 +971,14 @@ function beginSpeechVisuals(state) {
   targetMotion.mouth = 1;
   applyVisualState({ ...(lastServerState || state), mode: "speaking", expression: state.expression || "bright" });
   window.synraAvatar3D?.setSpeaking(true);
+  window.synraLive2D?.setSpeaking(true);
 }
 
 function endSpeechVisuals(speechId) {
   speechVisualLock = false;
   targetMotion.mouth = 0;
   window.synraAvatar3D?.setSpeaking(false);
+  window.synraLive2D?.setSpeaking(false);
   if (speechMouthTimer) {
     window.clearInterval(speechMouthTimer);
     speechMouthTimer = null;
@@ -1020,6 +1025,7 @@ async function playServerTts(text, speechId, state, options = {}) {
       speechMouthTimer = window.setInterval(() => {
         targetMotion.mouth = 0.52 + Math.random() * 0.48;
         window.synraAvatar3D?.setSpeaking(true);
+        window.synraLive2D?.setSpeaking(true);
       }, 95);
     };
     audio.onended = () => {
@@ -1108,6 +1114,7 @@ function speakWithBrowserVoice(speechText, speechId, state) {
   utterance.onboundary = () => {
     targetMotion.mouth = 0.64 + Math.random() * 0.36;
     window.synraAvatar3D?.setSpeaking(true);
+    window.synraLive2D?.setSpeaking(true);
   };
   utterance.onend = () => endSpeechVisuals(speechId);
   utterance.onerror = utterance.onend;
@@ -1596,6 +1603,13 @@ function updateMotion() {
   setCssNumber("--mouth-open", clamp(mouthWave, 0, 1));
   setCssNumber("--blink", blink);
   window.synraAvatar3D?.update({
+    x: currentMotion.x,
+    y: currentMotion.y,
+    rotate: currentMotion.rotate,
+    scale: currentMotion.scale,
+    mouth: clamp(mouthWave, 0, 1)
+  });
+  window.synraLive2D?.update?.({
     x: currentMotion.x,
     y: currentMotion.y,
     rotate: currentMotion.rotate,
