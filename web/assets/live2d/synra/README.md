@@ -16,3 +16,11 @@ bash scripts/install_live2d_model_pack.sh /path/to/runtime-or-delivery-folder
 
 The app will use the temporary VRM fallback until this runtime slot contains a
 valid Synra model.
+
+While the Cubism model is missing, the app shows:
+
+```text
+synra-final-design-neutral.png
+```
+
+as the approved static Live2D concept preview.

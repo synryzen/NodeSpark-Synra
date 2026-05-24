@@ -35,6 +35,8 @@ copy_optional_reference "$ROOT/web/assets/synra-two-palms-wave-reference.png" "$
 copy_optional_reference "$ROOT/web/assets/synra/sheets/expression-sheet.png" "$PACKAGE_DIR/reference/expression-sheet.png"
 copy_optional_reference "$ROOT/web/assets/synra/sheets/rigging-poses-sheet.png" "$PACKAGE_DIR/reference/rigging-poses-sheet.png"
 copy_optional_reference "$ROOT/live2d-production/references/current-vrm-fallback.jpg" "$PACKAGE_DIR/reference/current-vrm-fallback.jpg"
+copy_optional_reference "$ROOT/live2d-production/references/synra-final-design-neutral.png" "$PACKAGE_DIR/reference/synra-final-design-neutral.png"
+copy_optional_reference "$ROOT/live2d-production/references/synra-final-design-wave.png" "$PACKAGE_DIR/reference/synra-final-design-wave.png"
 
 if [[ "${#missing_references[@]}" -gt 0 ]]; then
   {

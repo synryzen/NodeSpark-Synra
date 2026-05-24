@@ -625,6 +625,51 @@ body {
   will-change: transform, opacity;
 }
 
+.concept2d-layer {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  pointer-events: none;
+  opacity: 0;
+  transform:
+    translate3d(var(--rig-x), var(--rig-y), 0)
+    rotate(var(--rig-rotate))
+    scale(var(--rig-scale));
+  transform-origin: 50% 58%;
+  transition: opacity 220ms ease;
+  animation: characterBreathe 5.4s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.concept2d-layer img {
+  display: block;
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: auto;
+  height: min(86vh, 96%);
+  max-width: 84%;
+  object-fit: contain;
+  border-radius: 12px;
+  transform: translateX(-50%);
+  filter:
+    drop-shadow(0 0 28px rgba(155, 92, 255, 0.22))
+    drop-shadow(0 34px 88px rgba(0, 0, 0, 0.58));
+}
+
+[data-live2d="missing-model"] .concept2d-layer {
+  opacity: 1;
+}
+
+[data-live2d="missing-model"] .avatar3d-layer,
+[data-live2d="missing-model"] .synra-frame-rig,
+[data-live2d="missing-model"] .fallback-avatar,
+[data-live2d="missing-model"] .avatar-load-surface {
+  opacity: 0;
+}
+
 #synraLive2DCanvas {
   display: block;
   width: 100%;
@@ -684,6 +729,7 @@ body {
 }
 
 [data-live2d="ready"] .avatar3d-layer,
+[data-live2d="ready"] .concept2d-layer,
 [data-live2d="ready"] .synra-frame-rig,
 [data-live2d="ready"] .fallback-avatar,
 [data-live2d="ready"] .avatar-load-surface {

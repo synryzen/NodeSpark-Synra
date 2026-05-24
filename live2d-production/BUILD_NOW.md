@@ -32,6 +32,16 @@ The current VRM fallback screenshot is saved here for comparison:
 live2d-production/references/current-vrm-fallback.jpg
 ```
 
+The approved final Synra design references are:
+
+```text
+live2d-production/references/synra-final-design-neutral.png
+live2d-production/references/synra-final-design-wave.png
+```
+
+Use `synra-final-design-neutral.png` as the base pose for the Live2D source
+art, and use `synra-final-design-wave.png` as the wave anatomy target.
+
 ## Required Source Art
 
 Cubism needs layered character art. A flat PNG or the current VRM cannot be
@@ -41,6 +51,12 @@ Minimum source file:
 
 ```text
 live2d-production/workspace/source/synra.psd
+```
+
+The PSD must be redrawn and separated from:
+
+```text
+live2d-production/workspace/source/synra-final-design-neutral.png
 ```
 
 The PSD should follow:
