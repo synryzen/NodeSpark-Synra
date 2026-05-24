@@ -46,6 +46,7 @@ const localBrainBadge = document.getElementById("localBrainBadge");
 const hubBrainBadge = document.getElementById("hubBrainBadge");
 const voiceBrainBadge = document.getElementById("voiceBrainBadge");
 const live2dBadge = document.getElementById("live2dBadge");
+const live2dStatusPill = document.getElementById("live2dStatusPill");
 const setupMeterLabel = document.getElementById("setupMeterLabel");
 const setupMeterValue = document.getElementById("setupMeterValue");
 const setupSteps = document.getElementById("setupSteps");
@@ -771,6 +772,7 @@ function renderLive2DStatus(status = live2dStatus) {
   if (!live2dBadge) return;
   const runtimeReady = Boolean(live2dStatus.runtimeReady);
   const modelReady = Boolean(live2dStatus.modelReady);
+  const missingModel = runtimeReady && !modelReady;
   live2dBadge.textContent = modelReady
     ? "Live2D model"
     : runtimeReady
@@ -782,6 +784,14 @@ function renderLive2DStatus(status = live2dStatus) {
       ? "Live2D runtime is installed; waiting for web/assets/live2d/synra/synra.model3.json."
       : "Live2D runtime files are not available.";
   live2dBadge.dataset.status = modelReady ? "online" : runtimeReady ? "warning" : "offline";
+  if (live2dStatusPill) {
+    live2dStatusPill.dataset.status = modelReady ? "online" : missingModel ? "warning" : "offline";
+    live2dStatusPill.textContent = modelReady
+      ? "Live2D Synra model active"
+      : missingModel
+        ? "Live2D runtime ready - export Synra Cubism model"
+        : "Live2D runtime missing";
+  }
 }
 
 async function fetchLive2DStatus() {
@@ -792,21 +802,52 @@ async function fetchLive2DStatus() {
   } catch {
     renderLive2DStatus({ modelReady: false, runtimeReady: false });
   }
+  if (lastHealth?.setup) renderSetup(lastHealth.setup, lastHealth);
+}
+
+function live2dSetupStep() {
+  const runtimeReady = Boolean(live2dStatus.runtimeReady);
+  const modelReady = Boolean(live2dStatus.modelReady);
+  return {
+    id: "live2d_model",
+    label: "Live2D",
+    done: modelReady,
+    detail: modelReady
+      ? "Synra Cubism model installed"
+      : runtimeReady
+        ? "Export synra.model3.json from Live2D Cubism"
+        : "Install Live2D browser runtime"
+  };
+}
+
+function setupWithVisualRig(setup) {
+  const steps = [...(setup?.steps || [])];
+  const hasLive2DStep = steps.some((step) => step.id === "live2d_model");
+  if (!hasLive2DStep) steps.push(live2dSetupStep());
+  const complete = steps.filter((step) => step.done).length;
+  return {
+    ...setup,
+    complete,
+    total: steps.length,
+    ready: complete === steps.length,
+    steps
+  };
 }
 
 function renderSetup(setup, health = lastHealth) {
   if (!setup || !setupSteps) return;
-  if (setupMeterValue) setupMeterValue.textContent = `${setup.complete || 0}/${setup.total || 0}`;
-  if (setupMeterLabel) setupMeterLabel.textContent = setup.ready ? "Ready" : "Setup";
+  const visualSetup = setupWithVisualRig(setup);
+  if (setupMeterValue) setupMeterValue.textContent = `${visualSetup.complete || 0}/${visualSetup.total || 0}`;
+  if (setupMeterLabel) setupMeterLabel.textContent = visualSetup.ready ? "Ready" : "Setup";
   setupSteps.innerHTML = "";
-  (setup.steps || []).forEach((step) => {
+  (visualSetup.steps || []).forEach((step) => {
     const item = document.createElement("span");
     item.dataset.done = step.done ? "true" : "false";
     item.textContent = step.label || step.id || "Step";
     item.title = step.detail || "";
     setupSteps.append(item);
   });
-  renderSetupDiagnostics(setup, health);
+  renderSetupDiagnostics(visualSetup, health);
 }
 
 function renderSetupDiagnostics(setup, health = lastHealth) {
@@ -825,10 +866,12 @@ function renderSetupDiagnostics(setup, health = lastHealth) {
             ? "Generate a pair code in NodeSparkHub and enter it here."
             : step.id === "local_ai"
               ? "Start Ollama or pull the configured text model."
-              : step.id === "vision"
-                ? "Pull the configured vision model and enable the kiosk camera."
-                : step.id === "voice"
-                  ? "Install Kokoro or configure ElevenLabs for natural speech."
+            : step.id === "vision"
+              ? "Pull the configured vision model and enable the kiosk camera."
+              : step.id === "voice"
+                ? "Install Kokoro or configure ElevenLabs for natural speech."
+                : step.id === "live2d_model"
+                  ? "Export Synra from Cubism to web/assets/live2d/synra/synra.model3.json."
                   : "Refresh workflows from NodeSparkHub.";
       lines.push({ label: step.label || step.id, detail: action, status: "todo" });
     });

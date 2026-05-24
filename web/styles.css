@@ -777,6 +777,7 @@ body {
 
 .live2d-status-pill {
   position: absolute;
+  z-index: 9;
   left: 18px;
   bottom: 18px;
   max-width: min(380px, calc(100% - 36px));
@@ -790,6 +791,20 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   backdrop-filter: blur(12px);
+  opacity: 1;
+  transition: opacity 180ms ease, border-color 180ms ease, color 180ms ease, background 180ms ease;
+}
+
+.live2d-status-pill[data-status="warning"] {
+  border-color: rgba(255, 209, 102, 0.42);
+  background: rgba(31, 22, 7, 0.72);
+  color: #ffe5a3;
+}
+
+.live2d-status-pill[data-status="offline"] {
+  border-color: rgba(255, 77, 109, 0.38);
+  background: rgba(32, 8, 14, 0.72);
+  color: #ffc8d1;
 }
 
 [data-live2d="ready"] .live2d-layer {
