@@ -63,6 +63,14 @@ function actionEnvelope(progress, fadeIn = 0.16, fadeOut = 0.18) {
   return smoothstep(0, fadeIn, progress) * (1 - smoothstep(1 - fadeOut, 1, progress));
 }
 
+function blendRotation(bone, target, amount, weight = 1) {
+  if (!bone || weight <= 0) return;
+  const blend = amount * clamp(weight, 0, 1);
+  bone.rotation.x = lerp(bone.rotation.x, target.x ?? bone.rotation.x, blend);
+  bone.rotation.y = lerp(bone.rotation.y, target.y ?? bone.rotation.y, blend);
+  bone.rotation.z = lerp(bone.rotation.z, target.z ?? bone.rotation.z, blend);
+}
+
 function synraVrmUrl() {
   const candidate = new URLSearchParams(window.location.search).get("vrm");
   if (!candidate) return DEFAULT_SYNRA_VRM_URL;
@@ -1136,12 +1144,99 @@ class SynraAvatar3DController {
 		      rightHand.rotation.y = lerp(rightHand.rotation.y, -this.pose.wristTwist + 0.035 + handToMouth * 0.28 + coverMouth * 0.16 + palmOut * 0.16, 0.08);
 	    }
     this.applyRelaxedFingerPose(elapsed);
+    this.applyActionClipOverrides(
+      {
+        head,
+        neck,
+        hips,
+        chest,
+        upperChest,
+        spine,
+        leftUpperArm,
+        rightUpperArm,
+        leftLowerArm,
+        rightLowerArm,
+        leftHand,
+        rightHand
+      },
+      elapsed
+    );
     if (this.vrm.expressionManager) {
       this.applyMouthTargets(mouth, elapsed);
       if (blink) this.expressionTargets.blink = 1;
       this.applyExpressions();
     }
     this.vrm.update(delta);
+  }
+
+  applyActionClipOverrides(bones, elapsed) {
+    const cue = `${this.mode} ${this.expression}`.toLowerCase();
+    if (cue.includes("wave")) this.applyWaveClip(bones, elapsed);
+    if (cue.includes("explain")) this.applyExplainClip(bones, elapsed);
+    if (this.idleAction?.name === "stretch") this.applyStretchClip(bones, elapsed);
+  }
+
+  applyWaveClip(bones, elapsed) {
+    const age = Math.max(0, elapsed - this.stateChangedAt);
+    const weight = smoothstep(0, 0.42, age);
+    const flutter = Math.sin(elapsed * 7.2) * weight;
+    const bodyBeat = Math.sin(elapsed * 2.2) * weight;
+
+    blendRotation(bones.head, { x: -0.035, y: -0.105, z: 0.072 + bodyBeat * 0.012 }, 0.18, weight);
+    blendRotation(bones.neck, { x: -0.014, y: -0.04, z: 0.018 }, 0.14, weight);
+    blendRotation(bones.chest, { x: -0.032, y: 0.052 }, 0.12, weight);
+    blendRotation(bones.upperChest, { x: -0.032, y: 0.045 }, 0.12, weight);
+    blendRotation(bones.spine, { x: 0.012, y: -0.018 }, 0.1, weight);
+    blendRotation(bones.hips, { x: -0.006, y: -0.028, z: 0.012 }, 0.08, weight);
+
+    blendRotation(bones.rightUpperArm, { x: -0.15, y: 0.08 + flutter * 0.01, z: -0.96 + flutter * 0.018 }, 0.18, weight);
+    blendRotation(bones.rightLowerArm, { x: -0.39, y: 0.28, z: 2.62 + flutter * 0.08 }, 0.18, weight);
+    blendRotation(bones.rightHand, { x: 0.08, y: 0.18, z: 0.24 + flutter * 0.05 }, 0.2, weight);
+
+    blendRotation(bones.leftUpperArm, { x: -0.04, y: 0.11, z: 1.28 }, 0.1, weight);
+    blendRotation(bones.leftLowerArm, { x: 0.03, y: 0.04, z: 0.2 }, 0.1, weight);
+    blendRotation(bones.leftHand, { x: -0.04, y: -0.04, z: -0.12 }, 0.1, weight);
+  }
+
+  applyExplainClip(bones, elapsed) {
+    const age = Math.max(0, elapsed - this.stateChangedAt);
+    const weight = smoothstep(0, 0.48, age);
+    const beat = Math.sin(elapsed * 2.8) * weight;
+
+    blendRotation(bones.head, { x: -0.025 + beat * 0.012, y: 0.02 + beat * 0.016, z: 0.012 }, 0.14, weight);
+    blendRotation(bones.chest, { x: -0.01, y: -0.03 + beat * 0.018 }, 0.1, weight);
+    blendRotation(bones.upperChest, { x: -0.014, y: -0.024 + beat * 0.018 }, 0.1, weight);
+    blendRotation(bones.hips, { x: 0.004, y: 0.018, z: -0.006 }, 0.08, weight);
+
+    blendRotation(bones.rightUpperArm, { x: -0.14, y: -0.18, z: -1.03 + beat * 0.025 }, 0.16, weight);
+    blendRotation(bones.rightLowerArm, { x: -0.16, y: 0.06, z: 2.0 + beat * 0.08 }, 0.16, weight);
+    blendRotation(bones.rightHand, { x: 0.1, y: 0.12, z: 0.16 + beat * 0.04 }, 0.18, weight);
+
+    blendRotation(bones.leftUpperArm, { x: -0.045, y: 0.12, z: 1.3 }, 0.1, weight);
+    blendRotation(bones.leftLowerArm, { x: 0.035, y: 0.04, z: 0.2 }, 0.1, weight);
+    blendRotation(bones.leftHand, { x: -0.055, y: -0.04, z: -0.13 }, 0.1, weight);
+  }
+
+  applyStretchClip(bones, elapsed) {
+    const action = this.idleAction || {};
+    const progress = clamp((elapsed - action.startedAt) / Math.max(action.duration || 1, 0.1), 0, 1);
+    const reach = smoothstep(0.06, 0.34, progress) * (1 - smoothstep(0.82, 1, progress));
+    const lean = Math.sin(progress * Math.PI) * reach;
+    const breathe = Math.sin(progress * Math.PI * 2) * reach;
+
+    blendRotation(bones.head, { x: -0.08 - lean * 0.035, y: -0.08, z: 0.035 }, 0.18, reach);
+    blendRotation(bones.neck, { x: -0.035, y: -0.025, z: 0.018 }, 0.14, reach);
+    blendRotation(bones.chest, { x: -0.15 - lean * 0.05, y: 0.08 + breathe * 0.02 }, 0.16, reach);
+    blendRotation(bones.upperChest, { x: -0.13 - lean * 0.04, y: 0.065 + breathe * 0.018 }, 0.16, reach);
+    blendRotation(bones.spine, { x: -0.035, y: -0.03, z: 0.012 }, 0.12, reach);
+    blendRotation(bones.hips, { x: 0.03, y: -0.055, z: 0.018 }, 0.1, reach);
+
+    blendRotation(bones.leftUpperArm, { x: 0.0, y: 0.0, z: -0.95 }, 0.22, reach);
+    blendRotation(bones.leftLowerArm, { x: 0.0, y: 0.0, z: 0.08 }, 0.22, reach);
+    blendRotation(bones.leftHand, { x: 0.0, y: -0.08, z: -0.04 }, 0.18, reach);
+    blendRotation(bones.rightUpperArm, { x: 0.0, y: 0.0, z: 0.95 }, 0.22, reach);
+    blendRotation(bones.rightLowerArm, { x: 0.0, y: 0.0, z: -0.08 }, 0.22, reach);
+    blendRotation(bones.rightHand, { x: 0.0, y: 0.08, z: 0.04 }, 0.18, reach);
   }
 
   updateAutonomousGaze(elapsed) {
