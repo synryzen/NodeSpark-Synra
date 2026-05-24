@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import importlib.util
 import io
 import json
+import time
 import threading
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -31,31 +33,140 @@ class TTSService:
         self._qwen_model_size: str = ""
         self._qwen_lock = threading.Lock()
         self._kokoro_pipeline: Any | None = None
+        self._status_cache: tuple[float, dict[str, Any]] | None = None
+        self._audio_cache: dict[tuple[str, str, str], TTSResult] = {}
+        self._audio_cache_order: list[tuple[str, str, str]] = []
+        self._cache_lock = threading.Lock()
+        self._voicebox_profiles: dict[str, str] = {}
+        self._prime_lock = threading.Lock()
+        self._prime_inflight: set[tuple[str, str, str]] = set()
+        self._provider_cache: tuple[float, str] | None = None
 
     def status(self) -> dict[str, Any]:
+        now = time.monotonic()
+        if self._status_cache and now - self._status_cache[0] < 4:
+            return dict(self._status_cache[1])
         provider = self._selected_provider()
-        return {
+        status = {
             "provider": provider or "browser",
             "available": bool(provider),
             "fallback": "browser",
             "voices": self._voice_catalog(provider),
             "detail": self._status_detail(provider),
         }
+        self._status_cache = (now, dict(status))
+        return status
 
     def synthesize(self, text: str, voice: str = "cute") -> TTSResult:
         text = self._clean_text(text)
-        provider = self._selected_provider()
+        provider = self._provider_for_voice(voice)
+        key = self._cache_key(provider, voice, text)
+        cached = self._cached_key(key)
+        if cached:
+            return cached
         if provider == "qwen":
-            return self._qwen(text, voice)
+            result = self._qwen(text, voice)
+            self._store_cached(key, result)
+            return result
         if provider == "voicebox":
-            return self._voicebox(text, voice)
+            result = self._voicebox(text, voice)
+            self._store_cached(key, result)
+            return result
         if provider == "elevenlabs":
-            return self._elevenlabs(text, voice)
+            result = self._elevenlabs(text, voice)
+            self._store_cached(key, result)
+            return result
         if provider == "kokoro":
-            return self._kokoro(text, voice)
+            result = self._kokoro(text, voice)
+            self._store_cached(key, result)
+            return result
         raise TTSError("No natural TTS provider is configured. Browser voice fallback is available.")
 
+    def cached(self, text: str, voice: str = "cute") -> TTSResult | None:
+        text = self._clean_text(text)
+        provider = self._provider_for_voice(voice)
+        return self._cached_key(self._cache_key(provider, voice, text))
+
+    def prime_async(self, voices: list[str] | None = None, texts: list[str] | None = None) -> bool:
+        voice_list = [voice for voice in (voices or []) if voice]
+        if not voice_list:
+            voice_list = ["cute", "soft", "bright"]
+        text_list = texts or ["On it.", "I’m listening.", "Hi. I’m here."]
+        jobs: list[tuple[str, str, tuple[str, str, str]]] = []
+        with self._prime_lock:
+            for voice in voice_list[:4]:
+                provider = self._provider_for_voice(voice)
+                if not provider:
+                    continue
+                for text in text_list[:4]:
+                    clean_text = self._clean_text(text)
+                    key = self._cache_key(provider, voice, clean_text)
+                    if self._cached_key(key) or key in self._prime_inflight:
+                        continue
+                    self._prime_inflight.add(key)
+                    jobs.append((voice, clean_text, key))
+        if not jobs:
+            return False
+        threading.Thread(
+            target=self._prime_worker,
+            args=(jobs,),
+            name="synra-tts-prime",
+            daemon=True,
+        ).start()
+        return True
+
+    def _prime_worker(self, jobs: list[tuple[str, str, tuple[str, str, str]]]) -> None:
+        for voice, text, key in jobs:
+            try:
+                self.synthesize(text, voice)
+            except Exception as exc:
+                print(f"[tts] prime skipped {voice}: {exc}")
+            finally:
+                with self._prime_lock:
+                    self._prime_inflight.discard(key)
+
+    def _cache_key(self, provider: str, voice: str, text: str) -> tuple[str, str, str]:
+        return (provider or "browser", voice or "cute", text)
+
+    def _cached_key(self, key: tuple[str, str, str]) -> TTSResult | None:
+        with self._cache_lock:
+            result = self._audio_cache.get(key)
+            if result and key in self._audio_cache_order:
+                self._audio_cache_order.remove(key)
+                self._audio_cache_order.append(key)
+            return result
+
+    def _store_cached(self, key: tuple[str, str, str], result: TTSResult) -> None:
+        with self._cache_lock:
+            self._audio_cache[key] = result
+            if key in self._audio_cache_order:
+                self._audio_cache_order.remove(key)
+            self._audio_cache_order.append(key)
+            while len(self._audio_cache_order) > 32:
+                old = self._audio_cache_order.pop(0)
+                self._audio_cache.pop(old, None)
+
     def _selected_provider(self) -> str:
+        now = time.monotonic()
+        if self._provider_cache and now - self._provider_cache[0] < 4:
+            return self._provider_cache[1]
+        provider = self._selected_provider_uncached()
+        self._provider_cache = (now, provider)
+        return provider
+
+    def _provider_for_voice(self, voice: str) -> str:
+        requested = (voice or "").split(":", 1)[0].strip().lower()
+        if requested == "qwen" and self._qwen_available():
+            return "qwen"
+        if requested == "voicebox" and self._voicebox_available():
+            return "voicebox"
+        if requested == "elevenlabs" and self.cfg.elevenlabs_api_key:
+            return "elevenlabs"
+        if requested == "kokoro" and self._kokoro_available():
+            return "kokoro"
+        return self._selected_provider()
+
+    def _selected_provider_uncached(self) -> str:
         requested = (self.cfg.provider or "auto").strip().lower()
         if requested in {"browser", "off", "none"}:
             return ""
@@ -67,14 +178,14 @@ class TTSService:
             return "elevenlabs" if self.cfg.elevenlabs_api_key else ""
         if requested == "kokoro":
             return "kokoro" if self._kokoro_available() else ""
-        if self.cfg.qwen_enabled and self._qwen_available():
-            return "qwen"
         if self.cfg.voicebox_enabled and self._voicebox_available():
             return "voicebox"
         if self.cfg.elevenlabs_api_key:
             return "elevenlabs"
         if self._kokoro_available():
             return "kokoro"
+        if self.cfg.qwen_enabled and self._qwen_available():
+            return "qwen"
         return ""
 
     def _status_detail(self, provider: str) -> str:
@@ -147,15 +258,11 @@ class TTSService:
     def _qwen_available(self) -> bool:
         if not self.cfg.qwen_enabled:
             return False
-        try:
-            import qwen_tts  # noqa: F401
-            import soundfile  # noqa: F401
-            import torch
-        except Exception:
+        if not importlib.util.find_spec("qwen_tts"):
             return False
-        if not self.cfg.qwen_allow_cpu and not torch.cuda.is_available():
+        if not importlib.util.find_spec("soundfile"):
             return False
-        return True
+        return bool(importlib.util.find_spec("torch"))
 
     def _qwen(self, text: str, voice: str) -> TTSResult:
         try:
@@ -309,13 +416,18 @@ class TTSService:
         return TTSResult(audio, content_type or "audio/wav", "voicebox", preset["id"])
 
     def _voicebox_profile_id(self, preset: dict[str, str]) -> str:
+        cached = self._voicebox_profiles.get(preset["profile"])
+        if cached:
+            return cached
         profiles = self._voicebox_json("GET", "/profiles", timeout=max(1.0, float(self.cfg.timeout_seconds)))
         rows = profiles if isinstance(profiles, list) else profiles.get("profiles", [])
         for row in rows if isinstance(rows, list) else []:
             if not isinstance(row, dict):
                 continue
             if row.get("id") == preset["profile"] or str(row.get("name") or "").lower() == preset["profile"].lower():
-                return str(row["id"])
+                profile_id = str(row["id"])
+                self._voicebox_profiles[preset["profile"]] = profile_id
+                return profile_id
         if not self.cfg.voicebox_auto_create_profiles:
             raise TTSError(f"Voicebox profile '{preset['profile']}' was not found.")
         created = self._voicebox_json(
@@ -339,6 +451,7 @@ class TTSService:
         profile_id = str(created.get("id") or "")
         if not profile_id:
             raise TTSError("Voicebox did not return a profile id.")
+        self._voicebox_profiles[preset["profile"]] = profile_id
         return profile_id
 
     def _voicebox_preset_for(self, voice: str) -> dict[str, str]:
@@ -436,12 +549,7 @@ class TTSService:
         return urljoin(base, path.lstrip("/"))
 
     def _kokoro_available(self) -> bool:
-        try:
-            import kokoro  # noqa: F401
-            import soundfile  # noqa: F401
-        except Exception:
-            return False
-        return True
+        return bool(importlib.util.find_spec("kokoro") and importlib.util.find_spec("soundfile"))
 
     def _kokoro(self, text: str, voice: str) -> TTSResult:
         try:
@@ -484,29 +592,32 @@ class TTSService:
         return mapping.get(voice, self.cfg.kokoro_voice or "af_heart")
 
     def _voice_catalog(self, provider: str) -> list[dict[str, str]]:
+        voices: list[dict[str, str]] = []
         if provider == "qwen":
-            return [
+            voices.extend([
                 {"id": f"qwen:{preset['id']}", "name": preset["name"], "style": preset["style"], "provider": "qwen"}
                 for preset in self._qwen_presets()
-            ]
+            ])
         if provider == "voicebox":
-            return [
+            voices.extend([
                 {"id": f"voicebox:{preset['id']}", "name": preset["name"], "style": preset["style"], "provider": "voicebox"}
                 for preset in self._voicebox_presets()
-            ]
-        if provider == "kokoro":
-            return [
+            ])
+        if provider == "kokoro" or self._kokoro_available():
+            voices.extend([
                 {"id": "kokoro:af_heart", "name": "Synra Heart", "style": "warm natural female", "provider": "kokoro"},
                 {"id": "kokoro:af_nicole", "name": "Synra Nicole", "style": "soft realistic female", "provider": "kokoro"},
                 {"id": "kokoro:af_bella", "name": "Synra Bella", "style": "bright anime female", "provider": "kokoro"},
                 {"id": "kokoro:af_sarah", "name": "Synra Sarah", "style": "calm assistant female", "provider": "kokoro"},
                 {"id": "kokoro:af_sky", "name": "Synra Sky", "style": "light natural female", "provider": "kokoro"},
                 {"id": "kokoro:af_nova", "name": "Synra Nova", "style": "confident female", "provider": "kokoro"},
-            ]
+            ])
         if provider == "elevenlabs":
-            return [
+            voices.extend([
                 {"id": "cute", "name": "ElevenLabs natural", "style": "configured neural female", "provider": "elevenlabs"},
-            ]
+            ])
+        if voices:
+            return voices
         return [
             {"id": "cute", "name": "Browser natural", "style": "filtered female browser voice", "provider": "browser"},
             {"id": "soft", "name": "Browser soft", "style": "filtered female browser voice", "provider": "browser"},

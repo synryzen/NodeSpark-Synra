@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import time
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -23,24 +24,33 @@ class LocalAIReply:
 class LocalAIService:
     def __init__(self, cfg: LocalAIConfig):
         self.cfg = cfg
+        self._status_cache: tuple[float, dict[str, Any]] | None = None
 
     def status(self) -> dict[str, Any]:
+        now = time.monotonic()
+        if self._status_cache and now - self._status_cache[0] < 4:
+            return dict(self._status_cache[1])
+        status: dict[str, Any]
         if not self.cfg.enabled:
-            return {"enabled": False, "available": False, "provider": self.cfg.provider, "model": self.cfg.model}
+            status = {"enabled": False, "available": False, "provider": self.cfg.provider, "model": self.cfg.model}
+            self._status_cache = (now, dict(status))
+            return status
         if self.cfg.provider != "ollama":
-            return {
+            status = {
                 "enabled": True,
                 "available": False,
                 "provider": self.cfg.provider,
                 "model": self.cfg.model,
                 "detail": "Unsupported local AI provider.",
             }
+            self._status_cache = (now, dict(status))
+            return status
         try:
-            data = self._request("GET", "/api/tags")
+            data = self._request("GET", "/api/tags", timeout=0.9)
             models = [str(item.get("name", "")) for item in data.get("models", []) if isinstance(item, dict)]
             has_text_model = _model_is_installed(self.cfg.model, models)
             has_vision_model = _model_is_installed(self.cfg.vision_model, models)
-            return {
+            status = {
                 "enabled": True,
                 "available": has_text_model,
                 "provider": "ollama",
@@ -50,8 +60,10 @@ class LocalAIService:
                 "models": models,
                 "detail": "Local model is ready." if has_text_model else "Ollama is running, but Synra's model is not pulled yet.",
             }
+            self._status_cache = (now, dict(status))
+            return status
         except Exception as exc:
-            return {
+            status = {
                 "enabled": True,
                 "available": False,
                 "provider": "ollama",
@@ -60,6 +72,8 @@ class LocalAIService:
                 "visionAvailable": False,
                 "detail": str(exc),
             }
+            self._status_cache = (now, dict(status))
+            return status
 
     def available(self) -> bool:
         return bool(self.status().get("available"))

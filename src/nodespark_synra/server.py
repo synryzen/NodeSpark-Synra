@@ -111,8 +111,12 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/tts":
             text = str(payload.get("text") or "")
             voice = str(payload.get("voice") or "cute")
+            cache_only = bool(payload.get("cacheOnly"))
             try:
-                result = self.server.app.tts.synthesize(text, voice)
+                result = self.server.app.tts.cached(text, voice) if cache_only else self.server.app.tts.synthesize(text, voice)
+                if result is None:
+                    self._json({"ok": False, "error": "TTS clip is not primed yet."}, status=404)
+                    return
                 self._binary(result.audio, result.content_type, {
                     "X-Synra-TTS-Provider": result.provider,
                     "X-Synra-TTS-Voice": result.voice,
@@ -120,9 +124,21 @@ class SynraRequestHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 self._json({"ok": False, "error": str(exc), **self.server.app.tts.status()}, status=503)
             return
+        if path == "/api/tts/prime":
+            voices = payload.get("voices")
+            texts = payload.get("texts")
+            started = self.server.app.tts.prime_async(
+                [str(item) for item in voices] if isinstance(voices, list) else None,
+                [str(item) for item in texts] if isinstance(texts, list) else None,
+            )
+            self._json({"ok": True, "started": started, **self.server.app.tts.status()})
+            return
         self._json({"ok": False, "error": f"Unknown API path: {path}"}, status=404)
 
     def log_message(self, fmt: str, *args) -> None:
+        line = fmt % args
+        if any(f'"GET {path} ' in line for path in ("/api/state", "/api/health", "/api/tts/status")):
+            return
         print(f"[http] {self.address_string()} - {fmt % args}")
 
     def _read_json(self) -> dict[str, Any]:

@@ -412,6 +412,11 @@ class SynraApp:
         if self.running:
             return
         self.running = True
+        selected_voice = str(self.store.ui_settings.get("voice") or "cute")
+        prime_voices = [selected_voice]
+        if ":" not in selected_voice:
+            prime_voices.extend(["cute", "soft", "bright"])
+        self.tts.prime_async(prime_voices)
         self._thread = threading.Thread(target=self._loop, name="synra-hub-loop", daemon=True)
         self._thread.start()
 
@@ -458,7 +463,10 @@ class SynraApp:
         return list(self._workflow_cache or self.cfg.hub.favorite_workflows)
 
     def update_settings(self, values: dict[str, Any]) -> dict[str, Any]:
-        return self.store.update_ui_settings(values)
+        settings = self.store.update_ui_settings(values)
+        if "voice" in values:
+            self.tts.prime_async([str(values.get("voice") or settings.get("voice") or "cute")])
+        return settings
 
     def update_memory_settings(self, values: dict[str, Any]) -> dict[str, Any]:
         if values.get("clear") is True:
@@ -509,7 +517,7 @@ class SynraApp:
                         print(f"[hub] command ack failed: {exc}")
                 return {"ok": True, "result": result, "state": self.state.snapshot()}
 
-            local_candidate = route.route == "local" and self.local_ai.should_answer_locally(text)
+            local_candidate = route.route == "local" and self.local_ai.should_answer_locally(text) and self.local_ai.available()
             self.state.set_state({
                 "mode": "thinking",
                 "expression": route.expression or "focused",
@@ -899,7 +907,7 @@ class SynraApp:
                 next_checkin = now + max(15, int(self.cfg.device.checkin_interval_seconds))
             if self.hub.configured() and self.hub.token and now >= next_poll:
                 self._poll_commands()
-                next_poll = now + max(1, int(self.cfg.device.command_poll_interval_seconds))
+                next_poll = now + max(0.35, float(self.cfg.device.command_poll_interval_seconds))
             time.sleep(0.25)
 
     def _checkin(self) -> None:

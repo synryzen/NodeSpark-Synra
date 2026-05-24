@@ -86,8 +86,12 @@ let speechMouthTimer = null;
 let lastHealth = null;
 let ttsStatus = { available: false, provider: "browser" };
 let activityItems = [];
+let activeAssistantTurn = 0;
+const cssNumberCache = new Map();
 const pageParams = new URLSearchParams(window.location.search);
-const serverTtsStartTimeoutMs = 45000;
+const serverTtsStartTimeoutMs = 12000;
+const quickAckTtsTimeoutMs = 1100;
+const quickAckTexts = ["On it.", "I’m listening.", "Okay."];
 
 const storageKeys = {
   background: "nodespark.synra.background",
@@ -423,12 +427,25 @@ async function fetchTtsStatus() {
       ttsStatus = data;
       syncVoiceOptions();
       renderTtsStatus();
+      primeSelectedVoice();
     }
   } catch {
     ttsStatus = { available: false, provider: "browser" };
     syncVoiceOptions();
     renderTtsStatus();
   }
+}
+
+function primeSelectedVoice() {
+  if (!speechOutputEnabled || !ttsStatus.available) return;
+  fetch("/api/tts/prime", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      voices: [currentVoicePreference()],
+      texts: quickAckTexts
+    })
+  }).catch(() => {});
 }
 
 async function updateMemory(payload) {
@@ -977,21 +994,23 @@ function endSpeechVisuals(speechId) {
   }, 300);
 }
 
-async function playServerTts(text, speechId, state) {
+async function playServerTts(text, speechId, state, options = {}) {
   if (currentVoicePreference().startsWith("voice:")) return false;
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), serverTtsStartTimeoutMs);
+  const timeoutMs = options.timeoutMs || serverTtsStartTimeoutMs;
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch("/api/tts", {
       method: "POST",
       signal: controller.signal,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voice: currentVoicePreference() })
+      body: JSON.stringify({ text, voice: currentVoicePreference(), cacheOnly: Boolean(options.cacheOnly) })
     });
     window.clearTimeout(timeout);
     if (!response.ok) return false;
     const blob = await response.blob();
     if (!blob.size) return false;
+    if (options.canPlay && !options.canPlay()) return false;
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     activeSpeechAudio = audio;
@@ -1021,6 +1040,33 @@ async function playServerTts(text, speechId, state) {
   }
 }
 
+function startQuickAcknowledgement(turnId, text) {
+  if (!speechOutputEnabled) return;
+  const phrase = quickAckTexts[Math.abs(hashText(text)) % quickAckTexts.length];
+  const speechId = `ack-${turnId}-${Date.now()}`;
+  const state = {
+    mode: "speaking",
+    expression: "attentive",
+    speech_id: speechId
+  };
+  playServerTts(phrase, speechId, state, {
+    cacheOnly: true,
+    timeoutMs: quickAckTtsTimeoutMs,
+    canPlay: () => turnId === activeAssistantTurn && !activeSpeechAudio && !window.speechSynthesis?.speaking
+  }).then((played) => {
+    if (played || ttsStatus.available || turnId !== activeAssistantTurn || activeSpeechAudio || window.speechSynthesis?.speaking) return;
+    speakWithBrowserVoice(phrase, speechId, state);
+  });
+}
+
+function hashText(text) {
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(index)) | 0;
+  }
+  return hash;
+}
+
 async function testSelectedVoice() {
   if (voiceTestButton) voiceTestButton.disabled = true;
   const text = "Hi, I'm Synra. This is how this voice sounds.";
@@ -1032,6 +1078,7 @@ async function testSelectedVoice() {
   try {
     stopActiveSpeechAudio();
     window.speechSynthesis?.cancel?.();
+    primeSelectedVoice();
     const usedServer = await playServerTts(text, state.speech_id, state);
     if (!usedServer) speakWithBrowserVoice(text, state.speech_id, state);
   } finally {
@@ -1131,6 +1178,8 @@ async function askAssistant(text) {
     return;
   }
 
+  const turnId = activeAssistantTurn + 1;
+  activeAssistantTurn = turnId;
   await setRemoteState({
     mode: "thinking",
     expression: "focused",
@@ -1143,6 +1192,7 @@ async function askAssistant(text) {
       style: "thinking"
     }
   });
+  startQuickAcknowledgement(turnId, trimmed);
 
   try {
     const image = shouldAttachVision(trimmed) ? captureCameraFrame() : "";
@@ -1500,7 +1550,10 @@ function clamp(value, min, max) {
 }
 
 function setCssNumber(name, value, unit = "") {
-  stage.style.setProperty(name, `${value.toFixed(3)}${unit}`);
+  const next = `${value.toFixed(3)}${unit}`;
+  if (cssNumberCache.get(name) === next) return;
+  cssNumberCache.set(name, next);
+  stage.style.setProperty(name, next);
 }
 
 function scheduleBlink(now) {
@@ -1869,6 +1922,7 @@ backgroundSelect?.addEventListener("change", () => applyBackground(backgroundSel
 voiceSelect?.addEventListener("change", () => {
   applyVoice(voiceSelect.value);
   renderTtsStatus();
+  primeSelectedVoice();
 });
 voiceTestButton?.addEventListener("click", testSelectedVoice);
 personalitySelect?.addEventListener("change", () => applyPersonality(personalitySelect.value));
@@ -1890,7 +1944,7 @@ fetchState();
 fetchHealth();
 fetchWorkflows();
 fetchTtsStatus();
-setInterval(fetchState, 650);
+setInterval(fetchState, 450);
 setInterval(fetchHealth, 4000);
 setInterval(fetchTtsStatus, 15000);
 
