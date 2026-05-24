@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NodeSpark Synra</title>
-    <link rel="stylesheet" href="/styles.css?v=20260524-wave-elbow-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260524-live2d-visible-1" />
     <script type="importmap">
       {
         "imports": {
@@ -117,6 +117,7 @@
           <span id="localBrainBadge">Local AI</span>
           <span id="hubBrainBadge">Hub AI</span>
           <span id="voiceBrainBadge">Voice</span>
+          <span id="live2dBadge">Live2D checking</span>
         </section>
 
         <section class="setup-meter" aria-label="Setup status">
@@ -132,6 +133,16 @@
           <div class="console-head">
             <span>Synra Core</span>
             <span id="emotionBadge">emotion: idle</span>
+          </div>
+          <div class="motion-lab" aria-label="Synra motion lab">
+            <button data-demo="wave">Wave</button>
+            <button data-demo="explain">Explain</button>
+            <button data-demo="determined">Focus</button>
+            <button data-demo="delighted">Joy</button>
+            <button data-demo="playful">Play</button>
+            <button data-demo="soft_nod">Nod</button>
+            <button data-demo="hair_tuck">Tuck</button>
+            <button data-demo="idle_shift">Shift</button>
           </div>
           <div class="core-grid" id="coreGrid">
             <span data-status="local">Local first</span>
@@ -230,11 +241,11 @@
       </aside>
     </main>
 
-    <script src="/assets/vendor/live2d/live2dcubismcore.min.js?v=20260524-live2d-1"></script>
-    <script src="/assets/vendor/live2d/pixi.min.js?v=20260524-live2d-1"></script>
-    <script src="/assets/vendor/live2d/pixi-live2d-display.min.js?v=20260524-live2d-1"></script>
-    <script src="/live2d-driver.js?v=20260524-live2d-1"></script>
-    <script type="module" src="/avatar3d-driver.js?v=20260524-live2d-1"></script>
-    <script src="/app.js?v=20260524-live2d-1"></script>
+    <script src="/assets/vendor/live2d/live2dcubismcore.min.js?v=20260524-live2d-visible-1"></script>
+    <script src="/assets/vendor/live2d/pixi.min.js?v=20260524-live2d-visible-1"></script>
+    <script src="/assets/vendor/live2d/pixi-live2d-display.min.js?v=20260524-live2d-visible-1"></script>
+    <script src="/live2d-driver.js?v=20260524-live2d-visible-1"></script>
+    <script type="module" src="/avatar3d-driver.js?v=20260524-live2d-visible-1"></script>
+    <script src="/app.js?v=20260524-live2d-visible-1"></script>
   </body>
 </html>

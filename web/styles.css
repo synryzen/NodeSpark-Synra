@@ -1339,7 +1339,7 @@ h1 {
 
 .assistant-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -1369,6 +1369,17 @@ h1 {
 .assistant-strip span[data-status="local"] {
   border-color: rgba(76, 201, 255, 0.36);
   color: #b9e9ff;
+}
+
+.assistant-strip span[data-status="warning"] {
+  border-color: rgba(255, 209, 102, 0.38);
+  color: #ffe5a3;
+  background: rgba(255, 209, 102, 0.07);
+}
+
+.assistant-strip span[data-status="offline"] {
+  border-color: rgba(255, 77, 109, 0.34);
+  color: #ffc8d1;
 }
 
 .setup-meter {
@@ -1508,6 +1519,32 @@ h1 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+}
+
+.motion-lab {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.motion-lab button {
+  min-width: 0;
+  min-height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(76, 201, 255, 0.22);
+  background:
+    linear-gradient(135deg, rgba(76, 201, 255, 0.09), transparent 54%),
+    rgba(255,255,255,0.045);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.motion-lab button:hover {
+  border-color: rgba(76, 201, 255, 0.9);
+  color: #dff7ff;
 }
 
 .core-grid span,

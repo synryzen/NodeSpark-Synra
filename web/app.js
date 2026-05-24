@@ -45,6 +45,7 @@ const hubDetail = document.getElementById("hubDetail");
 const localBrainBadge = document.getElementById("localBrainBadge");
 const hubBrainBadge = document.getElementById("hubBrainBadge");
 const voiceBrainBadge = document.getElementById("voiceBrainBadge");
+const live2dBadge = document.getElementById("live2dBadge");
 const setupMeterLabel = document.getElementById("setupMeterLabel");
 const setupMeterValue = document.getElementById("setupMeterValue");
 const setupSteps = document.getElementById("setupSteps");
@@ -85,6 +86,7 @@ let activeSpeechAudio = null;
 let speechMouthTimer = null;
 let lastHealth = null;
 let ttsStatus = { available: false, provider: "browser" };
+let live2dStatus = { modelReady: false, runtimeReady: false };
 let activityItems = [];
 let activeAssistantTurn = 0;
 const cssNumberCache = new Map();
@@ -760,6 +762,35 @@ function updateBrainBadges(health) {
     const ready = Boolean(ttsStatus.available);
     voiceBrainBadge.textContent = ready ? `${ttsStatus.provider} voice` : "Browser voice";
     voiceBrainBadge.dataset.status = ready ? "online" : "local";
+  }
+  renderLive2DStatus(live2dStatus);
+}
+
+function renderLive2DStatus(status = live2dStatus) {
+  live2dStatus = status || {};
+  if (!live2dBadge) return;
+  const runtimeReady = Boolean(live2dStatus.runtimeReady);
+  const modelReady = Boolean(live2dStatus.modelReady);
+  live2dBadge.textContent = modelReady
+    ? "Live2D model"
+    : runtimeReady
+      ? "Live2D runtime"
+      : "Live2D missing";
+  live2dBadge.title = modelReady
+    ? "Synra is using the Live2D Cubism model."
+    : runtimeReady
+      ? "Live2D runtime is installed; waiting for web/assets/live2d/synra/synra.model3.json."
+      : "Live2D runtime files are not available.";
+  live2dBadge.dataset.status = modelReady ? "online" : runtimeReady ? "warning" : "offline";
+}
+
+async function fetchLive2DStatus() {
+  try {
+    const response = await fetch("/api/live2d", { cache: "no-store" });
+    const data = await response.json();
+    renderLive2DStatus(data.live2d || {});
+  } catch {
+    renderLive2DStatus({ modelReady: false, runtimeReady: false });
   }
 }
 
@@ -1964,9 +1995,11 @@ fetchState();
 fetchHealth();
 fetchWorkflows();
 fetchTtsStatus();
+fetchLive2DStatus();
 setInterval(fetchState, 450);
 setInterval(fetchHealth, 4000);
 setInterval(fetchTtsStatus, 15000);
+setInterval(fetchLive2DStatus, 10000);
 
 const params = new URLSearchParams(window.location.search);
 const shouldAutoWake =
