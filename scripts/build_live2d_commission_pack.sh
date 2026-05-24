@@ -2,7 +2,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_DIR="${1:-$ROOT/dist}"
+OUT_DIR_INPUT="${1:-$ROOT/dist}"
+mkdir -p "$OUT_DIR_INPUT"
+OUT_DIR="$(cd "$OUT_DIR_INPUT" && pwd)"
 PACKAGE_NAME="nodespark-synra-live2d-production-kit"
 BUILD_DIR="$(mktemp -d)"
 PACKAGE_DIR="$BUILD_DIR/$PACKAGE_NAME"
@@ -12,7 +14,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$PACKAGE_DIR/reference" "$OUT_DIR"
+mkdir -p "$PACKAGE_DIR/reference"
 
 copy_optional_reference() {
   local source="$1"
@@ -32,6 +34,7 @@ copy_optional_reference "$ROOT/web/assets/synra-dress-reference.png" "$PACKAGE_D
 copy_optional_reference "$ROOT/web/assets/synra-two-palms-wave-reference.png" "$PACKAGE_DIR/reference/synra-two-palms-wave-reference.png"
 copy_optional_reference "$ROOT/web/assets/synra/sheets/expression-sheet.png" "$PACKAGE_DIR/reference/expression-sheet.png"
 copy_optional_reference "$ROOT/web/assets/synra/sheets/rigging-poses-sheet.png" "$PACKAGE_DIR/reference/rigging-poses-sheet.png"
+copy_optional_reference "$ROOT/live2d-production/references/current-vrm-fallback.jpg" "$PACKAGE_DIR/reference/current-vrm-fallback.jpg"
 
 if [[ "${#missing_references[@]}" -gt 0 ]]; then
   {
@@ -44,6 +47,7 @@ if [[ "${#missing_references[@]}" -gt 0 ]]; then
   } > "$PACKAGE_DIR/reference/REFERENCE_FILES_NEEDED.md"
 fi
 cp "$ROOT/live2d-production/README.md" "$PACKAGE_DIR/README.md"
+cp "$ROOT/live2d-production/BUILD_NOW.md" "$PACKAGE_DIR/BUILD_NOW.md"
 cp "$ROOT/live2d-production/ART_BRIEF.md" "$PACKAGE_DIR/ART_BRIEF.md"
 cp "$ROOT/live2d-production/REFERENCE_CARD.md" "$PACKAGE_DIR/REFERENCE_CARD.md"
 cp "$ROOT/live2d-production/COMMISSION_HANDOFF.md" "$PACKAGE_DIR/COMMISSION_HANDOFF.md"
