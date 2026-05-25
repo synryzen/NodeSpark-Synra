@@ -1,0 +1,118 @@
+{
+  "Version": 3,
+  "Meta": {
+    "Duration": 2.6,
+    "Fps": 30.0,
+    "Loop": false,
+    "AreBeziersRestricted": true,
+    "CurveCount": 6,
+    "TotalSegmentCount": 18,
+    "TotalPointCount": 24,
+    "UserDataCount": 0,
+    "TotalUserDataSize": 0
+  },
+  "Curves": [
+    {
+      "Target": "Parameter",
+      "Id": "ParamAngleY",
+      "Segments": [
+        0,
+        0,
+        0,
+        0.8,
+        -5,
+        0,
+        1.7,
+        -3,
+        0,
+        2.6,
+        0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamBodyAngleZ",
+      "Segments": [
+        0,
+        0,
+        0,
+        0.8,
+        -1.2,
+        0,
+        1.7,
+        1.4,
+        0,
+        2.6,
+        0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamLeg",
+      "Segments": [
+        0,
+        1,
+        0,
+        0.8,
+        0.88,
+        0,
+        1.7,
+        0.92,
+        0,
+        2.6,
+        1
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamMouthForm",
+      "Segments": [
+        0,
+        0,
+        0,
+        0.8,
+        -0.3,
+        0,
+        1.7,
+        -0.15,
+        0,
+        2.6,
+        0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamBrowLForm",
+      "Segments": [
+        0,
+        0,
+        0,
+        0.8,
+        -0.45,
+        0,
+        1.7,
+        -0.25,
+        0,
+        2.6,
+        0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamBrowRForm",
+      "Segments": [
+        0,
+        0,
+        0,
+        0.8,
+        -0.45,
+        0,
+        1.7,
+        -0.25,
+        0,
+        2.6,
+        0
+      ]
+    }
+  ]
+}

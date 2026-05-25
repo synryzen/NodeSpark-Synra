@@ -67,9 +67,128 @@
       ],
       "Wave": [
         {
-          "File": "motions/Hiyori_m06.motion3.json",
-          "FadeInTime": 0.9,
-          "FadeOutTime": 0.8
+          "File": "motions/Synra_wave.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "Explain": [
+        {
+          "File": "motions/Synra_explain.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "Stretch": [
+        {
+          "File": "motions/Synra_stretch.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "Delighted": [
+        {
+          "File": "motions/Synra_delighted.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "Playful": [
+        {
+          "File": "motions/Synra_playful.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "Curious": [
+        {
+          "File": "motions/Synra_curious.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "Determined": [
+        {
+          "File": "motions/Synra_determined.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "SoftNod": [
+        {
+          "File": "motions/Synra_soft_nod.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "HairTuck": [
+        {
+          "File": "motions/Synra_hair_tuck.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "IdleShift": [
+        {
+          "File": "motions/Synra_idle_shift.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "Talk": [
+        {
+          "File": "motions/Synra_talk.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "Listen": [
+        {
+          "File": "motions/Synra_listen.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "Think": [
+        {
+          "File": "motions/Synra_think.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "Concerned": [
+        {
+          "File": "motions/Synra_concerned.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "LookLeft": [
+        {
+          "File": "motions/Synra_look_left.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "LookRight": [
+        {
+          "File": "motions/Synra_look_right.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "LookUp": [
+        {
+          "File": "motions/Synra_look_up.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
+        }
+      ],
+      "LookDown": [
+        {
+          "File": "motions/Synra_look_down.motion3.json",
+          "FadeInTime": 0.42,
+          "FadeOutTime": 0.45
         }
       ]
     }

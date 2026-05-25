@@ -85,6 +85,10 @@ let commandSubmitting = false;
 let speechOutputEnabled = false;
 let activeSpeechAudio = null;
 let speechMouthTimer = null;
+let speechAudioContext = null;
+let speechMeterSource = null;
+let speechAnalyser = null;
+let speechAnalyserData = null;
 let lastHealth = null;
 let ttsStatus = { available: false, provider: "browser" };
 let live2dStatus = { modelReady: false, runtimeReady: false };
@@ -1068,6 +1072,7 @@ function endSpeechVisuals(speechId) {
     window.clearInterval(speechMouthTimer);
     speechMouthTimer = null;
   }
+  stopSpeechMouthMeter();
   const nextVisualState =
     lastServerState?.mode === "speaking"
       ? { ...lastServerState, mode: "idle", expression: "soft_smile" }
@@ -1106,13 +1111,7 @@ async function playServerTts(text, speechId, state, options = {}) {
     activeSpeechAudio = audio;
     audio.onplay = () => {
       beginSpeechVisuals(state);
-      if (speechMouthTimer) window.clearInterval(speechMouthTimer);
-      speechMouthTimer = window.setInterval(() => {
-        targetMotion.mouth = 0.52 + Math.random() * 0.48;
-        window.synraAvatar3D?.setSpeaking(true);
-        window.synraLive2D?.setSpeaking(true);
-        window.synraConcept2D?.setSpeaking(true);
-      }, 95);
+      startSpeechMouthMeter(audio);
     };
     audio.onended = () => {
       URL.revokeObjectURL(url);
@@ -1190,7 +1189,63 @@ function stopActiveSpeechAudio() {
     window.clearInterval(speechMouthTimer);
     speechMouthTimer = null;
   }
+  stopSpeechMouthMeter();
   window.synraConcept2D?.setSpeaking(false);
+}
+
+function stopSpeechMouthMeter() {
+  if (speechMouthTimer) {
+    window.clearInterval(speechMouthTimer);
+    speechMouthTimer = null;
+  }
+  try {
+    speechMeterSource?.disconnect?.();
+  } catch {
+    // Already disconnected.
+  }
+  speechMeterSource = null;
+  speechAnalyser = null;
+  speechAnalyserData = null;
+}
+
+function startSpeechMouthMeter(audio) {
+  stopSpeechMouthMeter();
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) {
+    speechMouthTimer = window.setInterval(() => {
+      targetMotion.mouth = 0.42 + Math.random() * 0.48;
+    }, 64);
+    return;
+  }
+  try {
+    speechAudioContext ||= new AudioCtx();
+    speechAudioContext.resume?.();
+    speechAnalyser = speechAudioContext.createAnalyser();
+    speechAnalyser.fftSize = 512;
+    speechAnalyser.smoothingTimeConstant = 0.42;
+    speechAnalyserData = new Uint8Array(speechAnalyser.fftSize);
+    speechMeterSource = speechAudioContext.createMediaElementSource(audio);
+    speechMeterSource.connect(speechAnalyser);
+    speechAnalyser.connect(speechAudioContext.destination);
+    speechMouthTimer = window.setInterval(() => {
+      speechAnalyser.getByteTimeDomainData(speechAnalyserData);
+      let sum = 0;
+      for (let index = 0; index < speechAnalyserData.length; index += 1) {
+        const normalized = (speechAnalyserData[index] - 128) / 128;
+        sum += normalized * normalized;
+      }
+      const rms = Math.sqrt(sum / speechAnalyserData.length);
+      const shaped = clamp((rms - 0.018) * 8.5, 0.08, 1);
+      targetMotion.mouth = targetMotion.mouth * 0.28 + shaped * 0.72;
+      window.synraAvatar3D?.setSpeaking(true);
+      window.synraLive2D?.setSpeaking(true);
+      window.synraConcept2D?.setSpeaking(true);
+    }, 32);
+  } catch {
+    speechMouthTimer = window.setInterval(() => {
+      targetMotion.mouth = 0.42 + Math.random() * 0.48;
+    }, 64);
+  }
 }
 
 function speakWithBrowserVoice(speechText, speechId, state) {

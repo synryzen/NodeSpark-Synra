@@ -1,7 +1,7 @@
 (() => {
   const LIVE2D_STATUS_URL = "/api/live2d";
   const DEFAULT_MODEL_PATH = "/assets/live2d/synra/synra.model3.json";
-  const ASSET_VERSION = "20260525-synra-cubism-smooth-2";
+  const ASSET_VERSION = "20260525-synra-cubism-emotion-1";
 
   const MOTION_PRIORITY = {
     idle: 1,
@@ -111,8 +111,27 @@
     handRB: ["ParamHandRB"]
   };
 
-  const IDLE_MOTIONS = ["idle_shift", "soft_nod", "hair_tuck", "stretch"];
-  const CLIP_GESTURES = new Set(["wave", "success", "delighted"]);
+  const IDLE_MOTIONS = ["idle_shift", "soft_nod", "hair_tuck", "curious"];
+  const CLIP_GESTURES = new Set([
+    "wave",
+    "explain",
+    "stretch",
+    "delighted",
+    "playful",
+    "curious",
+    "determined",
+    "soft_nod",
+    "hair_tuck",
+    "idle_shift",
+    "talk",
+    "listen",
+    "think",
+    "concerned",
+    "look_left",
+    "look_right",
+    "look_up",
+    "look_down"
+  ]);
 
   let resolveReadyCheck;
   window.synraLive2DReadyCheck = new Promise((resolve) => {
@@ -136,9 +155,210 @@
     return smoothstep(0, fadeIn, progress) * (1 - smoothstep(1 - fadeOut, 1, progress));
   }
 
+  function easeInOut(value) {
+    const t = clamp(value, 0, 1);
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  function mixPose(base, target, amount) {
+    const output = { ...base };
+    Object.keys(target).forEach((key) => {
+      if (typeof target[key] === "number") output[key] = lerp(output[key] ?? 0, target[key], amount);
+      else output[key] = target[key];
+    });
+    return output;
+  }
+
+  const BASE_POSE = {
+    partArmA: 1,
+    partArmB: 0,
+    shoulder: 0,
+    leg: 1,
+    armLA: -10,
+    armRA: -10,
+    armLB: 0,
+    armRB: 0,
+    handL: 0,
+    handR: 0,
+    handLB: 0,
+    handRB: 0,
+    bodyZ: 0,
+    angleZ: 0,
+    angleX: 0,
+    angleY: 0,
+    eyeX: 0,
+    eyeY: 0,
+    bustY: 0,
+    dressSway: 0,
+    mouthBoost: 0,
+    clip: false
+  };
+
+  const GESTURE_LIBRARY = {
+    wave: {
+      duration: 3600,
+      armSet: "B",
+      keyframes: [
+        [0, {}],
+        [0.18, { shoulder: 0.18, armLB: 2.4, armRB: -10, handLB: -1.2, handRB: 0, handL: -1, bodyZ: -0.6, angleZ: 0.7 }],
+        [0.34, { shoulder: 0.28, armLB: 8.7, armRB: -10, handLB: -7.2, handRB: 0, handL: -1, bodyZ: -1.3, angleZ: 1.5, bustY: 0.08 }],
+        [0.48, { shoulder: 0.26, armLB: 8.9, armRB: -10, handLB: -9.2, handRB: 0, handL: -1, bodyZ: -1.1, angleZ: 1.2 }],
+        [0.62, { shoulder: 0.26, armLB: 8.8, armRB: -10, handLB: -5.8, handRB: 0, handL: -1, bodyZ: -1.4, angleZ: 1.8 }],
+        [0.76, { shoulder: 0.25, armLB: 8.9, armRB: -10, handLB: -8.7, handRB: 0, handL: -1, bodyZ: -1.2, angleZ: 1.4 }],
+        [1, {}]
+      ]
+    },
+    explain: {
+      duration: 3200,
+      armSet: "B",
+      keyframes: [
+        [0, {}],
+        [0.22, { shoulder: 0.12, armLB: 2.2, armRB: 1.1, handLB: -1.4, handRB: 1.6, handL: 0.45, handR: 0.35, bodyZ: -0.7, angleZ: 0.8 }],
+        [0.48, { shoulder: 0.18, armLB: 3.8, armRB: 2.7, handLB: -2.9, handRB: 2.1, handL: 0.8, handR: 0.55, bodyZ: 0.8, angleZ: -0.8 }],
+        [0.72, { shoulder: 0.16, armLB: 2.4, armRB: 3.5, handLB: -1.3, handRB: 2.8, handL: 0.55, handR: 0.75, bodyZ: -0.4, angleZ: 0.4 }],
+        [1, {}]
+      ]
+    },
+    stretch: {
+      duration: 3600,
+      armSet: "B",
+      keyframes: [
+        [0, {}],
+        [0.18, { shoulder: 0.35, armLB: 3.3, armRB: 3.3, handLB: 3.4, handRB: 3.4, bodyZ: 0.6, angleY: -1.5 }],
+        [0.45, { shoulder: 0.95, armLB: 9.3, armRB: 9.0, handLB: 8.8, handRB: 8.8, leg: 0.86, bodyZ: 1.7, angleZ: -1.8, angleY: -3.8, bustY: 0.18 }],
+        [0.68, { shoulder: 0.8, armLB: 8.2, armRB: 8.6, handLB: 9.4, handRB: 8.9, leg: 0.88, bodyZ: 1.1, angleZ: 1.2, angleY: -2.4 }],
+        [1, {}]
+      ]
+    },
+    delighted: {
+      duration: 2400,
+      armSet: "B",
+      keyframes: [
+        [0, {}],
+        [0.24, { shoulder: 0.48, armLB: 5.2, armRB: 5.0, handLB: 5.5, handRB: 5.8, handL: 0.9, handR: 0.9, bodyZ: -1.5, angleZ: 2.2, bustY: 0.16, mouthBoost: 0.22 }],
+        [0.54, { shoulder: 0.34, armLB: 4.1, armRB: 4.4, handLB: 4.8, handRB: 4.5, handL: 0.86, handR: 0.86, bodyZ: 1.1, angleZ: -1.5, bustY: 0.12, mouthBoost: 0.16 }],
+        [1, {}]
+      ]
+    },
+    playful: {
+      duration: 2600,
+      armSet: "B",
+      keyframes: [
+        [0, {}],
+        [0.28, { shoulder: 0.24, armLB: 3.8, armRB: 0.8, handLB: -4.5, handRB: 1.6, handL: 0.72, bodyZ: -1.9, angleZ: 2.6, eyeX: -0.14, mouthBoost: 0.12 }],
+        [0.62, { shoulder: 0.16, armLB: 2.1, armRB: 2.3, handLB: -2.0, handRB: 2.4, handL: 0.6, handR: 0.4, bodyZ: 1.1, angleZ: -1.4, eyeX: 0.12 }],
+        [1, {}]
+      ]
+    },
+    curious: {
+      duration: 2400,
+      armSet: "A",
+      keyframes: [
+        [0, {}],
+        [0.34, { shoulder: 0.08, leg: 0.92, bodyZ: -1.4, angleZ: 2.2, angleX: -3, eyeX: -0.18, eyeY: 0.08, dressSway: 0.16 }],
+        [0.68, { shoulder: 0.06, leg: 0.94, bodyZ: 1.1, angleZ: -1.6, angleX: 2.6, eyeX: 0.16, eyeY: 0.05, dressSway: -0.12 }],
+        [1, {}]
+      ]
+    },
+    determined: {
+      duration: 2600,
+      armSet: "A",
+      keyframes: [
+        [0, {}],
+        [0.28, { shoulder: -0.08, leg: 0.94, bodyZ: 0.9, angleY: -1.8, angleZ: -0.8, angleX: 1.2 }],
+        [0.7, { shoulder: 0.02, leg: 0.9, bodyZ: 1.3, angleY: -2.2, angleZ: 0.8, angleX: -1.4 }],
+        [1, {}]
+      ]
+    },
+    soft_nod: {
+      duration: 1500,
+      armSet: "A",
+      keyframes: [
+        [0, {}],
+        [0.32, { angleY: -4.2, bodyZ: 0.4, shoulder: 0.08 }],
+        [0.58, { angleY: 2.2, bodyZ: -0.25, shoulder: 0.04 }],
+        [0.78, { angleY: -2.1, bodyZ: 0.2 }],
+        [1, {}]
+      ]
+    },
+    hair_tuck: {
+      duration: 2500,
+      armSet: "B",
+      keyframes: [
+        [0, {}],
+        [0.24, { shoulder: 0.2, armLB: -1.6, handLB: 1.2, bodyZ: -1.1, angleZ: 1.3 }],
+        [0.48, { shoulder: 0.28, armLB: -4.8, handLB: 3.6, handL: 0.42, bodyZ: -1.6, angleZ: 2.2, eyeX: -0.12 }],
+        [0.72, { shoulder: 0.18, armLB: -3.1, handLB: 1.8, handL: 0.3, bodyZ: -0.8, angleZ: 1.0 }],
+        [1, {}]
+      ]
+    },
+    idle_shift: {
+      duration: 2800,
+      armSet: "A",
+      keyframes: [
+        [0, {}],
+        [0.28, { leg: 0.9, shoulder: 0.06, bodyZ: -1.2, angleZ: 1.4, dressSway: 0.18 }],
+        [0.62, { leg: 0.96, shoulder: -0.04, bodyZ: 1.0, angleZ: -1.3, dressSway: -0.14 }],
+        [1, {}]
+      ]
+    },
+    talk: {
+      duration: 1700,
+      armSet: "B",
+      keyframes: [
+        [0, {}],
+        [0.36, { shoulder: 0.08, armLB: 1.2, armRB: 1.0, handLB: -0.8, handRB: 0.8, handL: 0.25, handR: 0.25, bodyZ: -0.4 }],
+        [0.72, { shoulder: 0.1, armLB: 1.9, armRB: 1.5, handLB: -1.1, handRB: 1.1, handL: 0.35, handR: 0.35, bodyZ: 0.4 }],
+        [1, {}]
+      ]
+    },
+    listen: {
+      duration: 1900,
+      armSet: "A",
+      keyframes: [
+        [0, {}],
+        [0.4, { shoulder: 0.1, angleY: -1.8, bodyZ: -0.7, eyeY: 0.08 }],
+        [0.76, { shoulder: 0.08, angleY: 0.8, bodyZ: 0.5, eyeY: 0.04 }],
+        [1, {}]
+      ]
+    },
+    think: {
+      duration: 2400,
+      armSet: "B",
+      keyframes: [
+        [0, {}],
+        [0.34, { shoulder: 0.18, armLB: -2.8, handLB: -2.2, handL: 0.32, bodyZ: -1.1, angleZ: 1.4, eyeX: -0.08 }],
+        [0.7, { shoulder: 0.16, armLB: -2.1, handLB: -1.6, handL: 0.26, bodyZ: 0.8, angleZ: -0.8, eyeX: 0.08 }],
+        [1, {}]
+      ]
+    },
+    concerned: {
+      duration: 2300,
+      armSet: "A",
+      keyframes: [
+        [0, {}],
+        [0.42, { shoulder: -0.18, angleY: -3.4, bodyZ: -1.0, angleZ: -1.0, eyeY: -0.08 }],
+        [0.72, { shoulder: -0.1, angleY: -1.4, bodyZ: 0.3, angleZ: 0.6 }],
+        [1, {}]
+      ]
+    },
+    look_left: { duration: 1500, armSet: "A", keyframes: [[0, {}], [0.5, { angleX: -7.5, eyeX: -0.45, bodyZ: -0.4 }], [1, {}]] },
+    look_right: { duration: 1500, armSet: "A", keyframes: [[0, {}], [0.5, { angleX: 7.5, eyeX: 0.45, bodyZ: 0.4 }], [1, {}]] },
+    look_up: { duration: 1500, armSet: "A", keyframes: [[0, {}], [0.5, { angleY: 7.0, eyeY: 0.42, bodyZ: -0.2 }], [1, {}]] },
+    look_down: { duration: 1500, armSet: "A", keyframes: [[0, {}], [0.5, { angleY: -8.0, eyeY: -0.42, bodyZ: 0.2 }], [1, {}]] }
+  };
+
   function withAssetVersion(path) {
     if (!path || path.includes("v=")) return path;
     return `${path}${path.includes("?") ? "&" : "?"}v=${ASSET_VERSION}-${Date.now().toString(36)}`;
+  }
+
+  function normalizeGestureName(name = "idle") {
+    if (name === "success") return "delighted";
+    if (name === "approval") return "explain";
+    if (name === "confused" || name === "sad") return "concerned";
+    if (name === "idle") return "idle_shift";
+    return name;
   }
 
   function setLive2DStatus(status, label) {
@@ -167,12 +387,12 @@
     if (cue.includes("soft_nod") || cue.includes("hair_tuck") || cue.includes("idle_shift")) return "soft_smile";
     if (cue.includes("sad")) return "sad";
     if (cue.includes("confused") || cue.includes("unclear")) return "confused";
-    if (cue.includes("concerned") || cue.includes("warning") || cue.includes("error")) return "concerned";
-    if (cue.includes("determined") || cue.includes("workflow")) return "determined";
-    if (cue.includes("thinking") || cue.includes("focused")) return "focused";
     if (cue.includes("curious") || cue.includes("approval")) return "curious";
     if (cue.includes("playful")) return "playful";
     if (cue.includes("delighted") || cue.includes("joy")) return "delighted";
+    if (cue.includes("concerned") || cue.includes("warning") || cue.includes("error")) return "concerned";
+    if (cue.includes("determined") || cue.includes("workflow")) return "determined";
+    if (cue.includes("thinking") || cue.includes("focused")) return "focused";
     if (cue.includes("wink")) return "wink";
     if (cue.includes("happy") || cue.includes("bright") || cue.includes("success") || cue.includes("wave")) return "happy";
     if (cue.includes("listening") || cue.includes("attentive") || cue.includes("explain")) return "attentive";
@@ -196,12 +416,12 @@
     if (cue.includes("confused") || cue.includes("unclear")) return "confused";
     if (cue.includes("sad")) return "sad";
     if (cue.includes("determined")) return "determined";
+    if (cue.includes("speaking") || cue.includes("talk")) return "talk";
     if (cue.includes("success") || cue.includes("bright")) return "success";
-    if (cue.includes("warning") || cue.includes("error") || cue.includes("concerned")) return "concerned";
     if (cue.includes("approval") || cue.includes("curious")) return "curious";
+    if (cue.includes("warning") || cue.includes("error") || cue.includes("concerned")) return "concerned";
     if (cue.includes("thinking") || cue.includes("workflow") || cue.includes("focused")) return "think";
     if (cue.includes("listening") || cue.includes("attentive")) return "listen";
-    if (cue.includes("speaking") || cue.includes("talk")) return "talk";
     return "idle";
   }
 
@@ -318,7 +538,7 @@
         await this.loadModel(this.modelPath);
         this.resize();
         window.addEventListener("resize", () => this.resize(), { passive: true });
-        this.app.ticker.add(() => this.tick());
+        this.app.ticker.add(() => this.tick(), undefined, PIXI.UPDATE_PRIORITY.LOW);
         resolveReadyCheck(true);
         setLive2DStatus("ready", "Synra Live2D online");
       } catch (error) {
@@ -405,7 +625,7 @@
 
     setSpeaking(active) {
       this.speaking = Boolean(active);
-      this.targetMouth = this.speaking ? 1 : 0;
+      this.targetMouth = this.speaking ? Math.max(this.targetMouth, 0.25) : 0;
       if (this.speaking) {
         this.startGesture(this.expression === "explain" ? "explain" : "talk");
       }
@@ -423,7 +643,7 @@
     update(motion = {}) {
       this.motion = { ...this.motion, ...motion };
       if (this.speaking) {
-        this.targetMouth = Math.max(this.targetMouth * 0.86, motion.mouth || 0.22);
+        this.targetMouth = Math.max(this.targetMouth * 0.82, motion.mouth || 0.22);
       } else {
         this.targetMouth *= 0.86;
       }
@@ -485,18 +705,13 @@
     }
 
     gestureDuration(name) {
-      if (name === "wave") return 3400;
-      if (name === "explain") return 2800;
-      if (name === "stretch") return 3000;
-      if (name === "hair_tuck") return 2200;
-      if (name === "soft_nod") return 1400;
-      if (name === "idle_shift") return 2400;
-      if (name === "talk") return 1600;
+      if (GESTURE_LIBRARY[name]?.duration) return GESTURE_LIBRARY[name].duration;
       return 1800;
     }
 
     startGesture(name) {
       if (!name) return;
+      name = normalizeGestureName(name);
       const now = performance.now();
       if (this.gesture.name === name && now - this.gesture.startedAt < 600) return;
       const useClip = CLIP_GESTURES.has(name) && this.playMotion(name);
@@ -539,25 +754,7 @@
       const hold = gesture.name === "talk" && this.speaking ? 1 : actionEnvelope(progress);
       const pulse = Math.sin(progress * Math.PI * 6);
       const slowPulse = Math.sin(progress * Math.PI * 2);
-      const pose = {
-        partArmA: 1,
-        partArmB: 0,
-        shoulder: 0,
-        leg: 1,
-        armLA: -10,
-        armRA: -10,
-        armLB: 0,
-        armRB: 0,
-        handL: 0,
-        handR: 0,
-        handLB: 0,
-        handRB: 0,
-        bodyZ: 0,
-        angleZ: 0,
-        bustY: 0,
-        dressSway: 0,
-        clip: false
-      };
+      const pose = { ...BASE_POSE };
 
       if (gesture.name.endsWith("_clip")) {
         pose.clip = true;
@@ -568,68 +765,36 @@
         return pose;
       }
 
-      if (["explain", "stretch", "hair_tuck", "playful", "talk"].includes(gesture.name)) {
-        pose.partArmA = 1 - hold;
-        pose.partArmB = hold;
+      const library = GESTURE_LIBRARY[gesture.name];
+      if (library?.keyframes?.length) {
+        const frames = library.keyframes;
+        let left = frames[0];
+        let right = frames[frames.length - 1];
+        for (let index = 0; index < frames.length - 1; index += 1) {
+          if (progress >= frames[index][0] && progress <= frames[index + 1][0]) {
+            left = frames[index];
+            right = frames[index + 1];
+            break;
+          }
+        }
+        const span = Math.max(0.001, right[0] - left[0]);
+        const local = easeInOut((progress - left[0]) / span);
+        const keyedPose = mixPose({ ...BASE_POSE, ...(left[1] || {}) }, right[1] || {}, local);
+        Object.assign(pose, mixPose(BASE_POSE, keyedPose, gesture.name === "talk" && this.speaking ? 1 : hold));
+        if (library.armSet === "B") {
+          pose.partArmA = 1 - hold;
+          pose.partArmB = hold;
+        } else {
+          pose.partArmA = 1;
+          pose.partArmB = 0;
+        }
       }
 
-      if (gesture.name === "wave" || gesture.name === "success" || gesture.name === "delighted") {
-        pose.shoulder = 0.35 * hold;
-        pose.armRB = (-5.8 + pulse * 0.7) * hold;
-        pose.handRB = (-8.2 + pulse * 0.8) * hold;
-        pose.handR = (0.35 + Math.abs(pulse) * 0.35) * hold;
-        pose.armLB = -0.8 * hold;
-        pose.handLB = -2.4 * hold;
-        pose.handL = 0.1 * hold;
-        pose.bodyZ = -1.1 * hold;
-        pose.angleZ = 1.8 * hold;
-        pose.bustY = 0.08 * hold;
-        pose.dressSway = slowPulse * 0.18 * hold;
-      } else if (gesture.name === "explain" || gesture.name === "approval") {
-        pose.shoulder = 0.18 * hold;
-        pose.armLB = 3.2 * hold;
-        pose.armRB = 2.8 * hold;
-        pose.handLB = -2.6 * hold;
-        pose.handRB = 2.4 * hold;
-        pose.handL = 0.7 * hold;
-        pose.handR = 0.7 * hold;
-        pose.bodyZ = slowPulse * 1.1 * hold;
-        pose.angleZ = slowPulse * 1.5 * hold;
-        pose.dressSway = slowPulse * 0.22 * hold;
-      } else if (gesture.name === "stretch") {
-        pose.shoulder = 0.9 * hold;
-        pose.armLB = (7.6 + slowPulse * 1.1) * hold;
-        pose.armRB = (7.2 - slowPulse * 1.1) * hold;
-        pose.handLB = 8.2 * hold;
-        pose.handRB = 8.2 * hold;
-        pose.leg = 1 - 0.18 * hold;
-        pose.bodyZ = slowPulse * 1.6 * hold;
-        pose.angleZ = slowPulse * 2.2 * hold;
-        pose.bustY = 0.18 * hold;
-      } else if (gesture.name === "hair_tuck") {
-        pose.shoulder = 0.25 * hold;
-        pose.armRB = 5.1 * hold;
-        pose.handRB = -4.5 * hold;
-        pose.handR = 0.45 * hold;
-        pose.bodyZ = -1.4 * hold;
-      } else if (gesture.name === "talk") {
-        pose.shoulder = 0.08 * hold;
-        pose.armLB = 1.6 * hold;
-        pose.armRB = 1.4 * hold;
-        pose.handLB = -0.8 * hold;
-        pose.handRB = 0.9 * hold;
-        pose.bodyZ = slowPulse * 0.55 * hold;
-      } else if (gesture.name === "soft_nod") {
-        pose.shoulder = 0.12 * hold;
-        pose.angleZ = slowPulse * 0.7 * hold;
-        pose.bustY = 0.06 * hold;
-      } else if (gesture.name === "idle_shift" || gesture.name === "curious") {
-        pose.leg = 1 - 0.08 * hold;
-        pose.bodyZ = slowPulse * 1.2 * hold;
-        pose.angleZ = slowPulse * 1.6 * hold;
-        pose.dressSway = slowPulse * 0.16 * hold;
-      }
-
+      pose.handLB += pulse * 0.24 * hold;
+      pose.handRB -= pulse * 0.18 * hold;
+      pose.bodyZ += slowPulse * 0.35 * hold;
+      pose.angleZ += slowPulse * 0.35 * hold;
+      pose.dressSway += slowPulse * 0.16 * hold;
       return pose;
     }
 
@@ -678,14 +843,14 @@
       this.setAnyParameter("mouthOpen", this.mouth);
       this.setAnyParameter("mouthForm", smile);
       this.setAnyParameter("breath", 0.5 + breath * 0.18 * energy);
-      this.setAnyParameter("angleX", pointerX * 18 + idleSway * 2.2 * personalityLift);
-      this.setAnyParameter("angleY", pointerY * -10 + breath * 1.6 - emotion.sad * 2 + emotion.surprise * 1.5);
+      this.setAnyParameter("angleX", pointerX * 18 + idleSway * 2.2 * personalityLift + gesture.angleX);
+      this.setAnyParameter("angleY", pointerY * -10 + breath * 1.6 - emotion.sad * 2 + emotion.surprise * 1.5 + gesture.angleY);
       this.setAnyParameter("angleZ", idleSway * 4.5 * personalityLift + gesture.angleZ + emotion.curious * 2.2 - emotion.sad * 1.5);
       this.setAnyParameter("bodyX", pointerX * 5 + idleSway * 2.5);
       this.setAnyParameter("bodyY", pointerY * -4 + breath * 1.2);
       this.setAnyParameter("bodyZ", idleSway * 2.5 * personalityLift + gesture.bodyZ);
-      this.setAnyParameter("eyeX", pointerX * 0.5);
-      this.setAnyParameter("eyeY", pointerY * -0.4 + emotion.curious * 0.08 - emotion.focus * 0.06);
+      this.setAnyParameter("eyeX", pointerX * 0.5 + gesture.eyeX);
+      this.setAnyParameter("eyeY", pointerY * -0.4 + emotion.curious * 0.08 - emotion.focus * 0.06 + gesture.eyeY);
       this.setAnyParameter("eyeLOpen", eyeOpen);
       this.setAnyParameter("eyeROpen", eyeOpen);
       this.setAnyParameter("browLY", brow);
@@ -698,6 +863,7 @@
       this.setAnyParameter("shoulder", gesture.shoulder + emotion.happy * 0.08 - emotion.sad * 0.05);
       this.setAnyParameter("leg", gesture.leg);
       this.setAnyParameter("bustY", gesture.bustY + breath * 0.04);
+      if (gesture.mouthBoost) this.setAnyParameter("mouthOpen", clamp(this.mouth + gesture.mouthBoost, 0, 1));
       if (!gesture.clip) {
         this.setAnyParameter("armLA", gesture.armLA + idleSway * 0.1 + emotion.happy * 0.08 - emotion.sad * 0.06);
         this.setAnyParameter("armRA", gesture.armRA - idleSway * 0.1 + emotion.happy * 0.08 - emotion.focus * 0.05);
@@ -710,6 +876,7 @@
         this.setPartOpacity("PartArmA", gesture.partArmA);
         this.setPartOpacity("PartArmB", gesture.partArmB);
       }
+      this.model?.internalModel?.coreModel?.update?.();
     }
   }
 

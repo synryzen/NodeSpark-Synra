@@ -1,0 +1,181 @@
+{
+  "Version": 3,
+  "Meta": {
+    "Duration": 3.2,
+    "Fps": 30.0,
+    "Loop": false,
+    "AreBeziersRestricted": true,
+    "CurveCount": 9,
+    "TotalSegmentCount": 31,
+    "TotalPointCount": 40,
+    "UserDataCount": 0,
+    "TotalUserDataSize": 0
+  },
+  "Curves": [
+    {
+      "Target": "Parameter",
+      "Id": "ParamArmLB",
+      "Segments": [
+        0,
+        0,
+        0,
+        0.55,
+        2.0,
+        0,
+        1.45,
+        3.7,
+        0,
+        2.4,
+        2.2,
+        0,
+        3.2,
+        0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamArmRB",
+      "Segments": [
+        0,
+        0,
+        0,
+        0.55,
+        1.4,
+        0,
+        1.45,
+        2.8,
+        0,
+        2.4,
+        3.4,
+        0,
+        3.2,
+        0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamHandLB",
+      "Segments": [
+        0,
+        0,
+        0,
+        0.55,
+        -1.4,
+        0,
+        1.45,
+        -2.9,
+        0,
+        2.4,
+        -1.2,
+        0,
+        3.2,
+        0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamHandRB",
+      "Segments": [
+        0,
+        0,
+        0,
+        0.55,
+        1.4,
+        0,
+        1.45,
+        2.2,
+        0,
+        2.4,
+        2.9,
+        0,
+        3.2,
+        0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamHandL",
+      "Segments": [
+        0,
+        0,
+        0,
+        0.65,
+        0.55,
+        0,
+        2.4,
+        0.7,
+        0,
+        3.2,
+        0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamHandR",
+      "Segments": [
+        0,
+        0,
+        0,
+        0.65,
+        0.4,
+        0,
+        2.4,
+        0.75,
+        0,
+        3.2,
+        0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamAngleX",
+      "Segments": [
+        0,
+        0,
+        0,
+        1.0,
+        -4,
+        0,
+        2.2,
+        3,
+        0,
+        3.2,
+        0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamBodyAngleZ",
+      "Segments": [
+        0,
+        0,
+        0,
+        1.0,
+        -1.2,
+        0,
+        2.2,
+        1.0,
+        0,
+        3.2,
+        0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamMouthForm",
+      "Segments": [
+        0,
+        0,
+        0,
+        0.5,
+        0.55,
+        0,
+        2.8,
+        0.55,
+        0,
+        3.2,
+        0
+      ]
+    }
+  ]
+}
