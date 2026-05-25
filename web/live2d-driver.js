@@ -237,6 +237,7 @@
       this.canvas = document.getElementById("synraLive2DCanvas");
       this.app = null;
       this.model = null;
+      this.modelJson = null;
       this.status = null;
       this.modelPath = DEFAULT_MODEL_PATH;
       this.mode = "idle";
@@ -255,7 +256,9 @@
       this.nextBlinkAt = performance.now() + 1800;
       this.blinkUntil = 0;
       this.availableMotions = new Set();
+      this.motionNameMap = new Map();
       this.availableExpressions = new Set();
+      this.expressionNameMap = new Map();
       this.emotion = emotionProfileFor();
       this.emotionTarget = { ...this.emotion };
     }
@@ -318,6 +321,9 @@
     }
 
     async loadModel(path) {
+      this.modelJson = await fetch(path, { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : null)
+        .catch(() => null);
       const model = await window.PIXI.live2d.Live2DModel.from(path, { autoInteract: false });
       model.interactive = false;
       if (model.anchor?.set) model.anchor.set(0.5, 0.5);
@@ -330,16 +336,19 @@
 
     readModelCapabilities() {
       const refs = this.modelReferences();
-      this.availableMotions = new Set(Object.keys(refs.Motions || refs.motions || {}));
+      const motionGroups = Object.keys(refs.Motions || refs.motions || {});
+      this.availableMotions = new Set(motionGroups);
+      this.motionNameMap = new Map(motionGroups.map((name) => [name.toLowerCase(), name]));
       const expressions = refs.Expressions || refs.expressions || [];
-      this.availableExpressions = new Set(
-        expressions
-          .map((item) => item?.Name || item?.name)
-          .filter(Boolean)
-      );
+      const expressionNames = expressions.map((item) => item?.Name || item?.name).filter(Boolean);
+      this.availableExpressions = new Set(expressionNames);
+      this.expressionNameMap = new Map(expressionNames.map((name) => [name.toLowerCase(), name]));
     }
 
     modelReferences() {
+      if (this.modelJson?.FileReferences || this.modelJson?.fileReferences) {
+        return this.modelJson.FileReferences || this.modelJson.fileReferences;
+      }
       const settings = this.model?.internalModel?.settings || {};
       const raw = settings.json || settings._json || settings._object || settings;
       return raw.FileReferences || raw.fileReferences || {
@@ -402,13 +411,18 @@
     pickExpression(name) {
       const choices = EXPRESSION_FALLBACKS[name] || [name, "soft_smile", "neutral"];
       if (!this.availableExpressions.size) return choices[0];
-      return choices.find((choice) => this.availableExpressions.has(choice)) || "";
+      return choices
+        .map((choice) => this.availableExpressions.has(choice) ? choice : this.expressionNameMap.get(choice.toLowerCase()))
+        .find(Boolean) || "";
     }
 
     pickMotion(group) {
-      const choices = MOTION_FALLBACKS[group] || [group, "idle"];
+      const actionFallback = group === "idle" || group === "idle_shift" || group === "soft_nod" ? "Idle" : "TapBody";
+      const choices = [...(MOTION_FALLBACKS[group] || [group, "idle"]), actionFallback, "Idle"];
       if (!this.availableMotions.size) return choices[0];
-      return choices.find((choice) => this.availableMotions.has(choice)) || "";
+      return choices
+        .map((choice) => this.availableMotions.has(choice) ? choice : this.motionNameMap.get(choice.toLowerCase()))
+        .find(Boolean) || "";
     }
 
     playExpression(name) {
