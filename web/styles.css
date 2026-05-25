@@ -773,17 +773,13 @@ body {
   left: 50%;
 }
 
-[data-live2d="missing-model"] .concept2d-layer,
-[data-live2d="missing-runtime"] .concept2d-layer,
-[data-live2d="missing-loader"] .concept2d-layer,
-[data-live2d="error"] .concept2d-layer {
+[data-live2d="missing-model"]:not([data-avatar3d="ready"]) .concept2d-layer,
+[data-live2d="missing-runtime"]:not([data-avatar3d="ready"]) .concept2d-layer,
+[data-live2d="missing-loader"]:not([data-avatar3d="ready"]) .concept2d-layer,
+[data-live2d="error"]:not([data-avatar3d="ready"]) .concept2d-layer {
   opacity: 1;
 }
 
-[data-live2d="missing-model"] .avatar3d-layer,
-[data-live2d="missing-runtime"] .avatar3d-layer,
-[data-live2d="missing-loader"] .avatar3d-layer,
-[data-live2d="error"] .avatar3d-layer,
 [data-live2d="missing-model"] .synra-frame-rig,
 [data-live2d="missing-runtime"] .synra-frame-rig,
 [data-live2d="missing-loader"] .synra-frame-rig,
@@ -845,6 +841,10 @@ body {
 
 [data-avatar3d="ready"] .avatar3d-layer {
   opacity: 1;
+}
+
+[data-avatar3d="ready"] .concept2d-layer {
+  opacity: 0;
 }
 
 [data-avatar3d="ready"] .synra-frame-rig,
