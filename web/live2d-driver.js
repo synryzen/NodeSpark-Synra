@@ -274,18 +274,18 @@
       const hasLoader = Boolean(window.PIXI?.live2d?.Live2DModel);
 
       if (!hasRuntime) {
-        resolveReadyCheck(false);
         setLive2DStatus("missing-runtime", "Live2D runtime not installed");
+        resolveReadyCheck(false);
         return;
       }
       if (!hasModel) {
-        resolveReadyCheck(false);
         setLive2DStatus("missing-model", "Live2D model not installed");
+        resolveReadyCheck(false);
         return;
       }
       if (!hasLoader) {
-        resolveReadyCheck(false);
         setLive2DStatus("missing-loader", "Live2D browser loader unavailable");
+        resolveReadyCheck(false);
         return;
       }
 

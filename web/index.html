@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NodeSpark Synra</title>
-    <link rel="stylesheet" href="/styles.css?v=20260524-synra-final-art-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260524-synra-animated-rig-1" />
     <script type="importmap">
       {
         "imports": {
@@ -32,8 +32,25 @@
           <div class="live2d-layer" id="live2dLayer" aria-label="NodeSpark Synra Live2D avatar">
             <canvas id="synraLive2DCanvas"></canvas>
           </div>
-          <div class="concept2d-layer" id="concept2dLayer" aria-label="NodeSpark Synra Live2D concept preview">
-            <img src="/assets/live2d/synra/synra-final-design-neutral-cutout.png?v=20260524-synra-final-art-1" alt="NodeSpark Synra final Live2D design preview" />
+          <div class="concept2d-layer" id="concept2dLayer" aria-label="NodeSpark Synra animated avatar rig">
+            <div class="concept2d-rig" id="concept2dRig">
+              <img
+                class="concept2d-base"
+                src="/assets/live2d/synra/synra-final-design-neutral-cutout.png?v=20260524-synra-animated-rig-1"
+                alt="NodeSpark Synra animated base"
+              />
+              <img
+                class="concept2d-wave"
+                src="/assets/live2d/synra/synra-final-design-wave-cutout.png?v=20260524-synra-animated-rig-1"
+                alt=""
+                aria-hidden="true"
+              />
+              <span class="concept2d-shadow" aria-hidden="true"></span>
+              <span class="concept2d-mouth" aria-hidden="true"></span>
+              <span class="concept2d-blink concept2d-blink-left" aria-hidden="true"></span>
+              <span class="concept2d-blink concept2d-blink-right" aria-hidden="true"></span>
+              <span class="concept2d-heart" aria-hidden="true"></span>
+            </div>
           </div>
           <div class="avatar3d-layer" id="avatar3dLayer" aria-label="NodeSpark Synra 3D avatar">
             <canvas id="synraAvatar3DCanvas"></canvas>
@@ -245,11 +262,12 @@
       </aside>
     </main>
 
-    <script src="/assets/vendor/live2d/live2dcubismcore.min.js?v=20260524-synra-final-art-1"></script>
-    <script src="/assets/vendor/live2d/pixi.min.js?v=20260524-synra-final-art-1"></script>
-    <script src="/assets/vendor/live2d/pixi-live2d-display.min.js?v=20260524-synra-final-art-1"></script>
-    <script src="/live2d-driver.js?v=20260524-synra-final-art-1"></script>
-    <script type="module" src="/avatar3d-driver.js?v=20260524-synra-final-art-1"></script>
-    <script src="/app.js?v=20260524-synra-final-art-1"></script>
+    <script src="/assets/vendor/live2d/live2dcubismcore.min.js?v=20260524-synra-animated-rig-1"></script>
+    <script src="/assets/vendor/live2d/pixi.min.js?v=20260524-synra-animated-rig-1"></script>
+    <script src="/assets/vendor/live2d/pixi-live2d-display.min.js?v=20260524-synra-animated-rig-1"></script>
+    <script src="/live2d-driver.js?v=20260524-synra-animated-rig-1"></script>
+    <script src="/concept2d-driver.js?v=20260524-synra-animated-rig-1"></script>
+    <script type="module" src="/avatar3d-driver.js?v=20260524-synra-animated-rig-1"></script>
+    <script src="/app.js?v=20260524-synra-animated-rig-1"></script>
   </body>
 </html>

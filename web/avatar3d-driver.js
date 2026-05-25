@@ -174,6 +174,12 @@ class SynraAvatar3DController {
           setAvatar3DStatus("standby", "Live2D avatar active");
           return;
         }
+        const live2dStatus = document.documentElement.dataset.live2d || "";
+        const hasConceptRig = Boolean(document.getElementById("concept2dLayer"));
+        if (hasConceptRig && ["missing-model", "missing-runtime", "missing-loader", "error"].includes(live2dStatus)) {
+          setAvatar3DStatus("standby", "Synra animated rig active");
+          return;
+        }
       } catch {
         // If the Live2D check fails, keep the temporary VRM fallback available.
       }

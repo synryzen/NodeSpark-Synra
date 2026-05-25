@@ -633,40 +633,169 @@ body {
   border-radius: 10px;
   pointer-events: none;
   opacity: 0;
-  transform:
-    translate3d(var(--rig-x), var(--rig-y), 0)
-    rotate(var(--rig-rotate))
-    scale(var(--rig-scale));
+  --concept-x: 0px;
+  --concept-y: 0px;
+  --concept-rotate: 0deg;
+  --concept-scale: 1;
+  --concept-wave: 0;
+  --concept-mouth: 0;
+  --concept-blink: 0;
+  --concept-heart: 0;
+  --concept-shadow: 0.62;
+  transform: none;
   transform-origin: 50% 58%;
   transition: opacity 220ms ease;
-  animation: characterBreathe 5.4s ease-in-out infinite;
-  will-change: transform, opacity;
+  will-change: opacity;
 }
 
-.concept2d-layer img {
-  display: block;
+.concept2d-rig {
   position: absolute;
   left: 50%;
   bottom: 0;
   width: auto;
   height: min(86vh, 96%);
   max-width: 84%;
+  aspect-ratio: 862 / 1825;
+  transform:
+    translate3d(calc(-50% + var(--concept-x)), var(--concept-y), 0)
+    rotate(var(--concept-rotate))
+    scale(var(--concept-scale));
+  transform-origin: 50% 67%;
+  will-change: transform;
+}
+
+.concept2d-rig img {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  border-radius: 12px;
-  transform: translateX(-50%);
+  border-radius: 0;
   filter:
     drop-shadow(0 0 28px rgba(155, 92, 255, 0.22))
     drop-shadow(0 34px 88px rgba(0, 0, 0, 0.58));
+  user-select: none;
 }
 
-[data-live2d="missing-model"] .concept2d-layer {
+.concept2d-base {
+  opacity: calc(1 - (var(--concept-wave) * 0.88));
+}
+
+.concept2d-wave {
+  opacity: var(--concept-wave);
+  transform:
+    translate3d(calc(var(--concept-wave) * -3px), calc(var(--concept-wave) * -2px), 0)
+    rotate(calc(var(--concept-wave) * -0.4deg));
+  transform-origin: 50% 66%;
+}
+
+.concept2d-shadow {
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  bottom: -1.6%;
+  height: 6.5%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(4, 8, 16, calc(var(--concept-shadow) * 0.62)), rgba(4, 8, 16, 0) 68%);
+  filter: blur(8px);
+  opacity: var(--concept-shadow);
+}
+
+.concept2d-mouth {
+  position: absolute;
+  left: 49.5%;
+  top: 15.95%;
+  width: 4.5%;
+  height: calc(0.45% + (var(--concept-mouth) * 1.35%));
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 50% 72%, rgba(255, 144, 166, 0.86) 0 20%, transparent 22%),
+    linear-gradient(180deg, rgba(111, 21, 55, 0.95), rgba(53, 6, 26, 0.96));
+  box-shadow: 0 0 5px rgba(255, 92, 150, calc(var(--concept-mouth) * 0.3));
+  opacity: calc(0.12 + (var(--concept-mouth) * 0.9));
+  transform:
+    translate(-50%, -50%)
+    scaleX(calc(0.82 + (var(--concept-mouth) * 0.34)));
+  transform-origin: 50% 50%;
+  mix-blend-mode: multiply;
+}
+
+.concept2d-blink {
+  position: absolute;
+  top: 13.9%;
+  width: 6.6%;
+  height: 1.1%;
+  border-radius: 999px;
+  background: rgba(35, 10, 40, 0.78);
+  opacity: var(--concept-blink);
+  transform: translateX(-50%) rotate(-1deg);
+  filter: blur(0.2px);
+}
+
+.concept2d-blink-left {
+  left: 44.4%;
+}
+
+.concept2d-blink-right {
+  left: 54.8%;
+}
+
+.concept2d-heart {
+  position: absolute;
+  left: 59.4%;
+  top: 25.8%;
+  width: 6.2%;
+  aspect-ratio: 1;
+  opacity: var(--concept-heart);
+  transform: translate(-50%, -50%) rotate(-45deg) scale(calc(0.62 + (var(--concept-heart) * 0.34)));
+  background: linear-gradient(135deg, #7de8ff, #8b5cff 52%, #ff79c9);
+  box-shadow: 0 0 16px rgba(125, 232, 255, 0.48);
+}
+
+.concept2d-heart::before,
+.concept2d-heart::after {
+  content: "";
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: inherit;
+}
+
+.concept2d-heart::before {
+  top: -50%;
+  left: 0;
+}
+
+.concept2d-heart::after {
+  top: 0;
+  left: 50%;
+}
+
+[data-live2d="missing-model"] .concept2d-layer,
+[data-live2d="missing-runtime"] .concept2d-layer,
+[data-live2d="missing-loader"] .concept2d-layer,
+[data-live2d="error"] .concept2d-layer {
   opacity: 1;
 }
 
 [data-live2d="missing-model"] .avatar3d-layer,
+[data-live2d="missing-runtime"] .avatar3d-layer,
+[data-live2d="missing-loader"] .avatar3d-layer,
+[data-live2d="error"] .avatar3d-layer,
 [data-live2d="missing-model"] .synra-frame-rig,
+[data-live2d="missing-runtime"] .synra-frame-rig,
+[data-live2d="missing-loader"] .synra-frame-rig,
+[data-live2d="error"] .synra-frame-rig,
 [data-live2d="missing-model"] .fallback-avatar,
-[data-live2d="missing-model"] .avatar-load-surface {
+[data-live2d="missing-runtime"] .fallback-avatar,
+[data-live2d="missing-loader"] .fallback-avatar,
+[data-live2d="error"] .fallback-avatar,
+[data-live2d="missing-model"] .avatar-load-surface,
+[data-live2d="missing-runtime"] .avatar-load-surface,
+[data-live2d="missing-loader"] .avatar-load-surface,
+[data-live2d="error"] .avatar-load-surface {
   opacity: 0;
 }
 
