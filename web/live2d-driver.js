@@ -1,6 +1,7 @@
 (() => {
   const LIVE2D_STATUS_URL = "/api/live2d";
   const DEFAULT_MODEL_PATH = "/assets/live2d/synra/synra.model3.json";
+  const ASSET_VERSION = "20260525-synra-cubism-smooth-2";
 
   const MOTION_PRIORITY = {
     idle: 1,
@@ -93,15 +94,25 @@
     browLAngle: ["ParamBrowLAngle"],
     browRAngle: ["ParamBrowRAngle"],
     cheek: ["ParamCheek", "ParamBlush"],
-    hairSway: ["ParamHairSway", "ParamHairFront", "ParamHairSide"],
-    dressSway: ["ParamDressSway", "ParamSkirtSway", "ParamClothSway"],
-    armL: ["ParamArmL", "ParamArmLeft"],
-    armR: ["ParamArmR", "ParamArmRight"],
+    shoulder: ["ParamShoulder"],
+    leg: ["ParamLeg"],
+    bustY: ["ParamBustY"],
+    hairSway: ["ParamHairSway", "ParamHairFront", "ParamHairSide", "ParamHairAhoge", "ParamHairBack"],
+    dressSway: ["ParamDressSway", "ParamSkirtSway", "ParamClothSway", "ParamSkirt", "ParamSkirt2", "ParamRibbon"],
+    armL: ["ParamArmL", "ParamArmLeft", "ParamArmLA"],
+    armR: ["ParamArmR", "ParamArmRight", "ParamArmRA"],
+    armLA: ["ParamArmLA"],
+    armRA: ["ParamArmRA"],
+    armLB: ["ParamArmLB"],
+    armRB: ["ParamArmRB"],
     handL: ["ParamHandL", "ParamHandLeft"],
-    handR: ["ParamHandR", "ParamHandRight"]
+    handR: ["ParamHandR", "ParamHandRight"],
+    handLB: ["ParamHandLB"],
+    handRB: ["ParamHandRB"]
   };
 
   const IDLE_MOTIONS = ["idle_shift", "soft_nod", "hair_tuck", "stretch"];
+  const CLIP_GESTURES = new Set(["wave", "success", "delighted"]);
 
   let resolveReadyCheck;
   window.synraLive2DReadyCheck = new Promise((resolve) => {
@@ -119,6 +130,15 @@
   function smoothstep(edge0, edge1, value) {
     const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
     return t * t * (3 - 2 * t);
+  }
+
+  function actionEnvelope(progress, fadeIn = 0.18, fadeOut = 0.22) {
+    return smoothstep(0, fadeIn, progress) * (1 - smoothstep(1 - fadeOut, 1, progress));
+  }
+
+  function withAssetVersion(path) {
+    if (!path || path.includes("v=")) return path;
+    return `${path}${path.includes("?") ? "&" : "?"}v=${ASSET_VERSION}-${Date.now().toString(36)}`;
   }
 
   function setLive2DStatus(status, label) {
@@ -255,6 +275,7 @@
       this.nextIdleMotionAt = performance.now() + 9000;
       this.nextBlinkAt = performance.now() + 1800;
       this.blinkUntil = 0;
+      this.gesture = { name: "idle", startedAt: performance.now(), duration: 1200 };
       this.availableMotions = new Set();
       this.motionNameMap = new Map();
       this.availableExpressions = new Set();
@@ -271,7 +292,7 @@
 
       setLive2DStatus("checking", "Checking Synra Live2D");
       this.status = await fetchLive2DStatus();
-      this.modelPath = this.status.modelPath || DEFAULT_MODEL_PATH;
+      this.modelPath = withAssetVersion(this.status.modelPath || DEFAULT_MODEL_PATH);
       const hasRuntime = Boolean(this.status.runtimeReady);
       const hasModel = Boolean(this.status.modelReady);
       const hasLoader = Boolean(window.PIXI?.live2d?.Live2DModel);
@@ -378,7 +399,7 @@
       if (nextKey === this.lastStateKey) return;
       this.lastStateKey = nextKey;
       this.playExpression(expressionFor(state));
-      this.playMotion(motionFor(state));
+      this.startGesture(motionFor(state));
       this.nextIdleMotionAt = performance.now() + 9000 + Math.random() * 7000;
     }
 
@@ -386,7 +407,7 @@
       this.speaking = Boolean(active);
       this.targetMouth = this.speaking ? 1 : 0;
       if (this.speaking) {
-        this.playMotion(this.expression === "explain" ? "explain" : "talk");
+        this.startGesture(this.expression === "explain" ? "explain" : "talk");
       }
     }
 
@@ -437,28 +458,55 @@
     }
 
     playMotion(group) {
-      if (!this.model || !group) return;
+      if (!this.model || !group) return false;
       const selected = this.pickMotion(group);
-      if (!selected) return;
+      if (!selected) return false;
       const now = performance.now();
-      if (selected === this.motionGroup && now - this.lastMotionAt < 1200) return;
+      if (selected === this.motionGroup && now - this.lastMotionAt < 1200) return true;
       this.motionGroup = selected;
       this.lastMotionAt = now;
       try {
         this.model.motion(selected, undefined, MOTION_PRIORITY[selected] || MOTION_PRIORITY[group] || 2);
+        return true;
       } catch {
         // The validator catches missing required motions; keep the UI alive if a draft rig is incomplete.
+        return false;
       }
     }
 
     maybePlayIdleMotion(now) {
       if (this.mode !== "idle" || this.speaking || now < this.nextIdleMotionAt) return;
-      const choices = IDLE_MOTIONS.filter((motion) => this.pickMotion(motion));
+      const choices = IDLE_MOTIONS;
       if (!choices.length) return;
       const selected = choices[Math.floor(Math.random() * choices.length)];
-      this.playMotion(selected);
+      this.startGesture(selected);
       const personalitySpeed = this.personality === "playful" ? 0.72 : this.personality === "focused" ? 1.35 : 1;
       this.nextIdleMotionAt = now + (9000 + Math.random() * 11000) * personalitySpeed / Math.max(this.motionLevel, 0.4);
+    }
+
+    gestureDuration(name) {
+      if (name === "wave") return 3400;
+      if (name === "explain") return 2800;
+      if (name === "stretch") return 3000;
+      if (name === "hair_tuck") return 2200;
+      if (name === "soft_nod") return 1400;
+      if (name === "idle_shift") return 2400;
+      if (name === "talk") return 1600;
+      return 1800;
+    }
+
+    startGesture(name) {
+      if (!name) return;
+      const now = performance.now();
+      if (this.gesture.name === name && now - this.gesture.startedAt < 600) return;
+      const useClip = CLIP_GESTURES.has(name) && this.playMotion(name);
+      this.gesture = { name: useClip ? `${name}_clip` : name, startedAt: now, duration: this.gestureDuration(name) };
+      if (!useClip) this.motionGroup = name;
+      if (this.layer) {
+        this.layer.dataset.gesture = this.gesture.name;
+        this.layer.dataset.motionClip = useClip ? "native" : "parameter";
+      }
+      this.lastMotionAt = now;
     }
 
     setParameter(id, value) {
@@ -473,6 +521,116 @@
 
     setAnyParameter(alias, value) {
       (PARAMETER_ALIASES[alias] || [alias]).forEach((id) => this.setParameter(id, value));
+    }
+
+    setPartOpacity(id, value) {
+      const core = this.model?.internalModel?.coreModel;
+      if (!core?.setPartOpacityById) return;
+      try {
+        core.setPartOpacityById(id, clamp(value, 0, 1));
+      } catch {
+        // Draft and sample rigs do not always expose all part ids.
+      }
+    }
+
+    gesturePose(now) {
+      const gesture = this.gesture || { name: "idle", startedAt: now, duration: 1200 };
+      const progress = clamp((now - gesture.startedAt) / Math.max(1, gesture.duration), 0, 1);
+      const hold = gesture.name === "talk" && this.speaking ? 1 : actionEnvelope(progress);
+      const pulse = Math.sin(progress * Math.PI * 6);
+      const slowPulse = Math.sin(progress * Math.PI * 2);
+      const pose = {
+        partArmA: 1,
+        partArmB: 0,
+        shoulder: 0,
+        leg: 1,
+        armLA: -10,
+        armRA: -10,
+        armLB: 0,
+        armRB: 0,
+        handL: 0,
+        handR: 0,
+        handLB: 0,
+        handRB: 0,
+        bodyZ: 0,
+        angleZ: 0,
+        bustY: 0,
+        dressSway: 0,
+        clip: false
+      };
+
+      if (gesture.name.endsWith("_clip")) {
+        pose.clip = true;
+        pose.bodyZ = -0.7 * hold;
+        pose.angleZ = 1.1 * hold;
+        pose.bustY = 0.06 * hold;
+        pose.dressSway = slowPulse * 0.14 * hold;
+        return pose;
+      }
+
+      if (["explain", "stretch", "hair_tuck", "playful", "talk"].includes(gesture.name)) {
+        pose.partArmA = 1 - hold;
+        pose.partArmB = hold;
+      }
+
+      if (gesture.name === "wave" || gesture.name === "success" || gesture.name === "delighted") {
+        pose.shoulder = 0.35 * hold;
+        pose.armRB = (-5.8 + pulse * 0.7) * hold;
+        pose.handRB = (-8.2 + pulse * 0.8) * hold;
+        pose.handR = (0.35 + Math.abs(pulse) * 0.35) * hold;
+        pose.armLB = -0.8 * hold;
+        pose.handLB = -2.4 * hold;
+        pose.handL = 0.1 * hold;
+        pose.bodyZ = -1.1 * hold;
+        pose.angleZ = 1.8 * hold;
+        pose.bustY = 0.08 * hold;
+        pose.dressSway = slowPulse * 0.18 * hold;
+      } else if (gesture.name === "explain" || gesture.name === "approval") {
+        pose.shoulder = 0.18 * hold;
+        pose.armLB = 3.2 * hold;
+        pose.armRB = 2.8 * hold;
+        pose.handLB = -2.6 * hold;
+        pose.handRB = 2.4 * hold;
+        pose.handL = 0.7 * hold;
+        pose.handR = 0.7 * hold;
+        pose.bodyZ = slowPulse * 1.1 * hold;
+        pose.angleZ = slowPulse * 1.5 * hold;
+        pose.dressSway = slowPulse * 0.22 * hold;
+      } else if (gesture.name === "stretch") {
+        pose.shoulder = 0.9 * hold;
+        pose.armLB = (7.6 + slowPulse * 1.1) * hold;
+        pose.armRB = (7.2 - slowPulse * 1.1) * hold;
+        pose.handLB = 8.2 * hold;
+        pose.handRB = 8.2 * hold;
+        pose.leg = 1 - 0.18 * hold;
+        pose.bodyZ = slowPulse * 1.6 * hold;
+        pose.angleZ = slowPulse * 2.2 * hold;
+        pose.bustY = 0.18 * hold;
+      } else if (gesture.name === "hair_tuck") {
+        pose.shoulder = 0.25 * hold;
+        pose.armRB = 5.1 * hold;
+        pose.handRB = -4.5 * hold;
+        pose.handR = 0.45 * hold;
+        pose.bodyZ = -1.4 * hold;
+      } else if (gesture.name === "talk") {
+        pose.shoulder = 0.08 * hold;
+        pose.armLB = 1.6 * hold;
+        pose.armRB = 1.4 * hold;
+        pose.handLB = -0.8 * hold;
+        pose.handRB = 0.9 * hold;
+        pose.bodyZ = slowPulse * 0.55 * hold;
+      } else if (gesture.name === "soft_nod") {
+        pose.shoulder = 0.12 * hold;
+        pose.angleZ = slowPulse * 0.7 * hold;
+        pose.bustY = 0.06 * hold;
+      } else if (gesture.name === "idle_shift" || gesture.name === "curious") {
+        pose.leg = 1 - 0.08 * hold;
+        pose.bodyZ = slowPulse * 1.2 * hold;
+        pose.angleZ = slowPulse * 1.6 * hold;
+        pose.dressSway = slowPulse * 0.16 * hold;
+      }
+
+      return pose;
     }
 
     updateEmotion() {
@@ -515,16 +673,17 @@
       const cheek = clamp(emotion.blush + emotion.happy * 0.14, 0, 1);
       const brow = clamp(emotion.brow + emotion.surprise * 0.22 - emotion.sad * 0.18, -1, 1);
       const energy = clamp(emotion.energy, 0.2, 1);
+      const gesture = this.gesturePose(now);
 
       this.setAnyParameter("mouthOpen", this.mouth);
       this.setAnyParameter("mouthForm", smile);
       this.setAnyParameter("breath", 0.5 + breath * 0.18 * energy);
       this.setAnyParameter("angleX", pointerX * 18 + idleSway * 2.2 * personalityLift);
       this.setAnyParameter("angleY", pointerY * -10 + breath * 1.6 - emotion.sad * 2 + emotion.surprise * 1.5);
-      this.setAnyParameter("angleZ", idleSway * 4.5 * personalityLift + emotion.curious * 2.2 - emotion.sad * 1.5);
+      this.setAnyParameter("angleZ", idleSway * 4.5 * personalityLift + gesture.angleZ + emotion.curious * 2.2 - emotion.sad * 1.5);
       this.setAnyParameter("bodyX", pointerX * 5 + idleSway * 2.5);
       this.setAnyParameter("bodyY", pointerY * -4 + breath * 1.2);
-      this.setAnyParameter("bodyZ", idleSway * 2.5 * personalityLift);
+      this.setAnyParameter("bodyZ", idleSway * 2.5 * personalityLift + gesture.bodyZ);
       this.setAnyParameter("eyeX", pointerX * 0.5);
       this.setAnyParameter("eyeY", pointerY * -0.4 + emotion.curious * 0.08 - emotion.focus * 0.06);
       this.setAnyParameter("eyeLOpen", eyeOpen);
@@ -535,11 +694,22 @@
       this.setAnyParameter("browRAngle", -emotion.curious * 0.34 + emotion.focus * 0.18);
       this.setAnyParameter("cheek", cheek);
       this.setAnyParameter("hairSway", hairSway * 0.26 + pointerX * 0.18);
-      this.setAnyParameter("dressSway", idleSway * 0.18 + breath * 0.12);
-      this.setAnyParameter("armL", idleSway * 0.12 + emotion.happy * 0.08 - emotion.sad * 0.06);
-      this.setAnyParameter("armR", -idleSway * 0.12 + emotion.happy * 0.08 - emotion.focus * 0.05);
-      this.setAnyParameter("handL", hairSway * 0.08 + emotion.happy * 0.06);
-      this.setAnyParameter("handR", -hairSway * 0.08 + emotion.curious * 0.1);
+      this.setAnyParameter("dressSway", idleSway * 0.18 + breath * 0.12 + gesture.dressSway);
+      this.setAnyParameter("shoulder", gesture.shoulder + emotion.happy * 0.08 - emotion.sad * 0.05);
+      this.setAnyParameter("leg", gesture.leg);
+      this.setAnyParameter("bustY", gesture.bustY + breath * 0.04);
+      if (!gesture.clip) {
+        this.setAnyParameter("armLA", gesture.armLA + idleSway * 0.1 + emotion.happy * 0.08 - emotion.sad * 0.06);
+        this.setAnyParameter("armRA", gesture.armRA - idleSway * 0.1 + emotion.happy * 0.08 - emotion.focus * 0.05);
+        this.setAnyParameter("armLB", gesture.armLB);
+        this.setAnyParameter("armRB", gesture.armRB);
+        this.setAnyParameter("handL", gesture.handL + hairSway * 0.08 + emotion.happy * 0.06);
+        this.setAnyParameter("handR", gesture.handR - hairSway * 0.08 + emotion.curious * 0.1);
+        this.setAnyParameter("handLB", gesture.handLB);
+        this.setAnyParameter("handRB", gesture.handRB);
+        this.setPartOpacity("PartArmA", gesture.partArmA);
+        this.setPartOpacity("PartArmB", gesture.partArmB);
+      }
     }
   }
 

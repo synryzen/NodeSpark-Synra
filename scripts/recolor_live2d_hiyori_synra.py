@@ -8,6 +8,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 TEXTURE_DIR = ROOT / "web" / "assets" / "live2d" / "synra" / "Hiyori.2048"
+SAMPLE_TEXTURE_DIR = Path("/tmp/CubismWebSamples/Samples/Resources/Hiyori/Hiyori.2048")
 
 
 def blend_channel(a: int, b: int, amount: float) -> int:
@@ -54,7 +55,9 @@ def is_clothing(pixel: tuple[int, int, int, int], x: int, y: int) -> bool:
     if a < 16:
         return False
     h, s, v = hsv(pixel)
-    cardigan = x < 760 and y < 1240 and 0.07 <= h <= 0.17 and 0.08 <= s <= 0.42 and v > 0.45
+    # Restrict the vest tint to the body garment atlas area. The previous broad
+    # color mask caught one skin limb strip, which showed up as blue on her leg.
+    cardigan = x < 650 and y < 1235 and 0.07 <= h <= 0.17 and 0.08 <= s <= 0.42 and v > 0.45
     skirt_or_sock = (y > 1020 or x < 760) and s <= 0.34 and 0.08 <= v <= 0.44
     return cardigan or skirt_or_sock
 
@@ -83,6 +86,9 @@ def recolor_texture_01(path: Path) -> None:
 
 
 def main() -> None:
+    if SAMPLE_TEXTURE_DIR.exists():
+        for texture in ("texture_00.png", "texture_01.png"):
+            (TEXTURE_DIR / texture).write_bytes((SAMPLE_TEXTURE_DIR / texture).read_bytes())
     recolor_texture_00(TEXTURE_DIR / "texture_00.png")
     recolor_texture_01(TEXTURE_DIR / "texture_01.png")
 
