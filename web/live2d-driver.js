@@ -1,7 +1,7 @@
 (() => {
   const LIVE2D_STATUS_URL = "/api/live2d";
   const DEFAULT_MODEL_PATH = "/assets/live2d/synra/synra.model3.json";
-  const ASSET_VERSION = "20260525-synra-cubism-emotion-1";
+  const ASSET_VERSION = "20260525-synra-cubism-buttons-1";
 
   const MOTION_PRIORITY = {
     idle: 1,
@@ -112,26 +112,7 @@
   };
 
   const IDLE_MOTIONS = ["idle_shift", "soft_nod", "hair_tuck", "curious"];
-  const CLIP_GESTURES = new Set([
-    "wave",
-    "explain",
-    "stretch",
-    "delighted",
-    "playful",
-    "curious",
-    "determined",
-    "soft_nod",
-    "hair_tuck",
-    "idle_shift",
-    "talk",
-    "listen",
-    "think",
-    "concerned",
-    "look_left",
-    "look_right",
-    "look_up",
-    "look_down"
-  ]);
+  const CLIP_GESTURES = new Set();
 
   let resolveReadyCheck;
   window.synraLive2DReadyCheck = new Promise((resolve) => {
@@ -615,7 +596,7 @@
       this.mode = state.mode || "idle";
       this.expression = state.expression || "soft_smile";
       this.emotionTarget = emotionProfileFor(state);
-      const nextKey = `${this.mode}:${this.expression}:${state.updated_at || state.speech_id || state.message || ""}`;
+      const nextKey = `${this.mode}:${this.expression}:${state.motion_nonce || state.updated_at || state.speech_id || state.message || ""}`;
       if (nextKey === this.lastStateKey) return;
       this.lastStateKey = nextKey;
       this.playExpression(expressionFor(state));

@@ -1266,9 +1266,12 @@ function speakWithBrowserVoice(speechText, speechId, state) {
 
 async function sendDemo(mode) {
   const demo = demoStates[mode] || { mode, expression: "bright", title: "Synra Control", style: mode };
+  const motionNonce = `manual-${mode}-${Date.now()}`;
   const payload = {
     mode: demo.mode,
     expression: demo.expression,
+    motion_nonce: motionNonce,
+    updated_at: motionNonce,
     message: demoText[mode] || "Synra is ready.",
     subtitle: "Manual control",
     card: {
@@ -1279,6 +1282,9 @@ async function sendDemo(mode) {
       progress: demo.progress ?? null
     }
   };
+  window.synraLive2D?.setState?.(payload);
+  window.synraAvatar3D?.setState?.(payload);
+  window.synraConcept2D?.setState?.(payload);
   await setRemoteState(payload);
 }
 
