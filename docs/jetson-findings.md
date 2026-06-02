@@ -65,7 +65,7 @@ Observed after the full Vulkan-from-ANGLE flag set:
 - Synra rendered again in kiosk mode.
 - Frame rate remained low, around 5-6 FPS on the tested snap Chromium path.
 - GPU telemetry did not show the level of `GR3D_FREQ` activity expected from a healthy hardware-rendered kiosk.
-- Render-scale tests at `0.42`, `0.35`, and `0.28` stayed around 6-7 FPS and made Synra visibly pixelated, so lowering render scale is not the right primary performance fix.
+- Render-scale tests at `0.62`, `0.42`, `0.35`, and `0.28` stayed around 6-7 FPS and made Synra visibly blurred/pixelated, so lowering render scale is rejected as a primary performance fix.
 
 ## Recommendation
 

@@ -1279,8 +1279,8 @@ function resolveEffectivePixelRatio(): number {
   const base = resolvePixelRatio();
   const renderScale = resolveRenderScaleOverride();
   if (renderScale !== null) return Math.min(base, renderScale);
-  if (state.performanceTier === "forced-low") return Math.min(base, performanceProfile.name === "jetson" ? 0.55 : 0.72);
-  if (state.performanceTier === "low") return Math.min(base, performanceProfile.name === "jetson" ? 0.68 : 0.82);
+  if (state.performanceTier === "forced-low") return Math.min(base, performanceProfile.name === "jetson" ? 1.0 : 0.72);
+  if (state.performanceTier === "low") return Math.min(base, performanceProfile.name === "jetson" ? 1.0 : 0.82);
   return base;
 }
 
@@ -1319,7 +1319,7 @@ function resolvePerformanceProfile(): { name: "desktop" | "jetson"; targetFps: n
     name: looksLikeJetson ? "jetson" : "desktop",
     targetFps,
     frameIntervalMs: 1000 / targetFps,
-    maxPixelRatio: looksLikeJetson ? 0.9 : 1.25
+    maxPixelRatio: looksLikeJetson ? 1.0 : 1.25
   };
 }
 

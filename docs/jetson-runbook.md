@@ -221,11 +221,12 @@ SYNRA_KIOSK_FPS=24 ~/synra-standalone/scripts/start-jetson-kiosk.sh
 SYNRA_KIOSK_FPS=30 ~/synra-standalone/scripts/start-jetson-kiosk.sh
 ```
 
-The kiosk render scale defaults to `0.62`, which keeps Synra visibly cleaner while still lowering the WebGL backing buffer. Lower scales are diagnostic only because they make the avatar visibly pixelated and did not meaningfully improve FPS on the tested snap Chromium path:
+The kiosk render scale defaults to `1.0` because lower scales made Synra visibly blurred/pixelated and did not meaningfully improve FPS on the tested snap Chromium path:
 
 ```bash
 SYNRA_KIOSK_RENDER_SCALE=0.28 ~/synra-standalone/scripts/start-jetson-kiosk.sh
 SYNRA_KIOSK_RENDER_SCALE=0.75 ~/synra-standalone/scripts/start-jetson-kiosk.sh
+SYNRA_KIOSK_RENDER_SCALE=1.0 ~/synra-standalone/scripts/start-jetson-kiosk.sh
 ```
 
 If Synra is running as an unattended kiosk and you want Chromium to automatically accept camera/mic prompts, opt in explicitly:
@@ -272,7 +273,7 @@ http://192.168.1.165:5191/?profile=jetson&mode=kiosk&fps=15&live=1&quality=low
 - `fps=15` lowers render pressure and improves frame pacing on Jetson.
 - `live=1` keeps the tuning controls collapsed unless the user opens them.
 - `quality=low` forces simpler effects and a lower render pixel ratio for weaker displays or thermal-heavy sessions.
-- `scale=0.62` gives the Jetson a direct render-buffer scale override; lower values trade too much sharpness and should only be used for diagnostics.
+- `scale=1.0` preserves Synra avatar clarity; lower values are diagnostic only because they make her look blurry.
 - Chromium is launched with GPU rasterization, scale factor 1, no extensions, no first-run UI, no scrollbars, and background throttling disabled.
 - The page reports voice capability in the right panel: `Speak + listen`, `Speak ready`, `Listen ready`, or `Text ready`.
 - Without `quality=low`, kiosk mode can automatically drop into the lower-cost tier if frame pacing remains below target for several seconds.
