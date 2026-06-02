@@ -201,9 +201,25 @@ dialog {
   top: 82px;
   right: 20px;
   width: min(300px, calc(100vw - 40px));
+  max-height: calc(100vh - 104px);
   display: grid;
   gap: 10px;
-  pointer-events: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  pointer-events: auto;
+  scrollbar-color: rgb(37 221 255 / 46%) transparent;
+  scrollbar-width: thin;
+}
+
+.right-rail::-webkit-scrollbar {
+  width: 7px;
+}
+
+.right-rail::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgb(37 221 255 / 42%);
 }
 
 .presence {
@@ -305,6 +321,7 @@ body[data-control-mode="live"] .performance-panel header {
 
 body[data-runtime-mode="kiosk"] .right-rail {
   width: min(292px, calc(100vw - 40px));
+  max-height: calc(100vh - 102px);
 }
 
 body[data-runtime-mode="kiosk"] .brand,
@@ -561,6 +578,7 @@ dialog::backdrop {
     right: auto;
     bottom: 92px;
     width: min(680px, calc(100vw - 32px));
+    max-height: min(42vh, 360px);
     transform: translateX(-50%);
   }
 

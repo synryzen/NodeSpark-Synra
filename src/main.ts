@@ -1167,6 +1167,7 @@ function updateTelemetry(now: number): void {
   const payload = {
     fps: state.fps,
     targetFps: performanceProfile.targetFps,
+    renderScale: resolveEffectivePixelRatio(),
     performanceTier: state.performanceTier,
     synraState: state.synra,
     avatarId: state.visual.avatarId,
@@ -1276,9 +1277,17 @@ function resolvePixelRatio(): number {
 
 function resolveEffectivePixelRatio(): number {
   const base = resolvePixelRatio();
+  const renderScale = resolveRenderScaleOverride();
+  if (renderScale !== null) return Math.min(base, renderScale);
   if (state.performanceTier === "forced-low") return Math.min(base, performanceProfile.name === "jetson" ? 0.55 : 0.72);
   if (state.performanceTier === "low") return Math.min(base, performanceProfile.name === "jetson" ? 0.68 : 0.82);
   return base;
+}
+
+function resolveRenderScaleOverride(): number | null {
+  const requestedScale = Number(new URLSearchParams(window.location.search).get("scale") || "");
+  if (!Number.isFinite(requestedScale)) return null;
+  return Math.min(Math.max(requestedScale, 0.25), 1.25);
 }
 
 function resolveInitialPerformanceTier(): "normal" | "low" | "forced-low" {

@@ -50,6 +50,9 @@ const kioskVulkanWebglPathIsConfigurable =
   kioskScript.includes("--enable-webgl2");
 const kioskDefaultsToLowQuality = kioskScript.includes("SYNRA_KIOSK_QUALITY:-low") && kioskScript.includes("quality=${KIOSK_QUALITY}");
 const jetsonForcedLowPixelRatioIsLean = mainScript.includes("forced-low") && mainScript.includes("0.55");
+const kioskRenderScaleIsConfigurable = kioskScript.includes("SYNRA_KIOSK_RENDER_SCALE:-0.62") && kioskScript.includes("scale=${KIOSK_RENDER_SCALE}");
+const runtimeRenderScaleIsConfigurable = mainScript.includes("renderScale") && mainScript.includes("resolveRenderScaleOverride");
+const rightRailCanScroll = mainScript.includes("right-rail") && readFileSync(join(root, "src/styles.css"), "utf8").includes("overflow-y: auto");
 const modelRoutesAreExplicit = serverScript.includes("model_name_for_intent") && serverScript.includes("SYNRA_VISION_MODEL_NAME") && mainScript.includes("classifySynraRequest");
 const result = {
   ok:
@@ -71,6 +74,9 @@ const result = {
     kioskVulkanWebglPathIsConfigurable &&
     kioskDefaultsToLowQuality &&
     jetsonForcedLowPixelRatioIsLean &&
+    kioskRenderScaleIsConfigurable &&
+    runtimeRenderScaleIsConfigurable &&
+    rightRailCanScroll &&
     modelRoutesAreExplicit,
   target: "jetson-first-lean-runtime",
   avatarMb,
@@ -98,6 +104,9 @@ const result = {
     "kiosk Chromium Vulkan WebGL path is configurable",
     "Jetson kiosk defaults to low-cost visual quality",
     "forced-low mode uses a lean Jetson pixel ratio",
+    "Jetson kiosk render scale is configurable",
+    "runtime honors render scale overrides",
+    "right-side control rail scrolls when controls overflow",
     "model routes are explicit for conversation, vision, tools, and NodeSpark",
     "model calls fall back to local Synra path"
   ]

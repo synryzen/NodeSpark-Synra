@@ -278,7 +278,7 @@ def sanitize_telemetry(body: dict[str, Any]) -> dict[str, Any]:
         value = body.get(key)
         if value is not None:
             telemetry[key] = str(value)[:80]
-    for key in {"fps", "targetFps", "messageCount"}:
+    for key in {"fps", "targetFps", "renderScale", "messageCount"}:
         value = body.get(key)
         if isinstance(value, (int, float)):
             telemetry[key] = round(float(value), 2)
