@@ -1276,7 +1276,9 @@ function resolvePixelRatio(): number {
 
 function resolveEffectivePixelRatio(): number {
   const base = resolvePixelRatio();
-  return state.performanceTier === "low" || state.performanceTier === "forced-low" ? Math.min(base, 0.82) : base;
+  if (state.performanceTier === "forced-low") return Math.min(base, performanceProfile.name === "jetson" ? 0.55 : 0.72);
+  if (state.performanceTier === "low") return Math.min(base, performanceProfile.name === "jetson" ? 0.68 : 0.82);
+  return base;
 }
 
 function resolveInitialPerformanceTier(): "normal" | "low" | "forced-low" {
@@ -1303,12 +1305,12 @@ function resolvePerformanceProfile(): { name: "desktop" | "jetson"; targetFps: n
   const requestedProfile = params.get("profile");
   const looksLikeJetson = requestedProfile === "jetson" || /aarch64|jetson|linux arm/i.test(navigator.userAgent);
   const requestedFps = Number(params.get("fps") || "");
-  const targetFps = Number.isFinite(requestedFps) && requestedFps >= 15 && requestedFps <= 60 ? requestedFps : runtimeMode === "kiosk" ? 24 : looksLikeJetson ? 30 : 60;
+  const targetFps = Number.isFinite(requestedFps) && requestedFps >= 15 && requestedFps <= 60 ? requestedFps : runtimeMode === "kiosk" ? 15 : looksLikeJetson ? 24 : 60;
   return {
     name: looksLikeJetson ? "jetson" : "desktop",
     targetFps,
     frameIntervalMs: 1000 / targetFps,
-    maxPixelRatio: looksLikeJetson ? 1 : 1.25
+    maxPixelRatio: looksLikeJetson ? 0.9 : 1.25
   };
 }
 

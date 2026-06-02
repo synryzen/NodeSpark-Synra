@@ -211,12 +211,13 @@ The deployed autostart file is:
 It launches:
 
 ```text
-http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=24&live=1
+http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=15&live=1&quality=low
 ```
 
-Kiosk mode intentionally targets 24 FPS by default. The previous 30 FPS target was usable but could sit below target on the Jetson, which makes motion feel uneven and wastes render budget. Override it only when the device is clearly stable:
+Kiosk mode intentionally targets 15 FPS by default on Jetson and starts in low-cost visual quality. The earlier 24/30 FPS targets could sit below target on the Jetson, which made motion uneven and wasted render budget. Override the target only when the device is clearly stable:
 
 ```bash
+SYNRA_KIOSK_FPS=24 ~/synra-standalone/scripts/start-jetson-kiosk.sh
 SYNRA_KIOSK_FPS=30 ~/synra-standalone/scripts/start-jetson-kiosk.sh
 ```
 
@@ -241,9 +242,10 @@ SYNRA_KIOSK_GL_MODE=desktop ~/synra-standalone/scripts/start-jetson-kiosk.sh
 SYNRA_KIOSK_GL_MODE=egl ~/synra-standalone/scripts/start-jetson-kiosk.sh
 SYNRA_KIOSK_GL_MODE=swiftshader ~/synra-standalone/scripts/start-jetson-kiosk.sh
 SYNRA_KIOSK_ANGLE_BACKEND=vulkan ~/synra-standalone/scripts/start-jetson-kiosk.sh
+SYNRA_KIOSK_ANGLE_BACKEND=none ~/synra-standalone/scripts/start-jetson-kiosk.sh
 ```
 
-`swiftshader` is CPU-rendered and should only be a diagnostic fallback. A good Jetson kiosk path should show WebGL available and some GPU activity while Synra is visible.
+`SYNRA_KIOSK_ANGLE_BACKEND` defaults to `vulkan` because the default snap Chromium path did not expose WebGL for Synra. The Vulkan setting also enables Chromium's Vulkan-from-ANGLE WebGL path. On the current Jetson, this made WebGL available in snap Chromium, but performance remained low. Use `SYNRA_KIOSK_ANGLE_BACKEND=none` only to compare against Chromium's default path. `swiftshader` is CPU-rendered and should only be a diagnostic fallback. A good Jetson kiosk path should show WebGL available and some GPU activity while Synra is visible.
 
 The app still supports manual testing at:
 
@@ -254,13 +256,13 @@ http://192.168.1.165:5191/?profile=jetson
 If the Jetson display still feels slow, force the lowest-cost visual tier:
 
 ```text
-http://192.168.1.165:5191/?profile=jetson&mode=kiosk&fps=24&live=1&quality=low
+http://192.168.1.165:5191/?profile=jetson&mode=kiosk&fps=15&live=1&quality=low
 ```
 
 ## Kiosk Performance Notes
 
 - `mode=kiosk` forces Live Mode controls on startup.
-- `fps=24` lowers render pressure and improves frame pacing on Jetson.
+- `fps=15` lowers render pressure and improves frame pacing on Jetson.
 - `live=1` keeps the tuning controls collapsed unless the user opens them.
 - `quality=low` forces simpler effects and a lower render pixel ratio for weaker displays or thermal-heavy sessions.
 - Chromium is launched with GPU rasterization, scale factor 1, no extensions, no first-run UI, no scrollbars, and background throttling disabled.

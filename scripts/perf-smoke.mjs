@@ -43,6 +43,13 @@ const kioskMediaGrantIsOptIn = kioskScript.includes("SYNRA_KIOSK_AUTO_GRANT_MEDI
 const kioskRemoteDebugIsOptIn = kioskScript.includes("SYNRA_KIOSK_REMOTE_DEBUG") && kioskScript.includes("--remote-debugging-port");
 const kioskGlModeIsConfigurable = kioskScript.includes("SYNRA_KIOSK_GL_MODE") && kioskScript.includes("--use-gl");
 const kioskAngleBackendIsConfigurable = kioskScript.includes("SYNRA_KIOSK_ANGLE_BACKEND") && kioskScript.includes("--use-angle");
+const kioskDefaultsToVulkanAngle = kioskScript.includes("SYNRA_KIOSK_ANGLE_BACKEND:-vulkan");
+const kioskVulkanWebglPathIsConfigurable =
+  kioskScript.includes("DefaultANGLEVulkan") &&
+  kioskScript.includes("VulkanFromANGLE") &&
+  kioskScript.includes("--enable-webgl2");
+const kioskDefaultsToLowQuality = kioskScript.includes("SYNRA_KIOSK_QUALITY:-low") && kioskScript.includes("quality=${KIOSK_QUALITY}");
+const jetsonForcedLowPixelRatioIsLean = mainScript.includes("forced-low") && mainScript.includes("0.55");
 const modelRoutesAreExplicit = serverScript.includes("model_name_for_intent") && serverScript.includes("SYNRA_VISION_MODEL_NAME") && mainScript.includes("classifySynraRequest");
 const result = {
   ok:
@@ -60,6 +67,10 @@ const result = {
     kioskRemoteDebugIsOptIn &&
     kioskGlModeIsConfigurable &&
     kioskAngleBackendIsConfigurable &&
+    kioskDefaultsToVulkanAngle &&
+    kioskVulkanWebglPathIsConfigurable &&
+    kioskDefaultsToLowQuality &&
+    jetsonForcedLowPixelRatioIsLean &&
     modelRoutesAreExplicit,
   target: "jetson-first-lean-runtime",
   avatarMb,
@@ -83,6 +94,10 @@ const result = {
     "kiosk remote debugging is opt-in",
     "kiosk Chromium GL mode is configurable",
     "kiosk Chromium ANGLE backend is configurable",
+    "Jetson kiosk defaults to Vulkan ANGLE",
+    "kiosk Chromium Vulkan WebGL path is configurable",
+    "Jetson kiosk defaults to low-cost visual quality",
+    "forced-low mode uses a lean Jetson pixel ratio",
     "model routes are explicit for conversation, vision, tools, and NodeSpark",
     "model calls fall back to local Synra path"
   ]

@@ -50,20 +50,27 @@ Tested overrides:
 - `SYNRA_KIOSK_GL_MODE=desktop`: not allowed by snap Chromium.
 - `SYNRA_KIOSK_GL_MODE=egl`: not allowed by snap Chromium.
 - `SYNRA_KIOSK_GL_MODE=swiftshader`: not allowed by snap Chromium.
-- `SYNRA_KIOSK_ANGLE_BACKEND=vulkan`: starts a GPU process, but WebGL still reports unavailable.
+- `SYNRA_KIOSK_ANGLE_BACKEND=vulkan` with `Vulkan`, `DefaultANGLEVulkan`, `VulkanFromANGLE`, `--enable-webgl`, and `--enable-webgl2`: WebGL reports available in snap Chromium.
 
-Observed Vulkan errors:
+Observed Vulkan errors before the full Vulkan-from-ANGLE flag set:
 
 ```text
 No suitable EGL configs found for initialization.
 ContextResult::kFatalFailure: ES3 is blocklisted/disabled/unsupported by driver.
 ```
 
+Observed after the full Vulkan-from-ANGLE flag set:
+
+- WebGL became available.
+- Synra rendered again in kiosk mode.
+- Frame rate remained low, around 5-6 FPS on the tested snap Chromium path.
+- GPU telemetry did not show the level of `GR3D_FREQ` activity expected from a healthy hardware-rendered kiosk.
+
 ## Recommendation
 
-The app now fails gracefully and reports `webgl: unavailable`, but full Synra avatar rendering on this Jetson requires fixing the browser/GPU stack. The likely next hardware/runtime work is:
+The app now fails gracefully when WebGL is unavailable, and the kiosk launcher has a repeatable Vulkan-from-ANGLE path that can make WebGL available. Full Synra avatar rendering on this Jetson still requires improving the browser/GPU stack or using a lighter dedicated runtime. The likely next hardware/runtime work is:
 
-1. Install or test a non-snap Chromium/Chrome build with working WebGL2 on Jetson.
+1. Install or test a non-snap Chromium/Electron/runtime build with working WebGL2 on Jetson.
 2. Confirm NVIDIA userspace graphics packages and EGL/Vulkan support.
 3. Confirm WebGL2 in the browser before expecting Three.js VRM rendering.
 4. Once WebGL reports available, rerun `kiosk-performance-check.sh` and watch `GR3D_FREQ`.

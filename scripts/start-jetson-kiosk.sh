@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KIOSK_FPS="${SYNRA_KIOSK_FPS:-24}"
-URL="${SYNRA_STANDALONE_URL:-http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=${KIOSK_FPS}&live=1}"
+KIOSK_FPS="${SYNRA_KIOSK_FPS:-15}"
+KIOSK_QUALITY="${SYNRA_KIOSK_QUALITY:-low}"
+URL="${SYNRA_STANDALONE_URL:-http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=${KIOSK_FPS}&live=1&quality=${KIOSK_QUALITY}}"
 CHROMIUM_BIN="${CHROMIUM_BIN:-}"
+ANGLE_BACKEND="${SYNRA_KIOSK_ANGLE_BACKEND:-vulkan}"
 EXTRA_CHROMIUM_FLAGS=()
 
 if [ "${SYNRA_KIOSK_AUTO_GRANT_MEDIA:-false}" = "true" ]; then
@@ -18,8 +20,16 @@ if [ -n "${SYNRA_KIOSK_GL_MODE:-}" ]; then
   EXTRA_CHROMIUM_FLAGS+=(--use-gl="${SYNRA_KIOSK_GL_MODE}")
 fi
 
-if [ -n "${SYNRA_KIOSK_ANGLE_BACKEND:-}" ]; then
-  EXTRA_CHROMIUM_FLAGS+=(--use-angle="${SYNRA_KIOSK_ANGLE_BACKEND}")
+if [ -n "${ANGLE_BACKEND}" ] && [ "${ANGLE_BACKEND}" != "none" ]; then
+  EXTRA_CHROMIUM_FLAGS+=(--use-angle="${ANGLE_BACKEND}")
+  if [ "${ANGLE_BACKEND}" = "vulkan" ]; then
+    EXTRA_CHROMIUM_FLAGS+=(
+      --enable-features=Vulkan,DefaultANGLEVulkan,VulkanFromANGLE
+      --disable-gpu-driver-bug-workarounds
+      --enable-webgl
+      --enable-webgl2
+    )
+  fi
 fi
 
 if [ -n "${SYNRA_KIOSK_OZONE_PLATFORM:-}" ]; then
