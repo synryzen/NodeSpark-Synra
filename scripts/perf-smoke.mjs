@@ -13,6 +13,8 @@ const required = [
   "public/backgrounds/synra-observatory.png",
   "public/backgrounds/synra-orbit-lounge.png",
   "public/backgrounds/synra-quantum-workshop.png",
+  "scripts/jetson-diagnostics.sh",
+  "scripts/kiosk-performance-check.sh",
   "src/main.ts",
   "src/model-client.ts"
 ];
@@ -36,7 +38,12 @@ const smartHomeBridgeIsSafe = serverScript.includes("/api/tools/smart-home") && 
 const smartHomeRequiresConfirmation = mainScript.includes("pendingAction") && mainScript.includes("Say confirm to run it") && mainScript.includes("cancel");
 const visionIsPermissionOnly = mainScript.includes("visionStatus") && mainScript.includes("ensureCameraReady") && mainScript.includes("I am not storing frames");
 const visionDiagnosticsAreLocal = serverScript.includes("/api/vision/public") && serverScript.includes("SYNRA_CAMERA_DEVICE") && serverScript.includes("Device-path diagnostics only");
+const telemetryIsAvailable = serverScript.includes("/api/telemetry/public") && mainScript.includes("updateTelemetry") && mainScript.includes("keepalive");
 const kioskMediaGrantIsOptIn = kioskScript.includes("SYNRA_KIOSK_AUTO_GRANT_MEDIA") && kioskScript.includes("--use-fake-ui-for-media-stream");
+const kioskRemoteDebugIsOptIn = kioskScript.includes("SYNRA_KIOSK_REMOTE_DEBUG") && kioskScript.includes("--remote-debugging-port");
+const kioskGlModeIsConfigurable = kioskScript.includes("SYNRA_KIOSK_GL_MODE") && kioskScript.includes("--use-gl");
+const kioskAngleBackendIsConfigurable = kioskScript.includes("SYNRA_KIOSK_ANGLE_BACKEND") && kioskScript.includes("--use-angle");
+const modelRoutesAreExplicit = serverScript.includes("model_name_for_intent") && serverScript.includes("SYNRA_VISION_MODEL_NAME") && mainScript.includes("classifySynraRequest");
 const result = {
   ok:
     avatarMb < 40 &&
@@ -48,7 +55,12 @@ const result = {
     smartHomeRequiresConfirmation &&
     visionIsPermissionOnly &&
     visionDiagnosticsAreLocal &&
-    kioskMediaGrantIsOptIn,
+    telemetryIsAvailable &&
+    kioskMediaGrantIsOptIn &&
+    kioskRemoteDebugIsOptIn &&
+    kioskGlModeIsConfigurable &&
+    kioskAngleBackendIsConfigurable &&
+    modelRoutesAreExplicit,
   target: "jetson-first-lean-runtime",
   avatarMb,
   avatarCount,
@@ -66,7 +78,12 @@ const result = {
     "smart-home actions require confirmation when configured",
     "camera path is permission-only until vision skill is configured",
     "Jetson camera diagnostics report device paths only",
+    "kiosk telemetry reports local FPS without secrets",
     "kiosk camera/mic auto-grant is opt-in",
+    "kiosk remote debugging is opt-in",
+    "kiosk Chromium GL mode is configurable",
+    "kiosk Chromium ANGLE backend is configurable",
+    "model routes are explicit for conversation, vision, tools, and NodeSpark",
     "model calls fall back to local Synra path"
   ]
 };

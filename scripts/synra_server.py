@@ -15,6 +15,7 @@ from typing import Any
 APP_DIR = Path(__file__).resolve().parents[1]
 DIST_DIR = APP_DIR / "dist"
 STARTED_AT = time.time()
+LAST_TELEMETRY: dict[str, Any] = {}
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -48,6 +49,7 @@ class SynraHandler(SimpleHTTPRequestHandler):
                     "uptimeSeconds": round(time.time() - STARTED_AT, 1),
                     "modelConfigured": bool(model_endpoint() and model_name()),
                     "model": public_model_name(),
+                    "modelRoutes": public_model_routes(),
                     "localTools": ["health", "model-status", "smart-home", "vision-status"],
                     "smartHomeConfigured": smart_home_configured(),
                     "cameraDevices": vision["cameraDevices"],
@@ -71,6 +73,9 @@ class SynraHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/vision/public"):
             self.send_json(200, vision_public_status())
             return
+        if self.path.startswith("/api/telemetry/public"):
+            self.send_json(200, {"ok": True, "telemetry": LAST_TELEMETRY})
+            return
         super().do_GET()
 
     def do_POST(self) -> None:
@@ -79,6 +84,9 @@ class SynraHandler(SimpleHTTPRequestHandler):
             return
         if self.path.startswith("/api/tools/smart-home"):
             self.handle_smart_home()
+            return
+        if self.path.startswith("/api/telemetry"):
+            self.handle_telemetry()
             return
         self.send_json(404, {"ok": False, "error": "Unknown Synra API route."})
 
@@ -93,8 +101,10 @@ class SynraHandler(SimpleHTTPRequestHandler):
             body = self.read_json_body()
             messages = body.get("messages", [])
             memory = body.get("memory", {})
+            intent = normalize_intent(body.get("intent"))
+            routed_model = model_name_for_intent(intent)
             payload = {
-                "model": model,
+                "model": routed_model,
                 "temperature": float(os.environ.get("SYNRA_MODEL_TEMPERATURE", "0.7")),
                 "messages": [
                     {
@@ -109,7 +119,7 @@ class SynraHandler(SimpleHTTPRequestHandler):
             if not text:
                 self.send_json(200, {"ok": False, "error": "Model returned no assistant text."})
                 return
-            self.send_json(200, {"ok": True, "text": text, "model": public_model_name()})
+            self.send_json(200, {"ok": True, "text": text, "model": public_model_label_for_intent(intent), "intent": intent})
         except urllib.error.HTTPError as error:
             self.send_json(200, {"ok": False, "error": f"Model endpoint returned HTTP {error.code}."})
         except urllib.error.URLError as error:
@@ -147,6 +157,15 @@ class SynraHandler(SimpleHTTPRequestHandler):
         except Exception as error:
             self.send_json(200, {"ok": False, "configured": smart_home_configured(), "error": str(error)})
 
+    def handle_telemetry(self) -> None:
+        global LAST_TELEMETRY
+        try:
+            body = self.read_json_body()
+            LAST_TELEMETRY = sanitize_telemetry(body)
+            self.send_json(200, {"ok": True})
+        except Exception as error:
+            self.send_json(200, {"ok": False, "error": str(error)})
+
     def read_json_body(self) -> dict[str, Any]:
         length = int(self.headers.get("content-length", "0"))
         if length <= 0:
@@ -173,6 +192,42 @@ def model_name() -> str:
 
 def public_model_name() -> str:
     return os.environ.get("SYNRA_MODEL_LABEL", model_name() or "Not configured").strip()
+
+
+def normalize_intent(value: Any) -> str:
+    intent = str(value or "conversation").strip().lower()
+    if intent not in {"conversation", "vision", "tool", "memory", "nodespark"}:
+        return "conversation"
+    return intent
+
+
+def model_name_for_intent(intent: str) -> str:
+    if intent == "vision":
+        return os.environ.get("SYNRA_VISION_MODEL_NAME", model_name()).strip()
+    if intent == "tool":
+        return os.environ.get("SYNRA_TOOL_MODEL_NAME", model_name()).strip()
+    if intent == "nodespark":
+        return os.environ.get("SYNRA_NODESPARK_MODEL_NAME", model_name()).strip()
+    return os.environ.get("SYNRA_FAST_MODEL_NAME", model_name()).strip() if intent == "conversation" else model_name()
+
+
+def public_model_label_for_intent(intent: str) -> str:
+    if intent == "vision":
+        return os.environ.get("SYNRA_VISION_MODEL_LABEL", model_name_for_intent(intent)).strip()
+    if intent == "tool":
+        return os.environ.get("SYNRA_TOOL_MODEL_LABEL", model_name_for_intent(intent)).strip()
+    if intent == "nodespark":
+        return os.environ.get("SYNRA_NODESPARK_MODEL_LABEL", model_name_for_intent(intent)).strip()
+    return os.environ.get("SYNRA_FAST_MODEL_LABEL", public_model_name()).strip()
+
+
+def public_model_routes() -> dict[str, str]:
+    return {
+        "conversation": public_model_label_for_intent("conversation"),
+        "vision": public_model_label_for_intent("vision"),
+        "tool": public_model_label_for_intent("tool"),
+        "nodespark": public_model_label_for_intent("nodespark"),
+    }
 
 
 def smart_home_configured() -> bool:
@@ -214,6 +269,20 @@ def vision_public_status() -> dict[str, Any]:
         "mediaDeviceCount": media_count,
         "note": "Device-path diagnostics only. Synra does not capture or store camera frames from this endpoint.",
     }
+
+
+def sanitize_telemetry(body: dict[str, Any]) -> dict[str, Any]:
+    allowed_strings = {"runtimeMode", "performanceTier", "synraState", "avatarId", "activeMotion", "route", "webgl"}
+    telemetry: dict[str, Any] = {"receivedAt": time.time()}
+    for key in allowed_strings:
+        value = body.get(key)
+        if value is not None:
+            telemetry[key] = str(value)[:80]
+    for key in {"fps", "targetFps", "messageCount"}:
+        value = body.get(key)
+        if isinstance(value, (int, float)):
+            telemetry[key] = round(float(value), 2)
+    return telemetry
 
 
 def call_home_assistant_light(action: str, entity_id: str) -> Any:

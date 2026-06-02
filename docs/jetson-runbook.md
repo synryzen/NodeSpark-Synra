@@ -49,6 +49,19 @@ SYNRA_MODEL_API_KEY=
 SYNRA_MODEL_TIMEOUT_SECONDS=45
 ```
 
+Optional route-specific models:
+
+```bash
+SYNRA_FAST_MODEL_NAME=qwen2.5:1.5b
+SYNRA_FAST_MODEL_LABEL=qwen2.5:1.5b
+SYNRA_VISION_MODEL_NAME=qwen2.5vl:3b
+SYNRA_VISION_MODEL_LABEL=qwen2.5vl:3b
+SYNRA_TOOL_MODEL_NAME=qwen2.5:1.5b
+SYNRA_NODESPARK_MODEL_NAME=qwen2.5:1.5b
+```
+
+Synra's direct commands bypass the model for speed. General conversation, future vision requests, smart-home/tool explanations, and future NodeSpark skill requests now have distinct routing labels so per-route models can be swapped without changing the app.
+
 ## Smart Home Configuration
 
 Synra has a safe smart-home bridge for Home Assistant lights. It only runs when explicitly configured in:
@@ -84,6 +97,8 @@ status
 help
 camera status
 enable camera
+voice status
+microphone status
 remember that I prefer concise answers
 clear memories
 switch to quantum workshop background
@@ -134,6 +149,18 @@ Health check:
 
 ```bash
 curl http://127.0.0.1:5191/api/health
+```
+
+Full Jetson diagnostic report:
+
+```bash
+~/synra-standalone/scripts/jetson-diagnostics.sh
+```
+
+Kiosk performance report:
+
+```bash
+~/synra-standalone/scripts/kiosk-performance-check.sh
 ```
 
 ## Deploy From Mac
@@ -200,6 +227,23 @@ SYNRA_KIOSK_AUTO_GRANT_MEDIA=true ~/synra-standalone/scripts/start-jetson-kiosk.
 ```
 
 Leave this off for normal use so browser media permissions remain visible to the user.
+
+For local Chrome inspection and performance probes:
+
+```bash
+SYNRA_KIOSK_REMOTE_DEBUG=true ~/synra-standalone/scripts/start-jetson-kiosk.sh
+```
+
+If Chromium logs EGL or GPU initialization failures, test explicit GL modes:
+
+```bash
+SYNRA_KIOSK_GL_MODE=desktop ~/synra-standalone/scripts/start-jetson-kiosk.sh
+SYNRA_KIOSK_GL_MODE=egl ~/synra-standalone/scripts/start-jetson-kiosk.sh
+SYNRA_KIOSK_GL_MODE=swiftshader ~/synra-standalone/scripts/start-jetson-kiosk.sh
+SYNRA_KIOSK_ANGLE_BACKEND=vulkan ~/synra-standalone/scripts/start-jetson-kiosk.sh
+```
+
+`swiftshader` is CPU-rendered and should only be a diagnostic fallback. A good Jetson kiosk path should show WebGL available and some GPU activity while Synra is visible.
 
 The app still supports manual testing at:
 

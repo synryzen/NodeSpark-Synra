@@ -10,6 +10,22 @@ if [ "${SYNRA_KIOSK_AUTO_GRANT_MEDIA:-false}" = "true" ]; then
   EXTRA_CHROMIUM_FLAGS+=(--use-fake-ui-for-media-stream)
 fi
 
+if [ "${SYNRA_KIOSK_REMOTE_DEBUG:-false}" = "true" ]; then
+  EXTRA_CHROMIUM_FLAGS+=(--remote-debugging-address=127.0.0.1 --remote-debugging-port="${SYNRA_KIOSK_DEBUG_PORT:-9222}")
+fi
+
+if [ -n "${SYNRA_KIOSK_GL_MODE:-}" ]; then
+  EXTRA_CHROMIUM_FLAGS+=(--use-gl="${SYNRA_KIOSK_GL_MODE}")
+fi
+
+if [ -n "${SYNRA_KIOSK_ANGLE_BACKEND:-}" ]; then
+  EXTRA_CHROMIUM_FLAGS+=(--use-angle="${SYNRA_KIOSK_ANGLE_BACKEND}")
+fi
+
+if [ -n "${SYNRA_KIOSK_OZONE_PLATFORM:-}" ]; then
+  EXTRA_CHROMIUM_FLAGS+=(--ozone-platform="${SYNRA_KIOSK_OZONE_PLATFORM}")
+fi
+
 if [ -z "$CHROMIUM_BIN" ]; then
   for candidate in chromium-browser chromium google-chrome /snap/bin/chromium; do
     if command -v "$candidate" >/dev/null 2>&1; then

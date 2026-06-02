@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM } from "@pixiv/three-vrm";
 import { DEFAULT_SYNRA_AVATAR_ID, SYNRA_AVATARS, getSynraAvatar, isSynraAvatarId, type SynraAvatarId } from "./avatar-catalog";
-import { askModel, localSynraReply } from "./model-client";
+import { askModel, classifySynraRequest, localSynraReply } from "./model-client";
 import { SynraMotionPlayer, type SynraMotionClipSpec } from "./motion-player";
 import { loadMemory, loadModelSettings, loadVisualSettings, saveMemory, saveModelSettings, saveVisualSettings } from "./storage";
 import type { ModelSettings, SynraMessage, SynraState } from "./types";
@@ -80,10 +80,18 @@ const STATE_MOTION_VARIETY: Record<SynraState, string[]> = {
   offline: ["error_calm", "concerned"]
 };
 
-const IDLE_LIFE_GESTURES = ["look_camera", "look_screen", "confirm", "confused_tilt"];
+const IDLE_LIFE_GESTURES = ["look_camera", "look_screen", "confirm", "confused_tilt", "wave", "attentive", "present"];
+const PRESENCE_NUDGES = [
+  "I am here.",
+  "Ready when you are.",
+  "Listening for the next move.",
+  "Systems are calm.",
+  "I am standing by."
+];
 
 const runtimeMode = resolveRuntimeMode();
 const initialPerformanceTier = resolveInitialPerformanceTier();
+const telemetryEnabled = runtimeMode === "kiosk" || new URLSearchParams(window.location.search).get("telemetry") === "1";
 
 const state = {
   synra: "idle" as SynraState,
@@ -111,8 +119,12 @@ const state = {
   lowFpsStartedAt: 0,
   stableFpsStartedAt: 0,
   lastLifeMotionAt: performance.now(),
+  nextLifeMotionAt: performance.now() + randomBetween(18000, 32000),
+  lastPresenceNudgeAt: performance.now(),
+  lastTelemetryAt: 0,
   speechFallbackTimer: 0,
   pendingAction: null as PendingAction | null,
+  lastRouteLabel: "startup",
   lastAutoMotionByState: {} as Partial<Record<SynraState, string>>
 };
 const performanceProfile = resolvePerformanceProfile();
@@ -129,7 +141,9 @@ Object.assign(window, {
     visionStatus: state.visionStatus,
     serverVisionStatus: state.serverVisionStatus,
     serverCameraDeviceCount: state.serverCameraDeviceCount,
+    lastRouteLabel: state.lastRouteLabel,
     performanceTier: state.performanceTier,
+    webgl: renderer ? "available" : "unavailable",
     pendingAction: state.pendingAction,
 	    messageCount: state.messages.length,
 	    lastMessage: state.messages.at(-1) ?? null,
@@ -253,14 +267,12 @@ const modelInput = must<HTMLElement, HTMLInputElement>("modelInput");
 const apiKeyInput = must<HTMLElement, HTMLInputElement>("apiKeyInput");
 const saveSettingsButton = must<HTMLElement, HTMLButtonElement>("saveSettingsButton");
 
-const renderer = new THREE.WebGLRenderer({
-  canvas,
-  alpha: true,
-  antialias: false,
-  powerPreference: "high-performance"
-});
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.setPixelRatio(resolveEffectivePixelRatio());
+const renderer = createRenderer();
+if (!renderer) {
+  canvas.hidden = true;
+  document.body.dataset.webgl = "unavailable";
+  fpsEl.textContent = "3D unavailable";
+}
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 50);
@@ -540,6 +552,8 @@ function normalizeAvatarStagePlacement(root: THREE.Object3D): void {
 
 async function handleUserText(text: string): Promise<void> {
   pushMessage("user", text);
+  const requestRoute = classifySynraRequest(text);
+  state.lastRouteLabel = requestRoute.label;
   const localResult = await tryHandleLocalCommand(text);
   if (localResult) {
     pushMessage("synra", localResult.text);
@@ -550,7 +564,7 @@ async function handleUserText(text: string): Promise<void> {
   setSynraState("thinking", "Thinking.");
   let reply = "";
   try {
-    reply = await askModel(state.settings, state.memory, state.messages);
+    reply = await askModel(state.settings, state.memory, state.messages, requestRoute.intent);
   } catch (error) {
     console.info("Synra local fallback", error);
     reply = localSynraReply(text);
@@ -576,7 +590,7 @@ async function tryHandleLocalCommand(text: string): Promise<LocalCommandResult |
 
   if (/^(synra[, ]+)?(help|commands|what can you do|what can i say)\??$/.test(normalized)) {
     return {
-      text: "You can ask for status, camera status, switch backgrounds, switch avatars, show or hide controls, set low or normal performance mode, remember a fact, clear memories, or control configured lights with confirmation.",
+      text: "You can ask for status, voice status, camera status, switch backgrounds, switch avatars, show or hide controls, set low or normal performance mode, remember a fact, clear memories, or control configured lights with confirmation.",
       motion: "present"
     };
   }
@@ -587,6 +601,10 @@ async function tryHandleLocalCommand(text: string): Promise<LocalCommandResult |
 
   if (/\b(camera|vision|see|eyes)\b/.test(normalized) && /\b(status|check|available|permission|can you|enable|turn on)\b/.test(normalized)) {
     return cameraStatusCommand(/\b(enable|turn on|open|allow)\b/.test(normalized));
+  }
+
+  if (/\b(voice|audio|microphone|mic|speak|listen)\b/.test(normalized) && /\b(status|check|available|permission|can you|enable|turn on)\b/.test(normalized)) {
+    return voiceStatusCommand(/\b(microphone|mic|listen|enable|turn on|open|allow)\b/.test(normalized));
   }
 
   if (/\b(clear|forget|delete)\b.*\b(memories|memory|remembered facts)\b/.test(normalized)) {
@@ -707,6 +725,18 @@ async function cameraStatusCommand(requestAccess: boolean): Promise<LocalCommand
   }
   await refreshVisionStatus();
   return { text: `Vision status: ${combinedVisionStatus()}. Say enable camera if you want me to request browser access.`, motion: "look_camera" };
+}
+
+async function voiceStatusCommand(requestAccess: boolean): Promise<LocalCommandResult> {
+  refreshVoiceStatus();
+  if (!requestAccess) {
+    return { text: `Voice status: ${state.voiceStatus}. Say listen or press the microphone button when you want me to request microphone access.`, motion: "present" };
+  }
+  const micReady = await ensureMicrophoneReady();
+  refreshVoiceStatus();
+  return micReady
+    ? { text: `Microphone access is available. Voice status: ${state.voiceStatus}.`, motion: "confirm" }
+    : { text: "Microphone access is not available right now. Check Chromium media permissions and the Jetson audio input.", motion: "concerned" };
 }
 
 async function ensureCameraReady(): Promise<boolean> {
@@ -1003,9 +1033,28 @@ function render(now: number): void {
   state.lastRenderAt = now;
   const delta = state.clock.getDelta();
   updatePerformance(now);
+  updateTelemetry(now);
+  if (!renderer) return;
   updateAvatar(delta, now);
   updateIdleLife(now);
   renderer.render(scene, camera);
+}
+
+function createRenderer(): THREE.WebGLRenderer | null {
+  try {
+    const webglRenderer = new THREE.WebGLRenderer({
+      canvas,
+      alpha: true,
+      antialias: false,
+      powerPreference: "high-performance"
+    });
+    webglRenderer.outputColorSpace = THREE.SRGBColorSpace;
+    webglRenderer.setPixelRatio(resolveEffectivePixelRatio());
+    return webglRenderer;
+  } catch (error) {
+    console.warn("Synra WebGL renderer unavailable", error);
+    return null;
+  }
 }
 
 function updateAvatar(delta: number, now: number): void {
@@ -1112,13 +1161,44 @@ function updatePerformanceTier(avgFps: number, now: number): void {
   }
 }
 
+function updateTelemetry(now: number): void {
+  if (!telemetryEnabled || now - state.lastTelemetryAt < 5000) return;
+  state.lastTelemetryAt = now;
+  const payload = {
+    fps: state.fps,
+    targetFps: performanceProfile.targetFps,
+    performanceTier: state.performanceTier,
+    synraState: state.synra,
+    avatarId: state.visual.avatarId,
+    activeMotion: state.motionPlayer.snapshot.activeClipId,
+    webgl: renderer ? "available" : "unavailable",
+    runtimeMode,
+    route: state.lastRouteLabel,
+    messageCount: state.messages.length
+  };
+  fetch("/api/telemetry", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    keepalive: true
+  }).catch(() => {});
+}
+
 function updateIdleLife(now: number): void {
   if (state.synra !== "idle" || !state.motionPlayer.snapshot.ready) return;
-  const interval = runtimeMode === "kiosk" ? 45000 : 28000;
-  if (now - state.lastLifeMotionAt < interval) return;
+  if (now < state.nextLifeMotionAt) return;
   state.lastLifeMotionAt = now;
+  state.nextLifeMotionAt = now + randomBetween(runtimeMode === "kiosk" ? 22000 : 16000, runtimeMode === "kiosk" ? 42000 : 30000);
+  if (now - state.lastPresenceNudgeAt > 90000) {
+    state.lastPresenceNudgeAt = now;
+    captionEl.textContent = PRESENCE_NUDGES[Math.floor(Math.random() * PRESENCE_NUDGES.length)];
+  }
   const route = IDLE_LIFE_GESTURES[Math.floor(Math.random() * IDLE_LIFE_GESTURES.length)];
   void playMotionRoute(route, { restart: true, returnToIdle: true });
+}
+
+function randomBetween(min: number, max: number): number {
+  return min + Math.random() * (max - min);
 }
 
 function setSynraState(next: SynraState, caption: string): void {
@@ -1185,6 +1265,7 @@ function resize(): void {
   camera.position.z = portrait ? 7.15 : 6.05;
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
+  if (!renderer) return;
   renderer.setPixelRatio(resolveEffectivePixelRatio());
   renderer.setSize(width, height, false);
 }
@@ -1206,8 +1287,10 @@ function resolveInitialPerformanceTier(): "normal" | "low" | "forced-low" {
 function applyPerformanceTier(tier: "normal" | "low" | "forced-low"): void {
   state.performanceTier = tier;
   document.body.dataset.performanceTier = tier === "normal" ? "normal" : "low";
-  renderer.setPixelRatio(resolveEffectivePixelRatio());
-  renderer.setSize(Math.max(1, window.innerWidth), Math.max(1, window.innerHeight), false);
+  if (renderer) {
+    renderer.setPixelRatio(resolveEffectivePixelRatio());
+    renderer.setSize(Math.max(1, window.innerWidth), Math.max(1, window.innerHeight), false);
+  }
 }
 
 function resolveRuntimeMode(): "kiosk" | "interactive" {

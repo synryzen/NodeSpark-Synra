@@ -31,6 +31,29 @@ Default runtime:
 http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=24&live=1
 ```
 
+Diagnostics:
+
+```bash
+~/synra-standalone/scripts/jetson-diagnostics.sh
+~/synra-standalone/scripts/kiosk-performance-check.sh
+```
+
+Kiosk troubleshooting supports opt-in media, remote debug, and Chromium GL mode overrides through `SYNRA_KIOSK_AUTO_GRANT_MEDIA`, `SYNRA_KIOSK_REMOTE_DEBUG`, and `SYNRA_KIOSK_GL_MODE`.
+
+## GitHub Page
+
+Project page:
+
+```text
+https://synryzen.github.io/NodeSpark-Synra/
+```
+
+Roadmap:
+
+```text
+docs/roadmap.md
+```
+
 ## Development
 
 ```bash
