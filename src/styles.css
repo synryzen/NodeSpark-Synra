@@ -1,0 +1,620 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #05070a;
+  color: #f8fafc;
+  --stage-image: url("/backgrounds/synra-command-room.png");
+  --text: #f8fafc;
+  --muted: rgb(206 216 229 / 76%);
+  --line: rgb(255 255 255 / 16%);
+  --panel: rgb(6 10 15 / 68%);
+  --panel-strong: rgb(8 12 18 / 82%);
+  --cyan: #25ddff;
+  --teal: #18d6b5;
+  --red: #ff405d;
+  --amber: #ffc85a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: #05070a;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  min-width: 320px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgb(2 5 8 / 20%), rgb(2 5 8 / 58%)),
+    var(--stage-image) center / cover no-repeat,
+    #05070a;
+}
+
+.stage-backdrop,
+.stage::before,
+.stage::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+}
+
+.stage-backdrop {
+  background:
+    radial-gradient(circle at 50% 72%, rgb(37 221 255 / 24%), transparent 24%),
+    radial-gradient(circle at 82% 40%, rgb(255 64 93 / 16%), transparent 30%),
+    radial-gradient(circle at 16% 46%, rgb(24 214 181 / 13%), transparent 29%),
+    linear-gradient(180deg, rgb(0 0 0 / 12%), rgb(0 0 0 / 40%));
+}
+
+.stage::before {
+  background:
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 4%) 0 1px, transparent 1px 112px),
+    repeating-linear-gradient(0deg, rgb(255 255 255 / 3%) 0 1px, transparent 1px 112px);
+  mask-image: linear-gradient(180deg, transparent 0, #000 34%, #000 82%, transparent 100%);
+}
+
+.stage::after {
+  background:
+    linear-gradient(90deg, rgb(2 5 8 / 58%), transparent 22%, transparent 78%, rgb(2 5 8 / 58%)),
+    linear-gradient(180deg, rgb(2 5 8 / 34%), transparent 22%, rgb(2 5 8 / 78%));
+}
+
+#scene {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 28px 34px rgb(0 0 0 / 54%));
+}
+
+.hud {
+  position: absolute;
+  z-index: 3;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  pointer-events: none;
+}
+
+.brand,
+.metrics,
+.presence,
+.performance-panel,
+.caption,
+.composer,
+dialog {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 9%), rgb(255 255 255 / 2%)),
+    var(--panel);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 10%),
+    0 22px 60px rgb(0 0 0 / 38%);
+  backdrop-filter: blur(18px) saturate(1.18);
+}
+
+.brand,
+.metrics {
+  display: flex;
+  align-items: center;
+}
+
+.brand {
+  gap: 12px;
+  min-width: 248px;
+  padding: 8px 12px 8px 9px;
+}
+
+.brand-logo {
+  width: 108px;
+  height: 46px;
+  object-fit: contain;
+  border-radius: 7px;
+  filter: drop-shadow(0 0 15px rgb(255 64 93 / 42%));
+}
+
+.brand div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.brand strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 850;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brand span:last-child,
+.metrics span,
+.presence span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.metrics {
+  gap: 9px;
+  min-height: 38px;
+  padding: 8px 12px;
+  background:
+    linear-gradient(135deg, rgb(37 221 255 / 10%), rgb(255 64 93 / 8%)),
+    var(--panel);
+}
+
+.metrics span {
+  white-space: nowrap;
+}
+
+.signal-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--teal);
+  box-shadow: 0 0 16px rgb(24 214 181 / 90%);
+}
+
+.right-rail {
+  position: absolute;
+  z-index: 3;
+  top: 82px;
+  right: 20px;
+  width: min(300px, calc(100vw - 40px));
+  display: grid;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.presence {
+  display: grid;
+  gap: 4px;
+  padding: 12px 13px;
+  pointer-events: none;
+}
+
+.presence strong {
+  color: #fff;
+  font-size: 20px;
+  line-height: 1.05;
+}
+
+.system-health strong {
+  font-size: 15px;
+}
+
+.performance-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 11px;
+  background:
+    linear-gradient(135deg, rgb(24 214 181 / 9%), rgb(255 64 93 / 7%)),
+    var(--panel);
+  pointer-events: auto;
+}
+
+.performance-panel header {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.performance-panel header span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.performance-panel label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.performance-panel label span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.performance-panel .mode-toggle {
+  background:
+    linear-gradient(135deg, rgb(37 221 255 / 22%), rgb(255 64 93 / 12%)),
+    rgb(255 255 255 / 9%);
+}
+
+.performance-panel select {
+  min-width: 0;
+  width: 100%;
+  height: 34px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+  padding: 0 9px;
+  background: rgb(255 255 255 / 10%);
+  color: #fff;
+  outline: none;
+}
+
+.performance-panel button {
+  height: 36px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 7px;
+  background: rgb(37 221 255 / 16%);
+  color: #fff;
+  font-weight: 850;
+}
+
+body[data-control-mode="live"] .performance-panel {
+  gap: 9px;
+}
+
+body[data-control-mode="live"] .manual-control {
+  display: none;
+}
+
+body[data-control-mode="live"] .performance-panel header {
+  min-height: 36px;
+}
+
+body[data-runtime-mode="kiosk"] .right-rail {
+  width: min(292px, calc(100vw - 40px));
+}
+
+body[data-runtime-mode="kiosk"] .brand,
+body[data-runtime-mode="kiosk"] .metrics,
+body[data-runtime-mode="kiosk"] .presence,
+body[data-runtime-mode="kiosk"] .performance-panel,
+body[data-runtime-mode="kiosk"] .caption,
+body[data-runtime-mode="kiosk"] .composer {
+  backdrop-filter: blur(14px) saturate(1.08);
+}
+
+body[data-runtime-mode="kiosk"] .stage-backdrop {
+  background:
+    radial-gradient(circle at 50% 72%, rgb(37 221 255 / 18%), transparent 24%),
+    radial-gradient(circle at 82% 40%, rgb(255 64 93 / 12%), transparent 30%),
+    linear-gradient(180deg, rgb(0 0 0 / 14%), rgb(0 0 0 / 44%));
+}
+
+body[data-performance-tier="low"] #scene {
+  filter: none;
+}
+
+body[data-performance-tier="low"] .stage-backdrop {
+  background:
+    radial-gradient(circle at 50% 72%, rgb(37 221 255 / 12%), transparent 23%),
+    linear-gradient(180deg, rgb(0 0 0 / 18%), rgb(0 0 0 / 50%));
+}
+
+body[data-performance-tier="low"] .stage::before {
+  display: none;
+}
+
+body[data-performance-tier="low"] .brand,
+body[data-performance-tier="low"] .metrics,
+body[data-performance-tier="low"] .presence,
+body[data-performance-tier="low"] .performance-panel,
+body[data-performance-tier="low"] .caption,
+body[data-performance-tier="low"] .composer {
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 9%),
+    0 14px 34px rgb(0 0 0 / 32%);
+  backdrop-filter: none;
+}
+
+.performance-panel strong {
+  overflow: hidden;
+  color: rgb(238 245 255 / 74%);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.caption-shell {
+  width: 100%;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.caption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 54px;
+  padding: 13px 18px;
+  background:
+    linear-gradient(135deg, rgb(37 221 255 / 10%), rgb(255 64 93 / 8%)),
+    var(--panel-strong);
+  color: var(--text);
+  font-size: clamp(16px, 1.7vw, 23px);
+  font-weight: 760;
+  line-height: 1.28;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.composer {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 24px;
+  width: min(760px, calc(100vw - 40px));
+  min-height: 62px;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 48px 48px;
+  gap: 8px;
+  padding: 8px;
+  background:
+    linear-gradient(90deg, rgb(37 221 255 / 9%), transparent 42%, rgb(255 64 93 / 9%)),
+    rgb(5 9 14 / 76%);
+}
+
+.composer input {
+  min-width: 0;
+  height: 46px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 7px;
+  padding: 0 14px;
+  background: rgb(255 255 255 / 10%);
+  color: #fff;
+  outline: none;
+}
+
+.composer input::placeholder {
+  color: rgb(223 230 238 / 50%);
+}
+
+.composer input:focus {
+  border-color: rgb(37 221 255 / 48%);
+  box-shadow: 0 0 0 3px rgb(37 221 255 / 11%);
+}
+
+.icon-button,
+.settings button {
+  min-width: 42px;
+  height: 46px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+  background: rgb(255 255 255 / 12%);
+  color: #fff;
+  font-weight: 900;
+  transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.icon-button:hover,
+.settings button:hover {
+  border-color: rgb(37 221 255 / 38%);
+  background: rgb(255 255 255 / 18%);
+}
+
+.icon-button:active,
+.settings button:active {
+  transform: scale(0.96);
+}
+
+.icon-button.listen {
+  display: grid;
+  place-items: center;
+}
+
+.icon-button.listen span {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #f8fafc;
+  box-shadow: 0 0 0 0 rgb(37 221 255 / 0%);
+}
+
+body[data-synra-state="listening"] .icon-button.listen {
+  border-color: rgb(37 221 255 / 64%);
+  background: rgb(37 221 255 / 86%);
+  box-shadow: 0 0 28px rgb(37 221 255 / 32%);
+}
+
+body[data-synra-state="listening"] .icon-button.listen span {
+  background: #041019;
+  animation: listenPulse 1s ease-out infinite;
+}
+
+body[data-synra-state="thinking"] .brand-logo,
+body[data-synra-state="speaking"] .brand-logo {
+  animation: markPulse 1.12s ease-in-out infinite;
+}
+
+body[data-synra-state="speaking"] .caption {
+  border-color: rgb(37 221 255 / 56%);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 10%),
+    0 0 34px rgb(37 221 255 / 18%),
+    0 22px 60px rgb(0 0 0 / 38%);
+}
+
+body[data-synra-state="thinking"] .signal-dot {
+  background: var(--amber);
+  box-shadow: 0 0 16px rgb(255 200 90 / 92%);
+}
+
+body[data-synra-state="offline"] .signal-dot {
+  background: var(--red);
+  box-shadow: 0 0 16px rgb(255 64 93 / 92%);
+}
+
+dialog {
+  width: min(520px, calc(100vw - 32px));
+  background: #101820;
+  color: var(--text);
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 62%);
+}
+
+.settings {
+  display: grid;
+  gap: 14px;
+}
+
+.settings h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.settings label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.settings input {
+  height: 42px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 7px;
+  padding: 0 10px;
+  background: rgb(255 255 255 / 8%);
+  color: #fff;
+}
+
+.settings menu {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+@keyframes markPulse {
+  0%,
+  100% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
+  50% {
+    filter: brightness(1.42);
+    transform: scale(1.03);
+  }
+}
+
+@keyframes listenPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(4 16 25 / 44%);
+  }
+  100% {
+    box-shadow: 0 0 0 16px rgb(4 16 25 / 0%);
+  }
+}
+
+@media (max-width: 860px) {
+  .right-rail {
+    top: auto;
+    left: 50%;
+    right: auto;
+    bottom: 92px;
+    width: min(680px, calc(100vw - 32px));
+    transform: translateX(-50%);
+  }
+
+  .caption-shell {
+    display: block;
+  }
+
+  .presence {
+    display: none;
+  }
+
+  .performance-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .hud {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+  }
+
+  .metrics {
+    display: none;
+  }
+
+  .brand {
+    min-width: 0;
+  }
+
+  .brand-logo {
+    width: 82px;
+    height: 38px;
+  }
+
+  .caption-shell {
+    width: 100%;
+  }
+
+  .caption {
+    min-height: 48px;
+    font-size: 15px;
+  }
+
+  .composer {
+    bottom: 14px;
+    width: calc(100vw - 24px);
+    grid-template-columns: 44px minmax(0, 1fr) 44px 44px;
+  }
+
+  .icon-button,
+  .settings button,
+  .composer input {
+    height: 44px;
+  }
+}
