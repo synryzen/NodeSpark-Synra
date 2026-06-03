@@ -34,6 +34,14 @@ const kioskScript = readFileSync(join(root, "scripts/start-jetson-kiosk.sh"), "u
 const serverScript = readFileSync(join(root, "scripts/synra_server.py"), "utf8");
 const mainScript = readFileSync(join(root, "src/main.ts"), "utf8");
 const kioskIsLean = kioskScript.includes("mode=kiosk") && kioskScript.includes("fps=${KIOSK_FPS}") && kioskScript.includes("--force-device-scale-factor=1");
+const code1IsDefaultAvatar = readFileSync(join(root, "src/avatar-catalog.ts"), "utf8").includes('DEFAULT_SYNRA_AVATAR_ID: SynraAvatarId = "code1"');
+const kioskRequestsCode1Avatar = kioskScript.includes("SYNRA_KIOSK_AVATAR:-code1") && kioskScript.includes("avatar=${KIOSK_AVATAR}");
+const rendererUsesQualityPresentation =
+  mainScript.includes("antialias: true") &&
+  mainScript.includes("THREE.NeutralToneMapping") &&
+  mainScript.includes("HemisphereLight") &&
+  mainScript.includes("faceLight") &&
+  mainScript.includes("camera.position.set(0, portrait ? 0.92");
 const smartHomeBridgeIsSafe = serverScript.includes("/api/tools/smart-home") && serverScript.includes("SYNRA_SMART_HOME_ENABLED") && serverScript.includes("Home Assistant");
 const smartHomeRequiresConfirmation = mainScript.includes("pendingAction") && mainScript.includes("Say confirm to run it") && mainScript.includes("cancel");
 const visionIsPermissionOnly = mainScript.includes("visionStatus") && mainScript.includes("ensureCameraReady") && mainScript.includes("I am not storing frames");
@@ -52,7 +60,9 @@ const kioskDefaultsToLowQuality = kioskScript.includes("SYNRA_KIOSK_QUALITY:-low
 const jetsonForcedLowPixelRatioPreservesClarity = mainScript.includes("forced-low") && mainScript.includes("1.0");
 const kioskRenderScaleIsConfigurable = kioskScript.includes("SYNRA_KIOSK_RENDER_SCALE:-1.0") && kioskScript.includes("scale=${KIOSK_RENDER_SCALE}");
 const runtimeRenderScaleIsConfigurable = mainScript.includes("renderScale") && mainScript.includes("resolveRenderScaleOverride");
-const rightRailCanScroll = mainScript.includes("right-rail") && readFileSync(join(root, "src/styles.css"), "utf8").includes("overflow-y: auto");
+const styles = readFileSync(join(root, "src/styles.css"), "utf8");
+const rightRailCanScroll = mainScript.includes("right-rail") && styles.includes("overflow-y: auto");
+const kioskComposerIsRightDocked = styles.includes('body[data-runtime-mode="kiosk"] .composer') && styles.includes("right: 20px") && styles.includes("transform: none");
 const modelRoutesAreExplicit = serverScript.includes("model_name_for_intent") && serverScript.includes("SYNRA_VISION_MODEL_NAME") && mainScript.includes("classifySynraRequest");
 const result = {
   ok:
@@ -61,6 +71,9 @@ const result = {
     backgroundCount >= 6 &&
     motionCount >= 57 &&
     kioskIsLean &&
+    code1IsDefaultAvatar &&
+    kioskRequestsCode1Avatar &&
+    rendererUsesQualityPresentation &&
     smartHomeBridgeIsSafe &&
     smartHomeRequiresConfirmation &&
     visionIsPermissionOnly &&
@@ -77,6 +90,7 @@ const result = {
     kioskRenderScaleIsConfigurable &&
     runtimeRenderScaleIsConfigurable &&
     rightRailCanScroll &&
+    kioskComposerIsRightDocked &&
     modelRoutesAreExplicit,
   target: "jetson-first-lean-runtime",
   avatarMb,
@@ -86,9 +100,11 @@ const result = {
   checks: [
     "standalone app does not depend on NodeSparkHub",
     "runtime includes all three Synra avatars",
+    "Code 1 is the default Synra avatar",
+    "Jetson kiosk requests the Code 1 avatar",
     "runtime includes six premium Synra stage backgrounds",
     "runtime includes the Hub VRMA motion library",
-    "renderer disables antialiasing",
+    "renderer uses Hub-style quality presentation",
     "adaptive pixel ratio is capped",
     "kiosk launcher uses lean Jetson mode",
     "smart-home bridge fails safely unless configured",
@@ -107,6 +123,7 @@ const result = {
     "Jetson kiosk render scale is configurable",
     "runtime honors render scale overrides",
     "right-side control rail scrolls when controls overflow",
+    "kiosk composer is docked right instead of blocking Synra",
     "model routes are explicit for conversation, vision, tools, and NodeSpark",
     "model calls fall back to local Synra path"
   ]

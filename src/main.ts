@@ -91,13 +91,14 @@ const PRESENCE_NUDGES = [
 
 const runtimeMode = resolveRuntimeMode();
 const initialPerformanceTier = resolveInitialPerformanceTier();
+const initialVisualSettings = resolveInitialVisualSettings();
 const telemetryEnabled = runtimeMode === "kiosk" || new URLSearchParams(window.location.search).get("telemetry") === "1";
 
 const state = {
   synra: "idle" as SynraState,
   messages: [] as SynraMessage[],
   settings: loadModelSettings(),
-  visual: loadVisualSettings(),
+  visual: initialVisualSettings,
   memory: loadMemory(),
   vrm: null as VRM | null,
   motionPlayer: new SynraMotionPlayer(),
@@ -276,15 +277,18 @@ if (!renderer) {
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 50);
-camera.position.set(0, 1.28, 4.1);
+camera.position.set(0, 0.9, 4.35);
+camera.lookAt(0, 0.88, 0);
 
-const keyLight = new THREE.DirectionalLight(0xfff0dc, 2.2);
-keyLight.position.set(1.5, 2.6, 2.1);
-scene.add(keyLight);
-const rimLight = new THREE.DirectionalLight(0x3fe5ff, 1.35);
-rimLight.position.set(-2.2, 1.8, -1.6);
-scene.add(rimLight);
-scene.add(new THREE.AmbientLight(0x8cc9ff, 0.92));
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.85);
+const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xd9e0ee, 1.15);
+const keyLight = new THREE.DirectionalLight(0xffffff, 2.05);
+const faceLight = new THREE.DirectionalLight(0xfff7ef, 0.82);
+const rimLight = new THREE.DirectionalLight(0xe8f4ff, 0.32);
+keyLight.position.set(-1.45, 2.75, 3.35);
+faceLight.position.set(0.15, 1.72, 3.3);
+rimLight.position.set(2.2, 1.8, -2.8);
+scene.add(ambientLight, hemisphereLight, keyLight, faceLight, rimLight);
 
 const loader = new GLTFLoader();
 loader.register((parser) => new VRMLoaderPlugin(parser));
@@ -547,7 +551,7 @@ function normalizeAvatarStagePlacement(root: THREE.Object3D): void {
   const scaledBox = new THREE.Box3().setFromObject(root);
   const scaledCenter = new THREE.Vector3();
   scaledBox.getCenter(scaledCenter);
-  root.position.set(-scaledCenter.x, 0.72 - scaledCenter.y, -scaledCenter.z);
+  root.position.set(-scaledCenter.x, 0.84 - scaledCenter.y, -scaledCenter.z);
 }
 
 async function handleUserText(text: string): Promise<void> {
@@ -1045,10 +1049,12 @@ function createRenderer(): THREE.WebGLRenderer | null {
     const webglRenderer = new THREE.WebGLRenderer({
       canvas,
       alpha: true,
-      antialias: false,
+      antialias: true,
       powerPreference: "high-performance"
     });
     webglRenderer.outputColorSpace = THREE.SRGBColorSpace;
+    webglRenderer.toneMapping = THREE.NeutralToneMapping;
+    webglRenderer.toneMappingExposure = 1;
     webglRenderer.setPixelRatio(resolveEffectivePixelRatio());
     return webglRenderer;
   } catch (error) {
@@ -1261,9 +1267,10 @@ function resize(): void {
   const width = Math.max(1, window.innerWidth);
   const height = Math.max(1, window.innerHeight);
   const portrait = width / height < 0.72;
-  camera.fov = portrait ? 36 : 31;
-  camera.position.y = portrait ? 0.9 : 1.02;
-  camera.position.z = portrait ? 7.15 : 6.05;
+  const wideStage = width / height > 1.35;
+  camera.fov = portrait ? 28 : wideStage ? 26 : 25.5;
+  camera.position.set(0, portrait ? 0.92 : wideStage ? 0.92 : 0.92, portrait ? 4.95 : wideStage ? 4.75 : 4.65);
+  camera.lookAt(0, portrait ? 0.88 : wideStage ? 0.86 : 0.9, 0);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
   if (!renderer) return;
@@ -1293,6 +1300,12 @@ function resolveRenderScaleOverride(): number | null {
 function resolveInitialPerformanceTier(): "normal" | "low" | "forced-low" {
   const quality = new URLSearchParams(window.location.search).get("quality");
   return quality === "low" ? "forced-low" : "normal";
+}
+
+function resolveInitialVisualSettings() {
+  const visual = loadVisualSettings();
+  const requestedAvatar = new URLSearchParams(window.location.search).get("avatar");
+  return isSynraAvatarId(requestedAvatar) ? { ...visual, avatarId: requestedAvatar } : visual;
 }
 
 function applyPerformanceTier(tier: "normal" | "low" | "forced-low"): void {

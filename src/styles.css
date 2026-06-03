@@ -321,7 +321,22 @@ body[data-control-mode="live"] .performance-panel header {
 
 body[data-runtime-mode="kiosk"] .right-rail {
   width: min(292px, calc(100vw - 40px));
-  max-height: calc(100vh - 102px);
+  max-height: calc(100vh - 184px);
+}
+
+body[data-runtime-mode="kiosk"] .composer {
+  left: auto;
+  right: 20px;
+  bottom: 20px;
+  width: min(292px, calc(100vw - 40px));
+  min-height: 54px;
+  grid-template-columns: 42px minmax(0, 1fr) 42px 42px;
+  transform: none;
+}
+
+body[data-runtime-mode="kiosk"] .composer input {
+  height: 38px;
+  padding: 0 10px;
 }
 
 body[data-runtime-mode="kiosk"] .brand,

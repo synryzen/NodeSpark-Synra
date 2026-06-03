@@ -1,8 +1,9 @@
 import type { ModelSettings, SynraMemory, VisualSettings } from "./types";
+import { DEFAULT_SYNRA_AVATAR_ID } from "./avatar-catalog";
 
 const modelKey = "synraStandalone.modelSettings.v1";
 const memoryKey = "synraStandalone.memory.v1";
-const visualKey = "synraStandalone.visualSettings.v1";
+const visualKey = "synraStandalone.visualSettings.v2";
 
 export function loadModelSettings(): ModelSettings {
   return readJson<ModelSettings>(modelKey, {
@@ -30,7 +31,7 @@ export function saveMemory(memory: SynraMemory): void {
 
 export function loadVisualSettings(): VisualSettings {
   return readJson<VisualSettings>(visualKey, {
-    avatarId: "classic",
+    avatarId: DEFAULT_SYNRA_AVATAR_ID,
     motionId: "wave",
     motionCategoryId: "greeting",
     backgroundId: "command-room",

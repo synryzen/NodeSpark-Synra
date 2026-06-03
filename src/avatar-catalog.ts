@@ -28,10 +28,10 @@ export const SYNRA_AVATARS: SynraAvatarOption[] = [
   }
 ];
 
-export const DEFAULT_SYNRA_AVATAR_ID: SynraAvatarId = "classic";
+export const DEFAULT_SYNRA_AVATAR_ID: SynraAvatarId = "code1";
 
 export function getSynraAvatar(id: string | null | undefined): SynraAvatarOption {
-  return SYNRA_AVATARS.find((avatar) => avatar.id === id) ?? SYNRA_AVATARS[0];
+  return SYNRA_AVATARS.find((avatar) => avatar.id === id) ?? SYNRA_AVATARS.find((avatar) => avatar.id === DEFAULT_SYNRA_AVATAR_ID) ?? SYNRA_AVATARS[0];
 }
 
 export function isSynraAvatarId(id: string | null | undefined): id is SynraAvatarId {
