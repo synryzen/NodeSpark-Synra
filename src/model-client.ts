@@ -28,21 +28,16 @@ export function classifySynraRequest(text: string): SynraRequestRoute {
 export async function askModel(settings: ModelSettings, memory: SynraMemory, messages: SynraMessage[], intent: SynraRequestIntent = "conversation"): Promise<string> {
   const endpoint = settings.endpoint.trim();
   const model = settings.model.trim();
+  const provider = resolveProvider(settings);
   if (!endpoint) {
     throw new Error("No model endpoint is configured.");
   }
 
-  const recent = messages.slice(-10).map((message) => ({
-    role: message.role === "synra" ? "assistant" : message.role,
-    content: message.text
-  }));
-
-  const isServerChat = endpoint === "/api/chat" || endpoint.endsWith("/api/chat");
-  const response = await fetch(endpoint, {
+  const isServerChat = provider === "server" || endpoint === "/api/chat" || endpoint.endsWith("/api/chat");
+  const response = await fetch(isServerChat ? endpoint : "/api/external-chat", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      ...(!isServerChat && settings.apiKey.trim() ? { Authorization: `Bearer ${settings.apiKey.trim()}` } : {})
+      "Content-Type": "application/json"
     },
     body: JSON.stringify(
       isServerChat
@@ -52,25 +47,15 @@ export async function askModel(settings: ModelSettings, memory: SynraMemory, mes
             intent
           }
         : {
+            provider,
+            endpoint,
             model,
+            apiKey: settings.apiKey,
             intent,
-            temperature: 0.7,
-            messages: [
-        {
-          role: "system",
-          content: [
-            "You are Synra, a warm, vivid, practical companion AI assistant.",
-            "Be concise, emotionally present, and useful.",
-            "Never claim to control devices unless a configured tool confirms it.",
-            `User style preference: ${memory.style || "warm, direct, and useful"}.`,
-            memory.preferredName ? `Preferred user name: ${memory.preferredName}.` : "",
-            memory.savedFacts.length ? `Remembered facts: ${memory.savedFacts.slice(-8).join("; ")}` : ""
-          ]
-            .filter(Boolean)
-            .join("\n")
-        },
-        ...recent
-            ]
+            temperature: settings.temperature ?? 0.2,
+            systemPrompt: settings.systemPrompt,
+            messages,
+            memory
           }
     )
   });
@@ -80,12 +65,16 @@ export async function askModel(settings: ModelSettings, memory: SynraMemory, mes
   }
 
   const data = (await response.json()) as { ok?: boolean; error?: string; text?: string; choices?: Array<{ message?: { content?: string } }> };
-  if (isServerChat && data.ok === false) {
+  if (data.ok === false) {
     throw new Error(data.error || "Server-side Synra model is unavailable.");
   }
-  const text = (isServerChat ? data.text : data.choices?.[0]?.message?.content)?.trim();
+  const text = (data.text || data.choices?.[0]?.message?.content)?.trim();
   if (!text) throw new Error("Model returned no text.");
   return text;
+}
+
+function resolveProvider(settings: ModelSettings): ModelSettings["provider"] {
+  return settings.provider === "openAICompatible" || settings.provider === "localHTTP" || settings.provider === "server" ? settings.provider : "server";
 }
 
 export function localSynraReply(text: string): string {

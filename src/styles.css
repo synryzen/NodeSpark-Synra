@@ -523,6 +523,8 @@ body[data-synra-state="offline"] .signal-dot {
 
 dialog {
   width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
   background: #101820;
   color: var(--text);
 }
@@ -548,13 +550,26 @@ dialog::backdrop {
   font-size: 13px;
 }
 
-.settings input {
+.settings input,
+.settings select,
+.settings textarea {
   height: 42px;
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 7px;
   padding: 0 10px;
   background: rgb(255 255 255 / 8%);
   color: #fff;
+  font: inherit;
+}
+
+.settings textarea {
+  min-height: 92px;
+  padding: 10px;
+  resize: vertical;
+}
+
+.settings select {
+  appearance: none;
 }
 
 .settings menu {

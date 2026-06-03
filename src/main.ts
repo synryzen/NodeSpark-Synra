@@ -221,9 +221,17 @@ app.innerHTML = `
   </section>
   <dialog id="settingsDialog">
     <form method="dialog" class="settings">
-      <h2>Model</h2>
+      <h2>AI Connection</h2>
       <label>
-        Endpoint
+        Provider
+        <select id="providerInput">
+          <option value="server">Synra server route</option>
+          <option value="openAICompatible">OpenAI-compatible cloud</option>
+          <option value="localHTTP">Local HTTP compatible</option>
+        </select>
+      </label>
+      <label>
+        Endpoint or base URL
         <input id="endpointInput" />
       </label>
       <label>
@@ -233,6 +241,14 @@ app.innerHTML = `
       <label>
         API key
         <input id="apiKeyInput" type="password" />
+      </label>
+      <label>
+        Temperature
+        <input id="temperatureInput" type="number" min="0" max="2" step="0.1" />
+      </label>
+      <label>
+        System prompt
+        <textarea id="systemPromptInput" rows="4" placeholder="Optional Synra personality or routing instructions"></textarea>
       </label>
       <menu>
         <button value="cancel">Cancel</button>
@@ -263,9 +279,12 @@ const listenButton = must<HTMLElement, HTMLButtonElement>("listenButton");
 const sendButton = document.querySelector<HTMLButtonElement>('button[title="Send"]');
 const settingsButton = must<HTMLElement, HTMLButtonElement>("settingsButton");
 const settingsDialog = must<HTMLElement, HTMLDialogElement>("settingsDialog");
+const providerInput = must<HTMLElement, HTMLSelectElement>("providerInput");
 const endpointInput = must<HTMLElement, HTMLInputElement>("endpointInput");
 const modelInput = must<HTMLElement, HTMLInputElement>("modelInput");
 const apiKeyInput = must<HTMLElement, HTMLInputElement>("apiKeyInput");
+const temperatureInput = must<HTMLElement, HTMLInputElement>("temperatureInput");
+const systemPromptInput = must<HTMLElement, HTMLTextAreaElement>("systemPromptInput");
 const saveSettingsButton = must<HTMLElement, HTMLButtonElement>("saveSettingsButton");
 
 const renderer = createRenderer();
@@ -377,22 +396,51 @@ controlModeButton.addEventListener("click", () => {
 });
 
 settingsButton.addEventListener("click", () => {
+  providerInput.value = resolveModelProvider(state.settings.provider);
   endpointInput.value = state.settings.endpoint;
   modelInput.value = state.settings.model;
   apiKeyInput.value = state.settings.apiKey;
+  temperatureInput.value = String(state.settings.temperature ?? 0.2);
+  systemPromptInput.value = state.settings.systemPrompt ?? "";
   settingsDialog.showModal();
 });
 
+providerInput.addEventListener("change", () => {
+  applyProviderPreset(providerInput.value);
+});
+
 saveSettingsButton.addEventListener("click", () => {
+  const temperature = Number(temperatureInput.value);
   const next: ModelSettings = {
+    provider: resolveModelProvider(providerInput.value),
     endpoint: endpointInput.value.trim(),
     model: modelInput.value.trim(),
-    apiKey: apiKeyInput.value
+    apiKey: apiKeyInput.value,
+    temperature: Number.isFinite(temperature) ? Math.min(Math.max(temperature, 0), 2) : 0.2,
+    systemPrompt: systemPromptInput.value.trim()
   };
   state.settings = next;
   saveModelSettings(next);
   refreshModelLabel();
 });
+
+function applyProviderPreset(provider: string): void {
+  if (provider === "server") {
+    endpointInput.value = "/api/chat";
+    modelInput.value = modelInput.value.trim() || "server";
+    apiKeyInput.value = "";
+    return;
+  }
+  if (provider === "openAICompatible") {
+    endpointInput.value = endpointInput.value.trim() && endpointInput.value.trim() !== "/api/chat" ? endpointInput.value.trim() : "https://api.openai.com/v1";
+    modelInput.value = modelInput.value.trim() && modelInput.value.trim() !== "server" ? modelInput.value.trim() : "gpt-4.1-mini";
+    return;
+  }
+  if (provider === "localHTTP") {
+    endpointInput.value = endpointInput.value.trim() && endpointInput.value.trim() !== "/api/chat" ? endpointInput.value.trim() : "http://127.0.0.1:11434/v1";
+    modelInput.value = modelInput.value.trim() && modelInput.value.trim() !== "server" ? modelInput.value.trim() : "llama3.2";
+  }
+}
 
 function populateAvatarSelect(): void {
   avatarSelect.innerHTML = SYNRA_AVATARS
@@ -542,8 +590,8 @@ function normalizeAvatarStagePlacement(root: THREE.Object3D): void {
   box.getCenter(center);
 
   if (size.y > 0.001) {
-    const targetHeight = 1.82;
-    const scale = THREE.MathUtils.clamp(targetHeight / size.y, 0.72, 1.42);
+    const targetHeight = 2.05;
+    const scale = THREE.MathUtils.clamp(targetHeight / size.y, 0.78, 1.62);
     root.scale.setScalar(scale);
     root.updateMatrixWorld(true);
   }
@@ -551,7 +599,7 @@ function normalizeAvatarStagePlacement(root: THREE.Object3D): void {
   const scaledBox = new THREE.Box3().setFromObject(root);
   const scaledCenter = new THREE.Vector3();
   scaledBox.getCenter(scaledCenter);
-  root.position.set(-scaledCenter.x, 0.84 - scaledCenter.y, -scaledCenter.z);
+  root.position.set(-scaledCenter.x, 0.96 - scaledCenter.y, -scaledCenter.z);
 }
 
 async function handleUserText(text: string): Promise<void> {
@@ -1247,12 +1295,14 @@ function createId(): string {
 }
 
 function refreshModelLabel(): void {
-  const model = state.settings.model ? state.settings.model : "Local path";
-  modelNameEl.textContent = performanceProfile.name === "jetson" ? `${model} · Jetson` : model;
+  const provider = resolveModelProvider(state.settings.provider);
+  const model = state.settings.model ? state.settings.model : provider === "server" ? "server fallback" : "not configured";
+  const providerLabel = provider === "openAICompatible" ? "Cloud" : provider === "localHTTP" ? "Local HTTP" : "Server";
+  modelNameEl.textContent = performanceProfile.name === "jetson" ? `${model} · ${providerLabel} · Jetson` : `${model} · ${providerLabel}`;
 }
 
 async function refreshServerModelStatus(): Promise<void> {
-  if (state.settings.endpoint !== "/api/chat") return;
+  if (resolveModelProvider(state.settings.provider) !== "server" && state.settings.endpoint !== "/api/chat") return;
   const response = await fetch("/api/model/public", { cache: "no-store" });
   if (!response.ok) return;
   const data = (await response.json()) as { configured?: boolean; model?: string };
@@ -1263,14 +1313,18 @@ async function refreshServerModelStatus(): Promise<void> {
   refreshModelLabel();
 }
 
+function resolveModelProvider(provider: string | undefined): ModelSettings["provider"] {
+  return provider === "openAICompatible" || provider === "localHTTP" || provider === "server" ? provider : "server";
+}
+
 function resize(): void {
   const width = Math.max(1, window.innerWidth);
   const height = Math.max(1, window.innerHeight);
   const portrait = width / height < 0.72;
   const wideStage = width / height > 1.35;
-  camera.fov = portrait ? 28 : wideStage ? 26 : 25.5;
-  camera.position.set(0, portrait ? 0.92 : wideStage ? 0.92 : 0.92, portrait ? 4.95 : wideStage ? 4.75 : 4.65);
-  camera.lookAt(0, portrait ? 0.88 : wideStage ? 0.86 : 0.9, 0);
+  camera.fov = portrait ? 29 : wideStage ? 26.5 : 26;
+  camera.position.set(0, portrait ? 1.0 : wideStage ? 0.98 : 0.96, portrait ? 5.05 : wideStage ? 4.72 : 4.62);
+  camera.lookAt(0, portrait ? 0.92 : wideStage ? 0.9 : 0.92, 0);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
   if (!renderer) return;
@@ -1285,7 +1339,7 @@ function resolvePixelRatio(): number {
 function resolveEffectivePixelRatio(): number {
   const base = resolvePixelRatio();
   const renderScale = resolveRenderScaleOverride();
-  if (renderScale !== null) return Math.min(base, renderScale);
+  if (renderScale !== null) return renderScale;
   if (state.performanceTier === "forced-low") return Math.min(base, performanceProfile.name === "jetson" ? 1.0 : 0.72);
   if (state.performanceTier === "low") return Math.min(base, performanceProfile.name === "jetson" ? 1.0 : 0.82);
   return base;
@@ -1294,7 +1348,7 @@ function resolveEffectivePixelRatio(): number {
 function resolveRenderScaleOverride(): number | null {
   const requestedScale = Number(new URLSearchParams(window.location.search).get("scale") || "");
   if (!Number.isFinite(requestedScale)) return null;
-  return Math.min(Math.max(requestedScale, 0.25), 1.25);
+  return Math.min(Math.max(requestedScale, 0.5), 2);
 }
 
 function resolveInitialPerformanceTier(): "normal" | "low" | "forced-low" {
@@ -1327,7 +1381,8 @@ function resolvePerformanceProfile(): { name: "desktop" | "jetson"; targetFps: n
   const requestedProfile = params.get("profile");
   const looksLikeJetson = requestedProfile === "jetson" || /aarch64|jetson|linux arm/i.test(navigator.userAgent);
   const requestedFps = Number(params.get("fps") || "");
-  const targetFps = Number.isFinite(requestedFps) && requestedFps >= 15 && requestedFps <= 60 ? requestedFps : runtimeMode === "kiosk" ? 15 : looksLikeJetson ? 24 : 60;
+  const minimumFps = runtimeMode === "kiosk" || looksLikeJetson ? 5 : 15;
+  const targetFps = Number.isFinite(requestedFps) && requestedFps >= minimumFps && requestedFps <= 60 ? requestedFps : runtimeMode === "kiosk" ? 15 : looksLikeJetson ? 24 : 60;
   return {
     name: looksLikeJetson ? "jetson" : "desktop",
     targetFps,

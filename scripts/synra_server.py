@@ -82,6 +82,9 @@ class SynraHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/chat"):
             self.handle_chat()
             return
+        if self.path.startswith("/api/external-chat"):
+            self.handle_external_chat()
+            return
         if self.path.startswith("/api/tools/smart-home"):
             self.handle_smart_home()
             return
@@ -124,6 +127,58 @@ class SynraHandler(SimpleHTTPRequestHandler):
             self.send_json(200, {"ok": False, "error": f"Model endpoint returned HTTP {error.code}."})
         except urllib.error.URLError as error:
             self.send_json(200, {"ok": False, "error": f"Model endpoint is unreachable: {error.reason}."})
+        except Exception as error:
+            self.send_json(200, {"ok": False, "error": str(error)})
+
+    def handle_external_chat(self) -> None:
+        try:
+            body = self.read_json_body()
+            provider = normalize_provider(body.get("provider"))
+            endpoint = normalize_chat_endpoint(str(body.get("endpoint") or "").strip())
+            model = str(body.get("model") or "").strip()
+            if not endpoint:
+                self.send_json(200, {"ok": False, "error": "No external model endpoint is configured."})
+                return
+            if not model:
+                self.send_json(200, {"ok": False, "error": "No external model name is configured."})
+                return
+
+            memory = body.get("memory", {})
+            messages = body.get("messages", [])
+            intent = normalize_intent(body.get("intent"))
+            temperature = clamp_float(body.get("temperature"), 0.0, 2.0, 0.2)
+            custom_prompt = str(body.get("systemPrompt") or "").strip()
+            payload = {
+                "model": model,
+                "temperature": temperature,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": system_prompt(memory, custom_prompt),
+                    },
+                    *normalize_messages(messages),
+                ],
+            }
+            response = post_json(endpoint, payload, str(body.get("apiKey") or "").strip())
+            text = extract_model_text(response)
+            if not text:
+                self.send_json(200, {"ok": False, "error": "External model returned no assistant text."})
+                return
+            self.send_json(
+                200,
+                {
+                    "ok": True,
+                    "text": text,
+                    "model": model,
+                    "provider": provider,
+                    "endpointLabel": endpoint_label(endpoint),
+                    "intent": intent,
+                },
+            )
+        except urllib.error.HTTPError as error:
+            self.send_json(200, {"ok": False, "error": f"External model endpoint returned HTTP {error.code}."})
+        except urllib.error.URLError as error:
+            self.send_json(200, {"ok": False, "error": f"External model endpoint is unreachable: {error.reason}."})
         except Exception as error:
             self.send_json(200, {"ok": False, "error": str(error)})
 
@@ -199,6 +254,13 @@ def normalize_intent(value: Any) -> str:
     if intent not in {"conversation", "vision", "tool", "memory", "nodespark"}:
         return "conversation"
     return intent
+
+
+def normalize_provider(value: Any) -> str:
+    provider = str(value or "server").strip()
+    if provider not in {"server", "openAICompatible", "localHTTP"}:
+        return "server"
+    return provider
 
 
 def model_name_for_intent(intent: str) -> str:
@@ -309,7 +371,26 @@ def endpoint_label(endpoint: str) -> str:
     return "Remote model endpoint"
 
 
-def system_prompt(memory: dict[str, Any]) -> str:
+def normalize_chat_endpoint(endpoint: str) -> str:
+    if not endpoint:
+        return ""
+    trimmed = endpoint.rstrip("/")
+    if trimmed.endswith("/chat/completions"):
+        return trimmed
+    if trimmed.endswith("/v1"):
+        return f"{trimmed}/chat/completions"
+    return f"{trimmed}/chat/completions"
+
+
+def clamp_float(value: Any, minimum: float, maximum: float, default: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return min(max(parsed, minimum), maximum)
+
+
+def system_prompt(memory: dict[str, Any], custom_prompt: str = "") -> str:
     style = str(memory.get("style") or "warm, direct, and useful")
     preferred_name = str(memory.get("preferredName") or "").strip()
     facts = memory.get("savedFacts") if isinstance(memory.get("savedFacts"), list) else []
@@ -325,6 +406,8 @@ def system_prompt(memory: dict[str, Any]) -> str:
         parts.append(f"Preferred user name: {preferred_name}.")
     if remembered:
         parts.append(f"Remembered facts: {remembered}")
+    if custom_prompt:
+        parts.append(f"Additional user-approved instructions: {custom_prompt[:2000]}")
     return "\n".join(parts)
 
 

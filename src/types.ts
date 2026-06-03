@@ -7,10 +7,15 @@ export interface SynraMessage {
   createdAt: string;
 }
 
+export type ModelProvider = "server" | "openAICompatible" | "localHTTP";
+
 export interface ModelSettings {
+  provider: ModelProvider;
   endpoint: string;
   model: string;
   apiKey: string;
+  temperature: number;
+  systemPrompt: string;
 }
 
 export interface SynraMemory {

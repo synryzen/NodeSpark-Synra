@@ -7,9 +7,12 @@ const visualKey = "synraStandalone.visualSettings.v2";
 
 export function loadModelSettings(): ModelSettings {
   return readJson<ModelSettings>(modelKey, {
+    provider: "server",
     endpoint: "/api/chat",
     model: "server",
-    apiKey: ""
+    apiKey: "",
+    temperature: 0.2,
+    systemPrompt: ""
   });
 }
 

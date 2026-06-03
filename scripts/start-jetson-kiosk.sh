@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KIOSK_FPS="${SYNRA_KIOSK_FPS:-15}"
+KIOSK_FPS="${SYNRA_KIOSK_FPS:-10}"
 KIOSK_QUALITY="${SYNRA_KIOSK_QUALITY:-low}"
 KIOSK_RENDER_SCALE="${SYNRA_KIOSK_RENDER_SCALE:-1.0}"
 KIOSK_AVATAR="${SYNRA_KIOSK_AVATAR:-code1}"
 URL="${SYNRA_STANDALONE_URL:-http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=${KIOSK_FPS}&live=1&quality=${KIOSK_QUALITY}&scale=${KIOSK_RENDER_SCALE}&avatar=${KIOSK_AVATAR}}"
 CHROMIUM_BIN="${CHROMIUM_BIN:-}"
 ANGLE_BACKEND="${SYNRA_KIOSK_ANGLE_BACKEND:-vulkan}"
+GL_MODE="${SYNRA_KIOSK_GL_MODE:-none}"
 EXTRA_CHROMIUM_FLAGS=()
 
 if [ "${SYNRA_KIOSK_AUTO_GRANT_MEDIA:-false}" = "true" ]; then
@@ -18,8 +19,8 @@ if [ "${SYNRA_KIOSK_REMOTE_DEBUG:-false}" = "true" ]; then
   EXTRA_CHROMIUM_FLAGS+=(--remote-debugging-address=127.0.0.1 --remote-debugging-port="${SYNRA_KIOSK_DEBUG_PORT:-9222}")
 fi
 
-if [ -n "${SYNRA_KIOSK_GL_MODE:-}" ]; then
-  EXTRA_CHROMIUM_FLAGS+=(--use-gl="${SYNRA_KIOSK_GL_MODE}")
+if [ -n "${GL_MODE}" ] && [ "${GL_MODE}" != "none" ]; then
+  EXTRA_CHROMIUM_FLAGS+=(--use-gl="${GL_MODE}")
 fi
 
 if [ -n "${ANGLE_BACKEND}" ] && [ "${ANGLE_BACKEND}" != "none" ]; then

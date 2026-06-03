@@ -33,6 +33,7 @@ const motionCount = countFiles(join(root, "public/motions"), ".vrma");
 const kioskScript = readFileSync(join(root, "scripts/start-jetson-kiosk.sh"), "utf8");
 const serverScript = readFileSync(join(root, "scripts/synra_server.py"), "utf8");
 const mainScript = readFileSync(join(root, "src/main.ts"), "utf8");
+const modelClientScript = readFileSync(join(root, "src/model-client.ts"), "utf8");
 const kioskIsLean = kioskScript.includes("mode=kiosk") && kioskScript.includes("fps=${KIOSK_FPS}") && kioskScript.includes("--force-device-scale-factor=1");
 const code1IsDefaultAvatar = readFileSync(join(root, "src/avatar-catalog.ts"), "utf8").includes('DEFAULT_SYNRA_AVATAR_ID: SynraAvatarId = "code1"');
 const kioskRequestsCode1Avatar = kioskScript.includes("SYNRA_KIOSK_AVATAR:-code1") && kioskScript.includes("avatar=${KIOSK_AVATAR}");
@@ -41,7 +42,8 @@ const rendererUsesQualityPresentation =
   mainScript.includes("THREE.NeutralToneMapping") &&
   mainScript.includes("HemisphereLight") &&
   mainScript.includes("faceLight") &&
-  mainScript.includes("camera.position.set(0, portrait ? 0.92");
+  mainScript.includes("targetHeight = 2.05") &&
+  mainScript.includes("camera.position.set(0, portrait ? 1.0");
 const smartHomeBridgeIsSafe = serverScript.includes("/api/tools/smart-home") && serverScript.includes("SYNRA_SMART_HOME_ENABLED") && serverScript.includes("Home Assistant");
 const smartHomeRequiresConfirmation = mainScript.includes("pendingAction") && mainScript.includes("Say confirm to run it") && mainScript.includes("cancel");
 const visionIsPermissionOnly = mainScript.includes("visionStatus") && mainScript.includes("ensureCameraReady") && mainScript.includes("I am not storing frames");
@@ -51,7 +53,11 @@ const kioskMediaGrantIsOptIn = kioskScript.includes("SYNRA_KIOSK_AUTO_GRANT_MEDI
 const kioskRemoteDebugIsOptIn = kioskScript.includes("SYNRA_KIOSK_REMOTE_DEBUG") && kioskScript.includes("--remote-debugging-port");
 const kioskGlModeIsConfigurable = kioskScript.includes("SYNRA_KIOSK_GL_MODE") && kioskScript.includes("--use-gl");
 const kioskAngleBackendIsConfigurable = kioskScript.includes("SYNRA_KIOSK_ANGLE_BACKEND") && kioskScript.includes("--use-angle");
-const kioskDefaultsToVulkanAngle = kioskScript.includes("SYNRA_KIOSK_ANGLE_BACKEND:-vulkan");
+const kioskUsesSnapVulkanFallback =
+  kioskScript.includes("SYNRA_KIOSK_ANGLE_BACKEND:-vulkan") &&
+  kioskScript.includes("SYNRA_KIOSK_GL_MODE:-none") &&
+  kioskScript.includes("SYNRA_KIOSK_FPS:-10") &&
+  kioskScript.includes("--disable-gpu-driver-bug-workarounds");
 const kioskVulkanWebglPathIsConfigurable =
   kioskScript.includes("DefaultANGLEVulkan") &&
   kioskScript.includes("VulkanFromANGLE") &&
@@ -59,11 +65,21 @@ const kioskVulkanWebglPathIsConfigurable =
 const kioskDefaultsToLowQuality = kioskScript.includes("SYNRA_KIOSK_QUALITY:-low") && kioskScript.includes("quality=${KIOSK_QUALITY}");
 const jetsonForcedLowPixelRatioPreservesClarity = mainScript.includes("forced-low") && mainScript.includes("1.0");
 const kioskRenderScaleIsConfigurable = kioskScript.includes("SYNRA_KIOSK_RENDER_SCALE:-1.0") && kioskScript.includes("scale=${KIOSK_RENDER_SCALE}");
-const runtimeRenderScaleIsConfigurable = mainScript.includes("renderScale") && mainScript.includes("resolveRenderScaleOverride");
+const runtimeRenderScaleIsConfigurable = mainScript.includes("renderScale") && mainScript.includes("resolveRenderScaleOverride") && mainScript.includes("return renderScale");
 const styles = readFileSync(join(root, "src/styles.css"), "utf8");
 const rightRailCanScroll = mainScript.includes("right-rail") && styles.includes("overflow-y: auto");
 const kioskComposerIsRightDocked = styles.includes('body[data-runtime-mode="kiosk"] .composer') && styles.includes("right: 20px") && styles.includes("transform: none");
 const modelRoutesAreExplicit = serverScript.includes("model_name_for_intent") && serverScript.includes("SYNRA_VISION_MODEL_NAME") && mainScript.includes("classifySynraRequest");
+const aiConnectionsAreConfigurable =
+  mainScript.includes("providerInput") &&
+  mainScript.includes("openAICompatible") &&
+  mainScript.includes("localHTTP") &&
+  mainScript.includes("temperatureInput") &&
+  mainScript.includes("systemPromptInput") &&
+  modelClientScript.includes("/api/external-chat") &&
+  serverScript.includes("/api/external-chat") &&
+  serverScript.includes("handle_external_chat") &&
+  serverScript.includes("normalize_chat_endpoint");
 const result = {
   ok:
     avatarMb < 40 &&
@@ -83,7 +99,7 @@ const result = {
     kioskRemoteDebugIsOptIn &&
     kioskGlModeIsConfigurable &&
     kioskAngleBackendIsConfigurable &&
-    kioskDefaultsToVulkanAngle &&
+    kioskUsesSnapVulkanFallback &&
     kioskVulkanWebglPathIsConfigurable &&
     kioskDefaultsToLowQuality &&
     jetsonForcedLowPixelRatioPreservesClarity &&
@@ -91,7 +107,8 @@ const result = {
     runtimeRenderScaleIsConfigurable &&
     rightRailCanScroll &&
     kioskComposerIsRightDocked &&
-    modelRoutesAreExplicit,
+    modelRoutesAreExplicit &&
+    aiConnectionsAreConfigurable,
   target: "jetson-first-lean-runtime",
   avatarMb,
   avatarCount,
@@ -116,15 +133,16 @@ const result = {
     "kiosk remote debugging is opt-in",
     "kiosk Chromium GL mode is configurable",
     "kiosk Chromium ANGLE backend is configurable",
-    "Jetson kiosk defaults to Vulkan ANGLE",
-    "kiosk Chromium Vulkan WebGL path is configurable",
+    "Jetson kiosk uses the snap Chromium WebGL fallback at 10 FPS",
+    "kiosk Chromium GL and ANGLE paths remain configurable",
     "Jetson kiosk defaults to low-cost visual quality",
     "forced-low mode preserves Jetson avatar clarity",
     "Jetson kiosk render scale is configurable",
-    "runtime honors render scale overrides",
+    "runtime honors render scale overrides above device pixel ratio",
     "right-side control rail scrolls when controls overflow",
     "kiosk composer is docked right instead of blocking Synra",
     "model routes are explicit for conversation, vision, tools, and NodeSpark",
+    "AI connection settings support server, cloud, and local HTTP models",
     "model calls fall back to local Synra path"
   ]
 };
