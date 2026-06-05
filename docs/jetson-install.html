@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Install Synra on Jetson</title>
+    <meta
+      name="description"
+      content="Install Synra Standalone and the Electron kiosk shell on NVIDIA Jetson with local or remote AI model support."
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #050607;
+        --panel: rgba(13, 16, 20, 0.82);
+        --line: rgba(255, 255, 255, 0.16);
+        --text: #f7f2ec;
+        --muted: #beb6ae;
+        --red: #f33d32;
+        --gold: #ffb84d;
+        --cyan: #4ad7ff;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 14% 18%, rgba(36, 175, 200, 0.24), transparent 32%),
+          radial-gradient(circle at 88% 24%, rgba(226, 43, 36, 0.24), transparent 34%),
+          linear-gradient(135deg, #030405, #0c1015 48%, #160807);
+      }
+
+      main {
+        width: min(980px, calc(100% - 36px));
+        margin: 0 auto;
+        padding: 30px 0 56px;
+      }
+
+      a {
+        color: #9ee8ff;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 36px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--text);
+        text-decoration: none;
+        font-weight: 900;
+      }
+
+      .brand img {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        box-shadow: 0 0 24px rgba(255, 58, 40, 0.42);
+      }
+
+      .nav-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .nav-links a,
+      .button {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 13px;
+        color: var(--text);
+        text-decoration: none;
+        background: rgba(255, 255, 255, 0.07);
+        font-weight: 800;
+      }
+
+      .hero,
+      section {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: 0 24px 90px rgba(0, 0, 0, 0.34);
+        backdrop-filter: blur(16px);
+      }
+
+      .hero {
+        padding: 28px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(42px, 8vw, 84px);
+        line-height: 0.95;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 24px;
+      }
+
+      p,
+      li {
+        color: var(--muted);
+        line-height: 1.58;
+      }
+
+      .lead {
+        max-width: 760px;
+        font-size: 19px;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .button.primary {
+        background: linear-gradient(135deg, rgba(243, 61, 50, 0.9), rgba(255, 184, 77, 0.82));
+      }
+
+      section {
+        margin-top: 18px;
+        padding: 24px;
+      }
+
+      pre {
+        overflow-x: auto;
+        margin: 14px 0 18px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        padding: 16px;
+        background: rgba(0, 0, 0, 0.52);
+        color: #fce7dc;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 14px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .callout {
+        border: 1px solid rgba(74, 215, 255, 0.25);
+        border-radius: 8px;
+        padding: 14px;
+        background: rgba(74, 215, 255, 0.08);
+      }
+
+      .signal {
+        color: var(--cyan);
+        font-size: 13px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      @media (max-width: 760px) {
+        main {
+          width: min(100% - 28px, 680px);
+        }
+
+        .nav {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="./">
+          <img src="assets/synra-logo.png" alt="" />
+          <span>NodeSpark Synra</span>
+        </a>
+        <div class="nav-links">
+          <a href="jetson-runbook.html">Runbook</a>
+          <a href="roadmap.html">Roadmap</a>
+          <a href="https://github.com/synryzen/NodeSpark-Synra">GitHub</a>
+        </div>
+      </nav>
+
+      <header class="hero">
+        <div class="signal">Jetson install</div>
+        <h1>Install Synra on Jetson</h1>
+        <p class="lead">
+          This installs Synra Standalone, the local API service, private model configuration, and the dedicated Electron
+          kiosk shell verified for the Jetson display path.
+        </p>
+        <pre><code>curl -fsSL https://raw.githubusercontent.com/synryzen/NodeSpark-Synra/main/scripts/install-jetson.sh | bash</code></pre>
+        <div class="actions">
+          <a class="button primary" href="#configure-ai">Configure AI</a>
+          <a class="button" href="#launch-kiosk">Launch Kiosk</a>
+          <a class="button" href="#verify">Verify</a>
+        </div>
+      </header>
+
+      <section>
+        <h2>What Gets Installed</h2>
+        <div class="grid">
+          <div class="callout">
+            <strong>Synra Standalone</strong>
+            <p>Installed at <code>~/synra-standalone</code> and served on port <code>5191</code>.</p>
+          </div>
+          <div class="callout">
+            <strong>Electron Kiosk</strong>
+            <p>Installed at <code>~/synra-jetson-station</code> with production launch scripts and diagnostics.</p>
+          </div>
+          <div class="callout">
+            <strong>User Service</strong>
+            <p>Creates <code>synra-standalone.service</code> for the local Python API server.</p>
+          </div>
+          <div class="callout">
+            <strong>Private Config</strong>
+            <p>Creates <code>~/.config/synra-standalone.env</code> and keeps existing values on update.</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Requirements</h2>
+        <ul>
+          <li>Jetson running Ubuntu with a desktop session.</li>
+          <li>Internet access.</li>
+          <li><code>git</code>, <code>curl</code>, <code>python3</code>, and a normal user account.</li>
+          <li>Node.js 20 or newer. The installer uses <code>nvm</code> if Node.js needs to be installed.</li>
+          <li>A local or remote OpenAI-compatible model endpoint for AI replies.</li>
+        </ul>
+      </section>
+
+      <section id="configure-ai">
+        <h2>Configure AI</h2>
+        <p>Edit Synra's private config:</p>
+        <pre><code>nano ~/.config/synra-standalone.env</code></pre>
+        <p>Remote OpenAI-compatible endpoint example:</p>
+        <pre><code>SYNRA_MODEL_ENDPOINT=https://lm.example.com/v1/chat/completions
+SYNRA_MODEL_NAME=zai-org/glm-4.6v-flash
+SYNRA_MODEL_LABEL=GLM 4.6V Flash
+SYNRA_MODEL_API_KEY=
+SYNRA_MODEL_TIMEOUT_SECONDS=45</code></pre>
+        <p>Local Ollama-compatible endpoint example:</p>
+        <pre><code>SYNRA_MODEL_ENDPOINT=http://127.0.0.1:11434/v1/chat/completions
+SYNRA_MODEL_NAME=qwen2.5:1.5b
+SYNRA_MODEL_LABEL=qwen2.5:1.5b
+SYNRA_MODEL_API_KEY=</code></pre>
+        <pre><code>systemctl --user restart synra-standalone.service
+curl http://127.0.0.1:5191/api/health</code></pre>
+      </section>
+
+      <section>
+        <h2>Configure Home Assistant</h2>
+        <p>Home Assistant is optional and remains user-confirmed for state-changing actions.</p>
+        <pre><code>SYNRA_SMART_HOME_ENABLED=true
+SYNRA_HOME_ASSISTANT_URL=http://homeassistant.local:8123
+SYNRA_HOME_ASSISTANT_TOKEN=your_home_assistant_long_lived_access_token
+SYNRA_HOME_ASSISTANT_DEFAULT_LIGHT=light.living_room</code></pre>
+      </section>
+
+      <section id="launch-kiosk">
+        <h2>Launch Kiosk</h2>
+        <p>The recommended production kiosk is Electron:</p>
+        <pre><code>~/synra-jetson-station/scripts/start-electron-kiosk.sh</code></pre>
+        <p>It launches this runtime URL:</p>
+        <pre><code>http://127.0.0.1:5191/?profile=jetson&amp;mode=kiosk&amp;fps=30&amp;live=1&amp;quality=sharp&amp;scale=1&amp;maxw=2560&amp;maxh=1600&amp;avatar=code1&amp;telemetry=1</code></pre>
+        <p>Snap Chromium is kept only as a fallback:</p>
+        <pre><code>~/synra-standalone/scripts/start-jetson-kiosk.sh</code></pre>
+      </section>
+
+      <section id="verify">
+        <h2>Verify Performance</h2>
+        <pre><code>~/synra-jetson-station/scripts/electron-gpu-check.sh</code></pre>
+        <p>A healthy result should show Synra telemetry reachable, kiosk mode active, WebGL available, FPS near target, and <code>GR3D_FREQ</code> activity while Synra is visible.</p>
+        <p>The verified production path on the current Jetson is Electron kiosk, <code>fps=30</code>, <code>quality=sharp</code>, <code>scale=1</code>, <code>maxw=2560</code>, <code>maxh=1600</code>, ANGLE backend <code>vulkan</code>, and remote debugging off by default.</p>
+      </section>
+
+      <section>
+        <h2>Update</h2>
+        <p>Run the installer again:</p>
+        <pre><code>curl -fsSL https://raw.githubusercontent.com/synryzen/NodeSpark-Synra/main/scripts/install-jetson.sh | bash</code></pre>
+        <p>The installer keeps an existing <code>~/.config/synra-standalone.env</code>.</p>
+      </section>
+    </main>
+  </body>
+</html>
