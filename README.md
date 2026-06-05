@@ -23,12 +23,18 @@ Synra is designed to:
 
 ## Jetson
 
-The Jetson deployment is documented in [docs/jetson-runbook.md](docs/jetson-runbook.md).
+The Jetson deployment is documented in [docs/jetson-runbook.md](docs/jetson-runbook.md), with a quick installer in [docs/jetson-install.md](docs/jetson-install.md).
+
+Fresh Jetson install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/synryzen/NodeSpark-Synra/main/scripts/install-jetson.sh | bash
+```
 
 Default runtime:
 
 ```text
-http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=24&live=1
+http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=30&live=1&quality=sharp&scale=1&maxw=2560&maxh=1600&avatar=code1&telemetry=1
 ```
 
 Diagnostics:
@@ -36,9 +42,10 @@ Diagnostics:
 ```bash
 ~/synra-standalone/scripts/jetson-diagnostics.sh
 ~/synra-standalone/scripts/kiosk-performance-check.sh
+~/synra-jetson-station/scripts/electron-gpu-check.sh
 ```
 
-Kiosk troubleshooting supports opt-in media, remote debug, and Chromium GL mode overrides through `SYNRA_KIOSK_AUTO_GRANT_MEDIA`, `SYNRA_KIOSK_REMOTE_DEBUG`, and `SYNRA_KIOSK_GL_MODE`.
+The recommended production kiosk is the Electron shell at `~/synra-jetson-station/scripts/start-electron-kiosk.sh`. Snap Chromium remains a fallback through `~/synra-standalone/scripts/start-jetson-kiosk.sh`.
 
 ## GitHub Page
 

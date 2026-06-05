@@ -1,0 +1,21 @@
+[Unit]
+Description=NodeSpark Synra Electron Kiosk
+After=graphical-session.target synra-standalone.service
+Wants=synra-standalone.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/nodespark/SynraJetsonStation
+Environment=NODE_ENV=production
+Environment=SYNRA_STANDALONE_URL=http://127.0.0.1:5191/
+Environment=SYNRA_KIOSK_REMOTE_DEBUG=true
+Environment=SYNRA_KIOSK_ANGLE_BACKEND=vulkan
+Environment=SYNRA_KIOSK_GL_MODE=none
+EnvironmentFile=-/etc/nodespark-synra-kiosk.env
+ExecStart=/opt/nodespark/SynraJetsonStation/scripts/start-electron-kiosk.sh
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

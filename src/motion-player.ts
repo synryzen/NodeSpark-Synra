@@ -80,6 +80,7 @@ export class SynraMotionPlayer {
   private vrm: VRM | null = null;
   private active: RuntimeClip | null = null;
   private activeReturnToIdle = false;
+  private returnToIdleRoute = "mode:idle";
   private lastPlayedClipId: string | null = null;
   private lastError: string | null = null;
   private generation = 0;
@@ -140,10 +141,15 @@ export class SynraMotionPlayer {
       this.active = null;
       const shouldReturnToIdle = this.activeReturnToIdle;
       this.activeReturnToIdle = false;
-      if (shouldReturnToIdle && runtime.spec.id !== this.resolveClipId("mode:idle")) {
-        void this.playAction("mode:idle", { loop: true, restart: true });
+      const idleClipId = this.resolveClipId(this.returnToIdleRoute);
+      if (shouldReturnToIdle && runtime.spec.id !== idleClipId) {
+        void this.playAction(this.returnToIdleRoute, { loop: true, restart: true });
       }
     }
+  }
+
+  setReturnToIdleRoute(route: string): void {
+    this.returnToIdleRoute = route.trim() || "mode:idle";
   }
 
   listClips(): SynraMotionClipSpec[] {

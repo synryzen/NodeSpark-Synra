@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KIOSK_FPS="${SYNRA_KIOSK_FPS:-10}"
-KIOSK_QUALITY="${SYNRA_KIOSK_QUALITY:-low}"
-KIOSK_RENDER_SCALE="${SYNRA_KIOSK_RENDER_SCALE:-1.0}"
+KIOSK_FPS="${SYNRA_KIOSK_FPS:-24}"
+KIOSK_QUALITY="${SYNRA_KIOSK_QUALITY:-performance}"
+KIOSK_RENDER_SCALE="${SYNRA_KIOSK_RENDER_SCALE:-0.5}"
+KIOSK_MAX_RENDER_WIDTH="${SYNRA_KIOSK_MAX_RENDER_WIDTH:-1280}"
+KIOSK_MAX_RENDER_HEIGHT="${SYNRA_KIOSK_MAX_RENDER_HEIGHT:-800}"
 KIOSK_AVATAR="${SYNRA_KIOSK_AVATAR:-code1}"
-URL="${SYNRA_STANDALONE_URL:-http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=${KIOSK_FPS}&live=1&quality=${KIOSK_QUALITY}&scale=${KIOSK_RENDER_SCALE}&avatar=${KIOSK_AVATAR}}"
+URL="${SYNRA_STANDALONE_URL:-http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=${KIOSK_FPS}&live=1&quality=${KIOSK_QUALITY}&scale=${KIOSK_RENDER_SCALE}&maxw=${KIOSK_MAX_RENDER_WIDTH}&maxh=${KIOSK_MAX_RENDER_HEIGHT}&avatar=${KIOSK_AVATAR}&telemetry=1}"
 CHROMIUM_BIN="${CHROMIUM_BIN:-}"
 ANGLE_BACKEND="${SYNRA_KIOSK_ANGLE_BACKEND:-vulkan}"
 GL_MODE="${SYNRA_KIOSK_GL_MODE:-none}"
@@ -79,7 +81,7 @@ exec "$CHROMIUM_BIN" \
   --disable-background-networking \
   --disable-renderer-backgrounding \
   --disable-background-timer-throttling \
-  --enable-gpu-rasterization \
+  --disable-gpu-rasterization \
   --ignore-gpu-blocklist \
   --force-device-scale-factor=1 \
   --autoplay-policy=no-user-gesture-required \

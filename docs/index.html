@@ -219,6 +219,62 @@
         box-shadow: 0 0 18px var(--cyan);
       }
 
+      .install {
+        margin-top: 52px;
+        padding: 24px;
+      }
+
+      .install h2 {
+        margin: 0 0 10px;
+        font-size: 26px;
+      }
+
+      .install p {
+        max-width: 820px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      pre {
+        overflow-x: auto;
+        margin: 18px 0;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        padding: 16px;
+        background: rgba(0, 0, 0, 0.46);
+        color: #fce7dc;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 14px;
+      }
+
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .step {
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .step strong {
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .step span {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
       footer {
         margin-top: 52px;
         color: var(--muted);
@@ -247,6 +303,10 @@
         .features {
           grid-template-columns: 1fr;
         }
+
+        .steps {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
@@ -261,6 +321,7 @@
           </div>
         </div>
         <div class="nav-links">
+          <a href="jetson-install.html">Install</a>
           <a href="roadmap.html">Roadmap</a>
           <a href="jetson-findings.html">Jetson</a>
         </div>
@@ -272,10 +333,11 @@
           <h1>NodeSpark Synra</h1>
           <p class="lead">
             A standalone AI companion built from Synra's NodeSpark identity: voice, avatar presence, local or cloud
-            models, smart-home tools, memory, and optional NodeSpark skills.
+            models, memory, free smart-home tools, and premium NodeSpark Command Center skills.
           </p>
           <div class="actions">
-            <a class="button" href="jetson-runbook.html">Jetson Runbook</a>
+            <a class="button" href="jetson-install.html">Install on Jetson</a>
+            <a class="button secondary" href="jetson-runbook.html">Runbook</a>
             <a class="button secondary" href="roadmap.html">Roadmap</a>
           </div>
         </div>
@@ -285,8 +347,9 @@
           <div class="row"><span>Runtime</span><strong>Vite + Three.js VRM</strong></div>
           <div class="row"><span>Avatars</span><strong>3 Synra characters</strong></div>
           <div class="row"><span>Motions</span><strong>57 VRMA clips</strong></div>
-          <div class="row"><span>Jetson Mode</span><strong>24 FPS kiosk</strong></div>
-          <div class="row"><span>NodeSpark</span><strong>Optional skill</strong></div>
+          <div class="row"><span>Jetson Mode</span><strong>30 FPS kiosk</strong></div>
+          <div class="row"><span>Smart home</span><strong>Free skill</strong></div>
+          <div class="row"><span>NodeSpark</span><strong>Subscriber skill</strong></div>
         </aside>
       </section>
 
@@ -314,9 +377,37 @@
         </article>
       </section>
 
+      <section class="panel install" aria-label="Jetson install">
+        <div class="signal">Production kiosk path</div>
+        <h2>Install Synra on Jetson</h2>
+        <p>
+          The installer sets up the Synra web runtime, local API service, private model configuration, and the dedicated
+          Electron kiosk shell that avoids snap Chromium confinement.
+        </p>
+        <pre><code>curl -fsSL https://raw.githubusercontent.com/synryzen/NodeSpark-Synra/main/scripts/install-jetson.sh | bash</code></pre>
+        <div class="steps">
+          <div class="step">
+            <strong>1. Install</strong>
+            <span>Builds Synra, installs the user service, and creates a safe starter config.</span>
+          </div>
+          <div class="step">
+            <strong>2. Configure AI</strong>
+            <span>Edit <code>~/.config/synra-standalone.env</code> with a local or remote OpenAI-compatible endpoint.</span>
+          </div>
+          <div class="step">
+            <strong>3. Launch Kiosk</strong>
+            <span>Run <code>~/synra-jetson-station/scripts/start-electron-kiosk.sh</code> for the verified 30 FPS path.</span>
+          </div>
+        </div>
+        <div class="actions">
+          <a class="button" href="jetson-install.html">Read Install Guide</a>
+          <a class="button secondary" href="jetson-runbook.html">Operations Runbook</a>
+        </div>
+      </section>
+
       <footer>
-        Synra Standalone is separate from NodeSpark and NodeSparkHub. NodeSpark integration is planned as an optional
-        skill.
+        Synra Standalone is separate from NodeSpark and NodeSparkHub. NodeSpark integration is a subscriber Command
+        Center skill, not a hard dependency.
       </footer>
     </main>
   </body>

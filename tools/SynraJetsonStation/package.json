@@ -1,0 +1,20 @@
+{
+  "name": "synra-jetson-station",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "test:kiosk": "npm run build && node --test tests/kiosk-config.test.mjs",
+    "start": "node dist/station-server.js",
+    "kiosk:electron": "electron dist/kiosk-shell.js",
+    "kiosk:diagnostics": "node dist/kiosk-diagnostics.js",
+    "simulate": "node dist/station-server.js --simulate --once"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "electron": "^39.8.5",
+    "typescript": "^5.9.2"
+  }
+}

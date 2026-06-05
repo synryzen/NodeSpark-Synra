@@ -9,7 +9,12 @@
     "preview": "vite preview --host 0.0.0.0",
     "serve:python": "python3 scripts/synra_server.py",
     "typecheck": "tsc --noEmit",
-    "perf:smoke": "node scripts/perf-smoke.mjs"
+    "audit:hub-runtime": "node scripts/hub-runtime-audit.mjs",
+    "qa:avatars": "node scripts/avatar-motion-smoke.mjs",
+    "perf:smoke": "node scripts/perf-smoke.mjs",
+    "station:typecheck": "npm --prefix tools/SynraJetsonStation run typecheck",
+    "station:test": "npm --prefix tools/SynraJetsonStation run test:kiosk",
+    "station:build": "npm --prefix tools/SynraJetsonStation run build"
   },
   "dependencies": {
     "@pixiv/three-vrm": "^3.4.2",

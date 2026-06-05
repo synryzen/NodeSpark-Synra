@@ -3,10 +3,12 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM } from "@pixiv/three-vrm";
 import { DEFAULT_SYNRA_AVATAR_ID, SYNRA_AVATARS, getSynraAvatar, isSynraAvatarId, type SynraAvatarId } from "./avatar-catalog";
+import { SynraAvatarRuntime } from "./hub-runtime/drivers/avatar3d";
+import type { SynraActionName, SynraMode } from "./hub-runtime/types/avatar";
 import { askModel, classifySynraRequest, localSynraReply } from "./model-client";
 import { SynraMotionPlayer, type SynraMotionClipSpec } from "./motion-player";
-import { loadMemory, loadModelSettings, loadVisualSettings, saveMemory, saveModelSettings, saveVisualSettings } from "./storage";
-import type { ModelSettings, SynraMessage, SynraState } from "./types";
+import { loadHomeAssistantSettings, loadMemory, loadModelSettings, loadProductSettings, loadVisualSettings, loadVoiceSettings, saveHomeAssistantSettings, saveMemory, saveModelSettings, saveProductSettings, saveVisualSettings, saveVoiceSettings } from "./storage";
+import type { HomeAssistantEntity, HomeAssistantSettings, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, SynraMessage, SynraSkillMode, SynraState, VoiceProvider, VoiceSettings } from "./types";
 
 const app = document.querySelector<HTMLElement>("#app");
 if (!app) throw new Error("Missing app root.");
@@ -27,11 +29,27 @@ type MotionCategory = {
 type LocalCommandResult = {
   text: string;
   motion?: string;
+  routeLabel?: string;
+  card?: ChatCard;
+};
+
+type ConnectionTruthStatus = "not-configured" | "configured" | "checking" | "reachable" | "unreachable" | "off" | "permission-needed" | "ready";
+type ConnectionTruthKey = "ai" | "nodeSpark" | "homeAssistant" | "voice" | "vision";
+
+type ConnectionTruth = {
+  status: ConnectionTruthStatus;
+  detail: string;
 };
 
 type PendingAction = {
   type: "smart_home";
   action: "turn_on" | "turn_off" | "toggle";
+  label: string;
+  entityId?: string;
+  createdAt: number;
+} | {
+  type: "nodespark_workflow";
+  workflowName: string;
   label: string;
   createdAt: number;
 };
@@ -51,6 +69,33 @@ type VisionPublicStatus = {
   videoDeviceCount?: number;
   mediaDeviceCount?: number;
 };
+
+type NodeSparkActionResponse = {
+  ok?: boolean;
+  error?: string;
+  service?: string;
+  version?: string;
+  status?: string;
+  path?: string;
+  workflows?: Array<string | NodeSparkWorkflowSummary>;
+  runs?: Array<{ id?: string; workflow?: string; status?: string; startedAt?: string; endedAt?: string }>;
+  run?: { id?: string; workflow?: string; status?: string; startedAt?: string; endedAt?: string };
+  count?: number;
+  workflowName?: string;
+};
+
+type NodeSparkWorkflowSummary = {
+  id?: string;
+  name: string;
+  status?: string;
+  detail?: string;
+  lastRun?: string;
+};
+
+type ChatCard =
+  | { kind: "nodespark_workflows"; workflows: NodeSparkWorkflowSummary[]; total: number; hubLabel: string; generatedAt: string }
+  | { kind: "nodespark_confirmation"; workflowName: string; risk: string; effect: string; hubLabel: string }
+  | { kind: "nodespark_run_result"; workflowName: string; run?: NodeSparkActionResponse["run"]; status: "started" | "failed"; error?: string; hubLabel: string };
 
 const SYNRA_BACKGROUNDS: SynraBackground[] = [
   { id: "command-room", label: "Command Room", url: "/backgrounds/synra-command-room.png" },
@@ -73,14 +118,23 @@ const MOTION_CATEGORIES: MotionCategory[] = [
 ];
 
 const STATE_MOTION_VARIETY: Record<SynraState, string[]> = {
-  idle: ["mode:idle", "local_stand_1", "local_stand_4", "local_stand_5", "local_stand_6"],
+  idle: ["mode:idle", "local_stand_1", "local_stand_4", "local_stand_5"],
   listening: ["mode:listening", "attentive", "lean_in", "look_camera"],
   thinking: ["mode:thinking", "ask_question", "compare", "look_screen"],
   speaking: ["mode:speaking", "explain", "present", "answer", "teach"],
   offline: ["error_calm", "concerned"]
 };
 
-const IDLE_LIFE_GESTURES = ["look_camera", "look_screen", "confirm", "confused_tilt", "wave", "attentive", "present"];
+const IDLE_LIFE_GESTURES = ["look_camera", "look_screen", "attentive", "present"];
+const KIOSK_IDLE_ROUTE = "mode:idle";
+const USE_HUB_AVATAR_RUNTIME = true;
+const SYNRYZEN_WEBSITE_URL = "https://synryzen.com";
+const NODESPARK_APP_STORE_URL = "https://apps.apple.com/us/app/nodespark/id6756223114";
+const NODESPARKHUB_ICON_URL = "/icons/nodesparkhub-icon.png";
+const STAGE_AVATAR_HEIGHT = {
+  kiosk: 1.78,
+  interactive: 1.86
+} as const;
 const PRESENCE_NUDGES = [
   "I am here.",
   "Ready when you are.",
@@ -98,6 +152,9 @@ const state = {
   synra: "idle" as SynraState,
   messages: [] as SynraMessage[],
   settings: loadModelSettings(),
+  voiceSettings: loadVoiceSettings(),
+  productSettings: loadProductSettings(),
+  homeAssistantSettings: loadHomeAssistantSettings(),
   visual: initialVisualSettings,
   memory: loadMemory(),
   vrm: null as VRM | null,
@@ -126,9 +183,26 @@ const state = {
   speechFallbackTimer: 0,
   pendingAction: null as PendingAction | null,
   lastRouteLabel: "startup",
-  lastAutoMotionByState: {} as Partial<Record<SynraState, string>>
+  lastRenderedSynraState: null as SynraState | null,
+  lastAutoMotionByState: {} as Partial<Record<SynraState, string>>,
+  connections: {
+    ai: { status: "configured", detail: "Server route" },
+    nodeSpark: { status: "not-configured", detail: "Premium skill" },
+    homeAssistant: { status: "not-configured", detail: "Free skill" },
+    voice: { status: "checking", detail: "Checking" },
+    vision: { status: "off", detail: "Camera off" }
+  } as Record<ConnectionTruthKey, ConnectionTruth>
 };
-const performanceProfile = resolvePerformanceProfile();
+let hubAvatarRuntime: SynraAvatarRuntime | null = null;
+let hubMotionClips: SynraMotionClipSpec[] = [];
+let hubMotionRoutes = new Map<string, string>();
+let hubMotionManifestReady = false;
+let activeVisionStream: MediaStream | null = null;
+let activeSpeechAudio: HTMLAudioElement | null = null;
+let activeSpeechAbort: AbortController | null = null;
+let speechSerial = 0;
+let performanceProfile = resolvePerformanceProfile();
+const chatCardRegistry = new Map<string, ChatCard>();
 Object.assign(window, {
 	  __synraStandaloneDebug: () => ({
 	    synraState: state.synra,
@@ -139,12 +213,20 @@ Object.assign(window, {
     backgroundCount: SYNRA_BACKGROUNDS.length,
     motion: state.motionPlayer.snapshot,
     voiceStatus: state.voiceStatus,
+    productSettings: state.productSettings,
+    homeAssistantSettings: publicHomeAssistantSettings(),
+    skillAccess: skillAccessSnapshot(),
     visionStatus: state.visionStatus,
+    visionEnabled: Boolean(activeVisionStream),
     serverVisionStatus: state.serverVisionStatus,
     serverCameraDeviceCount: state.serverCameraDeviceCount,
     lastRouteLabel: state.lastRouteLabel,
     performanceTier: state.performanceTier,
-    webgl: renderer ? "available" : "unavailable",
+    renderQuality: state.visual.renderQuality,
+    renderScale: resolveEffectivePixelRatio(),
+    renderBuffer: renderer ? renderer.getDrawingBufferSize(new THREE.Vector2()) : hubAvatarRuntime?.runtimeHealth() ?? null,
+    webgl: renderer || hubAvatarRuntime?.runtimeHealth().webglReady ? "available" : "unavailable",
+    hubRuntime: hubAvatarRuntime?.debugState() ?? null,
     pendingAction: state.pendingAction,
 	    messageCount: state.messages.length,
 	    lastMessage: state.messages.at(-1) ?? null,
@@ -159,11 +241,8 @@ app.innerHTML = `
     <canvas id="scene"></canvas>
     <div class="hud">
       <div class="brand">
-        <img class="brand-logo" src="/icons/synra-logo.png" alt="" />
-        <div>
-          <strong>Synra</strong>
-          <span id="status">Starting</span>
-        </div>
+        <img class="brand-logo brand-logo-only" src="/icons/synra-logo.png" alt="Synra" />
+        <span id="status" class="visually-hidden">Starting</span>
       </div>
       <div class="metrics">
         <span class="signal-dot"></span>
@@ -171,6 +250,24 @@ app.innerHTML = `
         <span id="modelName">Local path</span>
       </div>
     </div>
+    <aside class="left-chat-panel">
+      <div class="chat-panel">
+        <header class="chat-panel-header">
+          <span>Conversation</span>
+          <strong id="chatStatus">Ready</strong>
+        </header>
+        <div class="chat-log" id="chatLog" aria-live="polite">
+          <div class="chat-empty">Ask Synra anything.</div>
+        </div>
+        <form class="composer" id="composer">
+          <button type="button" id="listenButton" class="icon-button listen" title="Listen" aria-label="Listen"><span></span></button>
+          <button type="button" id="stopVoiceButton" class="icon-button stop" title="Stop voice" aria-label="Stop voice">■</button>
+          <input id="prompt" autocomplete="off" placeholder="Talk to Synra" />
+          <button type="submit" class="icon-button send" title="Send" aria-label="Send">↑</button>
+          <button type="button" id="settingsButton" class="icon-button settings-toggle" title="Model settings" aria-label="Model settings">⚙</button>
+        </form>
+      </div>
+    </aside>
     <aside class="right-rail">
       <div class="performance-panel">
         <header>
@@ -187,6 +284,14 @@ app.innerHTML = `
           <select id="avatarSelect"></select>
         </label>
         <label class="manual-control">
+          <span>Render Quality</span>
+          <select id="qualitySelect">
+            <option value="performance">Performance</option>
+            <option value="balanced">Balanced</option>
+            <option value="sharp">Sharp</option>
+          </select>
+        </label>
+        <label class="manual-control">
           <span>Motion Type</span>
           <select id="motionCategorySelect"></select>
         </label>
@@ -195,6 +300,103 @@ app.innerHTML = `
           <select id="motionSelect"></select>
         </label>
         <button type="button" id="playMotionButton" class="manual-control">Play Motion</button>
+      </div>
+      <div class="connection-panel">
+        <header>
+          <span>AI Connection</span>
+          <strong id="aiConnectionStatus">Server route</strong>
+        </header>
+        <div class="connection-grid">
+          <span>Provider</span>
+          <strong id="aiProviderStatus">Server</strong>
+          <span>Endpoint</span>
+          <strong id="aiEndpointStatus">/api/chat</strong>
+          <span>Quality</span>
+          <strong id="renderQualityStatus">Balanced</strong>
+        </div>
+        <div class="connection-actions">
+          <button type="button" id="openAiSettingsButton">Settings</button>
+          <button type="button" id="testAiButton">Test AI</button>
+        </div>
+      </div>
+      <div class="health-panel">
+        <header>
+          <span>System Health</span>
+          <strong id="healthSummaryStatus">Configured</strong>
+        </header>
+        <div class="health-list">
+          <div class="health-row">
+            <span>AI Model</span>
+            <strong id="healthAiStatus" data-state="configured">Configured</strong>
+          </div>
+          <div class="health-row">
+            <span>NodeSparkHub</span>
+            <strong id="healthNodeSparkStatus" data-state="not-configured">Not configured</strong>
+          </div>
+          <div class="health-row">
+            <span>Home Assistant</span>
+            <strong id="healthHomeAssistantStatus" data-state="not-configured">Not configured</strong>
+          </div>
+          <div class="health-row">
+            <span>Voice</span>
+            <strong id="healthVoiceStatus" data-state="checking">Checking</strong>
+          </div>
+          <div class="health-row">
+            <span>Vision</span>
+            <strong id="healthVisionStatus" data-state="off">Off</strong>
+          </div>
+        </div>
+        <button type="button" id="checkAllConnectionsButton">Check All</button>
+      </div>
+      <div class="skill-panel">
+        <header>
+          <span>Synra Access</span>
+          <strong id="synraAccessStatus">Free Companion</strong>
+        </header>
+        <div class="skill-list">
+          <div class="skill-row">
+            <span>Home Assistant</span>
+            <strong id="homeAssistantSkillStatus">Free</strong>
+          </div>
+          <div class="skill-row premium">
+            <span>NodeSpark Command Center</span>
+            <strong id="nodeSparkSkillStatus">Subscriber</strong>
+          </div>
+        </div>
+      <div class="skill-detail-grid">
+        <span>Targets</span>
+        <strong id="homeAssistantTargetCount">0 discovered</strong>
+        <span>Default</span>
+        <strong id="homeAssistantDefaultTarget">Not set</strong>
+      </div>
+      <div class="quick-tool-grid">
+        <button type="button" id="systemStatusButton">System</button>
+        <button type="button" id="networkStatusButton">Network</button>
+        <button type="button" id="dateTimeButton">Time</button>
+        <button type="button" id="nodeSparkStatusButton">NodeSpark</button>
+      </div>
+      <div class="hub-action-grid">
+        <button type="button" id="nodeSparkWorkflowsButton">Workflows</button>
+        <button type="button" id="nodeSparkRunsButton">Runs</button>
+        <button type="button" id="nodeSparkLatestRunButton">Latest</button>
+      </div>
+      <p class="skill-hint" id="nodeSparkActionHint">Pair Hub to enable workflow insight.</p>
+      <button type="button" id="openSkillSettingsButton">Skills</button>
+      </div>
+      <div class="about-panel">
+        <header>
+          <span>About</span>
+          <strong>Synryzen</strong>
+        </header>
+        <div class="about-product-mini">
+          <img src="${NODESPARKHUB_ICON_URL}" alt="NodeSparkHub icon" />
+          <div>
+            <span>Developer</span>
+            <strong>Matthew C Elliott</strong>
+          </div>
+        </div>
+        <p>Synra Standalone is a companion AI by Synryzen that can run on Jetson, desktop, mobile, and the browser with optional NodeSparkHub skills.</p>
+        <button type="button" id="openAboutButton">About Synra</button>
       </div>
       <div class="caption-shell">
         <div class="caption" id="caption">I am getting ready.</div>
@@ -210,49 +412,250 @@ app.innerHTML = `
       <div class="presence system-health">
         <span>Vision</span>
         <strong id="visionState">Not checked</strong>
+        <button type="button" id="visionToggleButton" class="inline-action">Vision Off</button>
+        <button type="button" id="visionAnalyzeButton" class="inline-action">Analyze View</button>
       </div>
     </aside>
-    <form class="composer" id="composer">
-      <button type="button" id="listenButton" class="icon-button listen" title="Listen" aria-label="Listen"><span></span></button>
-      <input id="prompt" autocomplete="off" placeholder="Talk to Synra" />
-      <button type="submit" class="icon-button send" title="Send" aria-label="Send">↑</button>
-      <button type="button" id="settingsButton" class="icon-button" title="Model settings" aria-label="Model settings">⚙</button>
-    </form>
   </section>
   <dialog id="settingsDialog">
     <form method="dialog" class="settings">
-      <h2>AI Connection</h2>
-      <label>
-        Provider
-        <select id="providerInput">
-          <option value="server">Synra server route</option>
-          <option value="openAICompatible">OpenAI-compatible cloud</option>
-          <option value="localHTTP">Local HTTP compatible</option>
-        </select>
-      </label>
-      <label>
-        Endpoint or base URL
-        <input id="endpointInput" />
-      </label>
-      <label>
-        Model
-        <input id="modelInput" />
-      </label>
-      <label>
-        API key
-        <input id="apiKeyInput" type="password" />
-      </label>
-      <label>
-        Temperature
-        <input id="temperatureInput" type="number" min="0" max="2" step="0.1" />
-      </label>
-      <label>
-        System prompt
-        <textarea id="systemPromptInput" rows="4" placeholder="Optional Synra personality or routing instructions"></textarea>
-      </label>
+      <h2>Synra Settings</h2>
+      <div class="settings-tabs" role="tablist" aria-label="Synra settings sections">
+        <button type="button" class="settings-tab active" data-settings-tab="ai" role="tab" aria-selected="true">AI</button>
+        <button type="button" class="settings-tab" data-settings-tab="voice" role="tab" aria-selected="false">Voice</button>
+        <button type="button" class="settings-tab" data-settings-tab="memory" role="tab" aria-selected="false">Memory</button>
+        <button type="button" class="settings-tab" data-settings-tab="home" role="tab" aria-selected="false">Home</button>
+        <button type="button" class="settings-tab" data-settings-tab="nodespark" role="tab" aria-selected="false">NodeSparkHub</button>
+        <button type="button" class="settings-tab" data-settings-tab="display" role="tab" aria-selected="false">Display</button>
+        <button type="button" class="settings-tab" data-settings-tab="about" role="tab" aria-selected="false">About</button>
+      </div>
+      <section class="settings-panel active" data-settings-panel="ai" role="tabpanel">
+        <h3>AI Connection</h3>
+        <label>
+          Provider
+          <select id="providerInput">
+            <option value="server">Synra server route</option>
+            <option value="openAICompatible">OpenAI-compatible cloud</option>
+            <option value="localHTTP">Local HTTP compatible</option>
+          </select>
+        </label>
+        <label>
+          Endpoint or base URL
+          <input id="endpointInput" />
+        </label>
+        <label>
+          Model
+          <input id="modelInput" />
+        </label>
+        <label>
+          API key
+          <input id="apiKeyInput" type="password" />
+        </label>
+        <label>
+          Temperature
+          <input id="temperatureInput" type="number" min="0" max="2" step="0.1" />
+        </label>
+        <label>
+          System prompt
+          <textarea id="systemPromptInput" rows="4" placeholder="Optional Synra personality or routing instructions"></textarea>
+        </label>
+      </section>
+      <section class="settings-panel" data-settings-panel="voice" role="tabpanel" hidden>
+        <h3>Voice Output</h3>
+        <label>
+          Voice provider
+          <select id="voiceProviderInput">
+            <option value="browser">Browser speech</option>
+            <option value="elevenLabs">ElevenLabs</option>
+          </select>
+        </label>
+        <label>
+          ElevenLabs API key
+          <input id="elevenLabsApiKeyInput" type="password" autocomplete="off" />
+        </label>
+        <label>
+          ElevenLabs voice ID
+          <input id="elevenLabsVoiceIdInput" placeholder="Voice ID from ElevenLabs" />
+        </label>
+        <label>
+          ElevenLabs model
+          <input id="elevenLabsModelIdInput" placeholder="eleven_multilingual_v2" />
+        </label>
+        <label>
+          Output format
+          <input id="elevenLabsOutputFormatInput" placeholder="mp3_44100_128" />
+        </label>
+        <label>
+          Stability
+          <input id="elevenLabsStabilityInput" type="number" min="0" max="1" step="0.01" />
+        </label>
+        <label>
+          Similarity boost
+          <input id="elevenLabsSimilarityInput" type="number" min="0" max="1" step="0.01" />
+        </label>
+      </section>
+      <section class="settings-panel" data-settings-panel="memory" role="tabpanel" hidden>
+        <h3>Memory</h3>
+        <label>
+          Preferred name
+          <input id="memoryPreferredNameInput" placeholder="What Synra should call you" />
+        </label>
+        <label>
+          Response style
+          <input id="memoryStyleInput" placeholder="warm, direct, and useful" />
+        </label>
+        <label>
+          Remembered facts
+          <textarea id="memoryFactsInput" rows="4" placeholder="One approved memory per line"></textarea>
+        </label>
+        <label>
+          Routines
+          <textarea id="memoryRoutinesInput" rows="3" placeholder="Morning routine, work hours, preferred check-ins"></textarea>
+        </label>
+        <label>
+          Rooms and devices
+          <textarea id="memoryDevicesInput" rows="3" placeholder="Office lamp, studio lights, living room"></textarea>
+        </label>
+      </section>
+      <section class="settings-panel" data-settings-panel="home" role="tabpanel" hidden>
+        <h3>Home Assistant</h3>
+        <label>
+          Home Assistant skill
+          <select id="homeAssistantEnabledInput">
+            <option value="off">Off</option>
+            <option value="on">On</option>
+          </select>
+        </label>
+        <label>
+          Home Assistant URL
+          <input id="homeAssistantUrlInput" placeholder="http://homeassistant.local:8123" />
+        </label>
+        <label>
+          Long-lived access token
+          <input id="homeAssistantTokenInput" type="password" autocomplete="off" />
+        </label>
+        <label>
+          Default light entity
+          <input id="homeAssistantLightEntityInput" placeholder="light.office" />
+        </label>
+        <label>
+          Discovered target
+          <select id="homeAssistantEntitySelect">
+            <option value="">No discovered entities yet</option>
+          </select>
+        </label>
+      </section>
+      <section class="settings-panel" data-settings-panel="nodespark" role="tabpanel" hidden>
+        <h3>NodeSparkHub</h3>
+        <label>
+          Synra focus
+          <select id="synraSkillModeInput">
+            <option value="hybrid">Hybrid companion</option>
+            <option value="homeAssistant">Home Assistant companion</option>
+            <option value="nodeSparkHub">NodeSparkHub controller</option>
+          </select>
+        </label>
+        <label>
+          NodeSpark Command Center
+          <select id="nodeSparkAccessInput">
+            <option value="locked">Requires NodeSpark subscription</option>
+            <option value="subscriber">Subscriber mode</option>
+          </select>
+        </label>
+        <label>
+          NodeSparkHub URL
+          <input id="nodeSparkHubUrlInput" placeholder="http://nodesparkhub.local:8787" />
+        </label>
+        <label>
+          Synra device name
+          <input id="nodeSparkDeviceNameInput" placeholder="Synra Standalone Jetson" />
+        </label>
+        <label>
+          Hub pairing PIN
+          <input id="nodeSparkPairingPinInput" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="12" />
+        </label>
+        <div class="connection-actions settings-button-row three">
+          <button type="button" id="pairNodeSparkButton">Pair with PIN</button>
+          <button type="button" id="checkNodeSparkPairingButton">Check Hub</button>
+          <button type="button" id="forgetNodeSparkPairingButton">Forget Pairing</button>
+        </div>
+        <div class="settings-status-grid compact">
+          <span>Pairing</span>
+          <strong id="nodeSparkPairingStatus">Not paired</strong>
+          <span>Hub</span>
+          <strong id="nodeSparkPairedHubStatus">No Hub token</strong>
+        </div>
+        <p class="settings-note">Generate the PIN in NodeSparkHub, enter it once here, and Synra will store the paired-device token locally. Workflow execution will still require confirmation before anything runs.</p>
+      </section>
+      <section class="settings-panel" data-settings-panel="display" role="tabpanel" hidden>
+        <h3>Display</h3>
+        <div class="settings-status-grid">
+          <span>Avatar</span>
+          <strong id="settingsAvatarStatus">Synra</strong>
+          <span>Background</span>
+          <strong id="settingsBackgroundStatus">Command Room</strong>
+          <span>Render quality</span>
+          <strong id="settingsQualityStatus">Balanced</strong>
+          <span>Mode</span>
+          <strong id="settingsModeStatus">Manual</strong>
+        </div>
+        <p class="settings-note">Display controls stay in the right rail for fast kiosk adjustments without reopening settings.</p>
+      </section>
+      <section class="settings-panel" data-settings-panel="about" role="tabpanel" hidden>
+        <h3>About</h3>
+        <div class="settings-status-grid">
+          <span>Developer</span>
+          <strong>Matthew C Elliott</strong>
+          <span>Website</span>
+          <strong>synryzen.com</strong>
+          <span>Product</span>
+          <strong>Synra Standalone</strong>
+        </div>
+        <p class="settings-note">Synra is a standalone companion assistant with optional Home Assistant and NodeSparkHub skills.</p>
+      </section>
       <menu>
         <button value="cancel">Cancel</button>
+        <button type="button" id="discoverHomeAssistantButton">Discover Home</button>
+        <button type="button" id="testHomeAssistantButton">Test Home</button>
+        <button type="button" id="testVoiceButton">Test Voice</button>
+        <button type="button" id="forgetMemoriesButton">Forget Memory</button>
+        <button type="button" id="exportMemoryButton">Export Memory</button>
+        <button type="button" id="importMemoryButton">Import Memory</button>
         <button id="saveSettingsButton" value="default">Save</button>
+      </menu>
+    </form>
+  </dialog>
+  <dialog id="aboutDialog">
+    <form method="dialog" class="about-dialog">
+      <div class="about-hero">
+        <img class="about-hero-icon" src="${NODESPARKHUB_ICON_URL}" alt="NodeSparkHub icon" />
+        <div>
+          <span>Synryzen Companion Platform</span>
+          <h2>Synra Standalone</h2>
+          <p>Synra is a companion AI assistant created by Matthew C Elliott to feel alive, reliable, and useful across Jetson, Mac, iPhone, and browser experiences.</p>
+        </div>
+      </div>
+      <div class="about-fact-grid">
+        <span>Developer</span>
+        <strong>Matthew C Elliott</strong>
+        <span>Website</span>
+        <a href="${SYNRYZEN_WEBSITE_URL}" target="_blank" rel="noreferrer">${SYNRYZEN_WEBSITE_URL}</a>
+        <span>Core modes</span>
+        <strong>Companion, Home Assistant, NodeSparkHub skill</strong>
+      </div>
+      <section class="about-section">
+        <h3>NodeSparkHub</h3>
+        <p>NodeSparkHub is the command-center side of the NodeSpark ecosystem. It brings workflows, devices, AI routing, and Synra control together so builders can automate, observe, and act from one place.</p>
+        <a class="about-store-link" href="${NODESPARK_APP_STORE_URL}" target="_blank" rel="noreferrer">Open NodeSpark on the App Store</a>
+      </section>
+      <section class="about-section trust">
+        <h3>Trust and Control</h3>
+        <p>Synra keeps local preferences on this device, asks before running smart-home actions, treats camera access as permission-only, and keeps NodeSparkHub as an optional subscriber skill.</p>
+      </section>
+      <menu class="about-actions">
+        <a href="${SYNRYZEN_WEBSITE_URL}" target="_blank" rel="noreferrer">Synryzen</a>
+        <a href="${NODESPARK_APP_STORE_URL}" target="_blank" rel="noreferrer">NodeSpark</a>
+        <button value="cancel">Close</button>
       </menu>
     </form>
   </dialog>
@@ -261,34 +664,108 @@ app.innerHTML = `
 const canvas = must<HTMLElement, HTMLCanvasElement>("scene");
 const statusEl = must<HTMLElement, HTMLElement>("status");
 const captionEl = must<HTMLElement, HTMLElement>("caption");
+const chatLogEl = must<HTMLElement, HTMLElement>("chatLog");
+const chatStatusEl = must<HTMLElement, HTMLElement>("chatStatus");
 const presenceStateEl = must<HTMLElement, HTMLElement>("presenceState");
 const voiceStateEl = must<HTMLElement, HTMLElement>("voiceState");
 const visionStateEl = must<HTMLElement, HTMLElement>("visionState");
+const visionToggleButton = must<HTMLElement, HTMLButtonElement>("visionToggleButton");
+const visionAnalyzeButton = must<HTMLElement, HTMLButtonElement>("visionAnalyzeButton");
 const backgroundSelect = must<HTMLElement, HTMLSelectElement>("backgroundSelect");
 const avatarSelect = must<HTMLElement, HTMLSelectElement>("avatarSelect");
+const qualitySelect = must<HTMLElement, HTMLSelectElement>("qualitySelect");
 const motionCategorySelect = must<HTMLElement, HTMLSelectElement>("motionCategorySelect");
 const motionSelect = must<HTMLElement, HTMLSelectElement>("motionSelect");
 const playMotionButton = must<HTMLElement, HTMLButtonElement>("playMotionButton");
 const controlModeButton = must<HTMLElement, HTMLButtonElement>("controlModeButton");
 const activeMotionEl = must<HTMLElement, HTMLElement>("activeMotion");
+const aiConnectionStatusEl = must<HTMLElement, HTMLElement>("aiConnectionStatus");
+const aiProviderStatusEl = must<HTMLElement, HTMLElement>("aiProviderStatus");
+const aiEndpointStatusEl = must<HTMLElement, HTMLElement>("aiEndpointStatus");
+const renderQualityStatusEl = must<HTMLElement, HTMLElement>("renderQualityStatus");
+const openAiSettingsButton = must<HTMLElement, HTMLButtonElement>("openAiSettingsButton");
+const testAiButton = must<HTMLElement, HTMLButtonElement>("testAiButton");
+const healthSummaryStatusEl = must<HTMLElement, HTMLElement>("healthSummaryStatus");
+const healthAiStatusEl = must<HTMLElement, HTMLElement>("healthAiStatus");
+const healthNodeSparkStatusEl = must<HTMLElement, HTMLElement>("healthNodeSparkStatus");
+const healthHomeAssistantStatusEl = must<HTMLElement, HTMLElement>("healthHomeAssistantStatus");
+const healthVoiceStatusEl = must<HTMLElement, HTMLElement>("healthVoiceStatus");
+const healthVisionStatusEl = must<HTMLElement, HTMLElement>("healthVisionStatus");
+const checkAllConnectionsButton = must<HTMLElement, HTMLButtonElement>("checkAllConnectionsButton");
+const synraAccessStatusEl = must<HTMLElement, HTMLElement>("synraAccessStatus");
+const homeAssistantSkillStatusEl = must<HTMLElement, HTMLElement>("homeAssistantSkillStatus");
+const homeAssistantTargetCountEl = must<HTMLElement, HTMLElement>("homeAssistantTargetCount");
+const homeAssistantDefaultTargetEl = must<HTMLElement, HTMLElement>("homeAssistantDefaultTarget");
+const nodeSparkSkillStatusEl = must<HTMLElement, HTMLElement>("nodeSparkSkillStatus");
+const openSkillSettingsButton = must<HTMLElement, HTMLButtonElement>("openSkillSettingsButton");
+const openAboutButton = must<HTMLElement, HTMLButtonElement>("openAboutButton");
+const systemStatusButton = must<HTMLElement, HTMLButtonElement>("systemStatusButton");
+const networkStatusButton = must<HTMLElement, HTMLButtonElement>("networkStatusButton");
+const dateTimeButton = must<HTMLElement, HTMLButtonElement>("dateTimeButton");
+const nodeSparkStatusButton = must<HTMLElement, HTMLButtonElement>("nodeSparkStatusButton");
+const nodeSparkWorkflowsButton = must<HTMLElement, HTMLButtonElement>("nodeSparkWorkflowsButton");
+const nodeSparkRunsButton = must<HTMLElement, HTMLButtonElement>("nodeSparkRunsButton");
+const nodeSparkLatestRunButton = must<HTMLElement, HTMLButtonElement>("nodeSparkLatestRunButton");
+const nodeSparkActionHintEl = must<HTMLElement, HTMLElement>("nodeSparkActionHint");
 const fpsEl = must<HTMLElement, HTMLElement>("fps");
 const modelNameEl = must<HTMLElement, HTMLElement>("modelName");
 const composer = must<HTMLElement, HTMLFormElement>("composer");
 const promptInput = must<HTMLElement, HTMLInputElement>("prompt");
 const listenButton = must<HTMLElement, HTMLButtonElement>("listenButton");
+const stopVoiceButton = must<HTMLElement, HTMLButtonElement>("stopVoiceButton");
 const sendButton = document.querySelector<HTMLButtonElement>('button[title="Send"]');
 const settingsButton = must<HTMLElement, HTMLButtonElement>("settingsButton");
 const settingsDialog = must<HTMLElement, HTMLDialogElement>("settingsDialog");
+const aboutDialog = must<HTMLElement, HTMLDialogElement>("aboutDialog");
+const settingsTabButtons = [...document.querySelectorAll<HTMLButtonElement>(".settings-tab")];
+const settingsPanels = [...document.querySelectorAll<HTMLElement>(".settings-panel")];
 const providerInput = must<HTMLElement, HTMLSelectElement>("providerInput");
 const endpointInput = must<HTMLElement, HTMLInputElement>("endpointInput");
 const modelInput = must<HTMLElement, HTMLInputElement>("modelInput");
 const apiKeyInput = must<HTMLElement, HTMLInputElement>("apiKeyInput");
 const temperatureInput = must<HTMLElement, HTMLInputElement>("temperatureInput");
 const systemPromptInput = must<HTMLElement, HTMLTextAreaElement>("systemPromptInput");
+const synraSkillModeInput = must<HTMLElement, HTMLSelectElement>("synraSkillModeInput");
+const nodeSparkAccessInput = must<HTMLElement, HTMLSelectElement>("nodeSparkAccessInput");
+const nodeSparkHubUrlInput = must<HTMLElement, HTMLInputElement>("nodeSparkHubUrlInput");
+const nodeSparkDeviceNameInput = must<HTMLElement, HTMLInputElement>("nodeSparkDeviceNameInput");
+const nodeSparkPairingPinInput = must<HTMLElement, HTMLInputElement>("nodeSparkPairingPinInput");
+const pairNodeSparkButton = must<HTMLElement, HTMLButtonElement>("pairNodeSparkButton");
+const checkNodeSparkPairingButton = must<HTMLElement, HTMLButtonElement>("checkNodeSparkPairingButton");
+const forgetNodeSparkPairingButton = must<HTMLElement, HTMLButtonElement>("forgetNodeSparkPairingButton");
+const nodeSparkPairingStatusEl = must<HTMLElement, HTMLElement>("nodeSparkPairingStatus");
+const nodeSparkPairedHubStatusEl = must<HTMLElement, HTMLElement>("nodeSparkPairedHubStatus");
+const homeAssistantEnabledInput = must<HTMLElement, HTMLSelectElement>("homeAssistantEnabledInput");
+const homeAssistantUrlInput = must<HTMLElement, HTMLInputElement>("homeAssistantUrlInput");
+const homeAssistantTokenInput = must<HTMLElement, HTMLInputElement>("homeAssistantTokenInput");
+const homeAssistantLightEntityInput = must<HTMLElement, HTMLInputElement>("homeAssistantLightEntityInput");
+const homeAssistantEntitySelect = must<HTMLElement, HTMLSelectElement>("homeAssistantEntitySelect");
+const memoryPreferredNameInput = must<HTMLElement, HTMLInputElement>("memoryPreferredNameInput");
+const memoryStyleInput = must<HTMLElement, HTMLInputElement>("memoryStyleInput");
+const memoryFactsInput = must<HTMLElement, HTMLTextAreaElement>("memoryFactsInput");
+const memoryRoutinesInput = must<HTMLElement, HTMLTextAreaElement>("memoryRoutinesInput");
+const memoryDevicesInput = must<HTMLElement, HTMLTextAreaElement>("memoryDevicesInput");
+const voiceProviderInput = must<HTMLElement, HTMLSelectElement>("voiceProviderInput");
+const elevenLabsApiKeyInput = must<HTMLElement, HTMLInputElement>("elevenLabsApiKeyInput");
+const elevenLabsVoiceIdInput = must<HTMLElement, HTMLInputElement>("elevenLabsVoiceIdInput");
+const elevenLabsModelIdInput = must<HTMLElement, HTMLInputElement>("elevenLabsModelIdInput");
+const elevenLabsOutputFormatInput = must<HTMLElement, HTMLInputElement>("elevenLabsOutputFormatInput");
+const elevenLabsStabilityInput = must<HTMLElement, HTMLInputElement>("elevenLabsStabilityInput");
+const elevenLabsSimilarityInput = must<HTMLElement, HTMLInputElement>("elevenLabsSimilarityInput");
+const discoverHomeAssistantButton = must<HTMLElement, HTMLButtonElement>("discoverHomeAssistantButton");
+const testHomeAssistantButton = must<HTMLElement, HTMLButtonElement>("testHomeAssistantButton");
+const testVoiceButton = must<HTMLElement, HTMLButtonElement>("testVoiceButton");
+const forgetMemoriesButton = must<HTMLElement, HTMLButtonElement>("forgetMemoriesButton");
+const exportMemoryButton = must<HTMLElement, HTMLButtonElement>("exportMemoryButton");
+const importMemoryButton = must<HTMLElement, HTMLButtonElement>("importMemoryButton");
 const saveSettingsButton = must<HTMLElement, HTMLButtonElement>("saveSettingsButton");
+const settingsAvatarStatusEl = must<HTMLElement, HTMLElement>("settingsAvatarStatus");
+const settingsBackgroundStatusEl = must<HTMLElement, HTMLElement>("settingsBackgroundStatus");
+const settingsQualityStatusEl = must<HTMLElement, HTMLElement>("settingsQualityStatus");
+const settingsModeStatusEl = must<HTMLElement, HTMLElement>("settingsModeStatus");
 
-const renderer = createRenderer();
-if (!renderer) {
+const renderer = USE_HUB_AVATAR_RUNTIME ? null : createRenderer();
+if (!renderer && !USE_HUB_AVATAR_RUNTIME) {
   canvas.hidden = true;
   document.body.dataset.webgl = "unavailable";
   fpsEl.textContent = "3D unavailable";
@@ -296,8 +773,9 @@ if (!renderer) {
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 50);
-camera.position.set(0, 0.9, 4.35);
-camera.lookAt(0, 0.88, 0);
+camera.position.set(0, 0.9, 4.45);
+camera.lookAt(0, 0.86, 0);
+let contactShadow: THREE.Mesh | null = null;
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 1.85);
 const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xd9e0ee, 1.15);
@@ -308,30 +786,123 @@ keyLight.position.set(-1.45, 2.75, 3.35);
 faceLight.position.set(0.15, 1.72, 3.3);
 rimLight.position.set(2.2, 1.8, -2.8);
 scene.add(ambientLight, hemisphereLight, keyLight, faceLight, rimLight);
+installContactShadow();
 
 const loader = new GLTFLoader();
 loader.register((parser) => new VRMLoaderPlugin(parser));
+let activeRecognition: SpeechRecognition | null = null;
+
+if (USE_HUB_AVATAR_RUNTIME) {
+  hubAvatarRuntime = new SynraAvatarRuntime({
+    canvas,
+    stage: canvas.closest<HTMLElement>(".stage") ?? app,
+    status: activeMotionEl,
+    vrmUrl: getSynraAvatar(resolveInitialAvatarId()).url
+  });
+}
 
 resize();
 window.addEventListener("resize", resize);
 
 setSynraState("idle", "Starting Synra.");
 document.body.dataset.runtimeMode = runtimeMode;
+populateQualitySelect();
+applyRenderQuality(resolveRenderQuality(state.visual.renderQuality));
 applyPerformanceTier(state.performanceTier);
 populateBackgroundSelect();
 populateAvatarSelect();
 populateMotionCategorySelect();
 applyBackground(resolveBackground(state.visual.backgroundId));
 applyControlMode(resolveInitialControlMode());
-loadAvatarById(resolveInitialAvatarId()).catch(() => loadAvatarById(DEFAULT_SYNRA_AVATAR_ID)).catch((error) => {
-  setSynraState("offline", `Avatar failed to load: ${error instanceof Error ? error.message : String(error)}`);
-});
+void bootAvatarRuntime();
 refreshServerModelStatus().catch(() => {});
 refreshVoiceStatus();
 refreshVisionStatus().catch(() => {});
 if ("speechSynthesis" in window) speechSynthesis.addEventListener("voiceschanged", refreshVoiceStatus);
 requestAnimationFrame(render);
 refreshModelLabel();
+refreshAiConnectionPanel();
+refreshSkillPanel();
+refreshSystemHealthPanel();
+installQaHarness();
+
+async function bootAvatarRuntime(): Promise<void> {
+  try {
+    if (hubAvatarRuntime) {
+      activeMotionEl.textContent = "Loading Hub runtime";
+      await loadHubMotionManifest();
+      populateMotionSelect();
+      await hubAvatarRuntime.boot();
+      document.body.dataset.webgl = "available";
+      setSynraState("idle", `${getSynraAvatar(resolveInitialAvatarId()).label} is ready.`);
+      if (runtimeMode === "kiosk") {
+        void playMotionRoute(KIOSK_IDLE_ROUTE, { loop: true, restart: true });
+      } else {
+        void playMotionRoute("wave", { restart: true, returnToIdle: true });
+      }
+      return;
+    }
+    await loadAvatarById(resolveInitialAvatarId());
+  } catch {
+    try {
+      await loadAvatarById(DEFAULT_SYNRA_AVATAR_ID);
+    } catch (error) {
+      setSynraState("offline", `Avatar failed to load: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+
+function installQaHarness(): void {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("qa") !== "1" && params.get("test") !== "1") return;
+  const testWindow = window as Window & {
+    __synraStandaloneTest?: Record<string, unknown>;
+  };
+  testWindow.__synraStandaloneTest = {
+    avatarIds: SYNRA_AVATARS.map((avatar) => avatar.id),
+    motionIds: () => hubMotionClips.map((clip) => clip.id),
+    state: () => ({
+      synraState: state.synra,
+      avatarId: state.visual.avatarId,
+      activeMotion: currentHubMotionId() ?? state.motionPlayer.snapshot.activeClipId,
+      hubRuntimeReady: Boolean(hubAvatarRuntime?.runtimeHealth().renderHeartbeat),
+      hubHealth: hubAvatarRuntime?.runtimeHealth() ?? null,
+      motionCount: hubMotionClips.length,
+      visionEnabled: Boolean(activeVisionStream),
+      aboutReady: Boolean(document.getElementById("aboutDialog")) && Boolean(document.getElementById("openAboutButton")),
+      caption: captionEl.textContent,
+      status: statusEl.textContent,
+      lastRouteLabel: state.lastRouteLabel,
+      messages: state.messages.slice(-6)
+    }),
+    switchAvatar: async (avatarId: string) => {
+      if (!isSynraAvatarId(avatarId)) throw new Error(`Unknown avatar: ${avatarId}`);
+      await loadAvatarById(avatarId);
+      return (testWindow.__synraStandaloneTest?.state as () => Record<string, unknown>)();
+    },
+    playMotion: async (motionId: string) => {
+      if (!hubMotionClips.some((clip) => clip.id === motionId)) throw new Error(`Unknown motion: ${motionId}`);
+      await playMotionRoute(motionId, { restart: true, returnToIdle: true });
+      return (testWindow.__synraStandaloneTest?.state as () => Record<string, unknown>)();
+    },
+    stopMotion: () => {
+      hubAvatarRuntime?.stopMotionTest();
+      return (testWindow.__synraStandaloneTest?.state as () => Record<string, unknown>)();
+    },
+    setVision: async (enabled: boolean) => {
+      await setVisionEnabled(enabled);
+      return (testWindow.__synraStandaloneTest?.state as () => Record<string, unknown>)();
+    },
+    setQuality: (quality: RenderQuality) => {
+      applyRenderQuality(resolveRenderQuality(quality));
+      return (testWindow.__synraStandaloneTest?.state as () => Record<string, unknown>)();
+    },
+    sendText: async (text: string) => {
+      await handleUserText(text);
+      return (testWindow.__synraStandaloneTest?.state as () => Record<string, unknown>)();
+    }
+  };
+}
 
 composer.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -360,6 +931,18 @@ listenButton.addEventListener("click", () => {
   void startListening();
 });
 
+stopVoiceButton.addEventListener("click", () => {
+  stopVoiceActivity("Voice stopped.");
+});
+
+visionToggleButton.addEventListener("click", () => {
+  void setVisionEnabled(!activeVisionStream);
+});
+
+visionAnalyzeButton.addEventListener("click", () => {
+  void runVisionAnalyzeButton();
+});
+
 backgroundSelect.addEventListener("change", () => {
   const background = resolveBackground(backgroundSelect.value);
   state.visual = { ...state.visual, backgroundId: background.id };
@@ -372,6 +955,13 @@ avatarSelect.addEventListener("change", () => {
   state.visual = { ...state.visual, avatarId };
   saveVisualSettings(state.visual);
   void loadAvatarById(avatarId);
+});
+
+qualitySelect.addEventListener("change", () => {
+  const quality = resolveRenderQuality(qualitySelect.value);
+  applyRenderQuality(quality);
+  saveVisualSettings(state.visual);
+  setSynraState("idle", `${renderQualityLabel(quality)} render quality is active.`);
 });
 
 motionCategorySelect.addEventListener("change", () => {
@@ -396,13 +986,127 @@ controlModeButton.addEventListener("click", () => {
 });
 
 settingsButton.addEventListener("click", () => {
-  providerInput.value = resolveModelProvider(state.settings.provider);
-  endpointInput.value = state.settings.endpoint;
-  modelInput.value = state.settings.model;
-  apiKeyInput.value = state.settings.apiKey;
-  temperatureInput.value = String(state.settings.temperature ?? 0.2);
-  systemPromptInput.value = state.settings.systemPrompt ?? "";
-  settingsDialog.showModal();
+  openSettingsDialog("ai");
+});
+
+openAiSettingsButton.addEventListener("click", () => {
+  openSettingsDialog("ai");
+});
+
+openSkillSettingsButton.addEventListener("click", () => {
+  openSettingsDialog("nodespark");
+});
+
+openAboutButton.addEventListener("click", () => {
+  aboutDialog.showModal();
+});
+
+systemStatusButton.addEventListener("click", () => {
+  void runQuickLocalTool("system_status");
+});
+
+networkStatusButton.addEventListener("click", () => {
+  void runQuickLocalTool("network_status");
+});
+
+dateTimeButton.addEventListener("click", () => {
+  void runQuickLocalTool("date_time");
+});
+
+chatLogEl.addEventListener("click", (event) => {
+  const target = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>("[data-nodespark-workflow], [data-nodespark-confirm], [data-nodespark-cancel], [data-nodespark-refresh], [data-nodespark-runs]") : null;
+  if (!target) return;
+  const workflow = target.dataset.nodesparkWorkflow || target.dataset.nodesparkConfirm || "";
+  if (target.dataset.nodesparkCancel) {
+    void handleUserText("cancel");
+    return;
+  }
+  if (target.dataset.nodesparkRefresh) {
+    void runNodeSparkChatCardCommand(listNodeSparkWorkflowsCommand);
+    return;
+  }
+  if (target.dataset.nodesparkRuns) {
+    void runNodeSparkChatCardCommand(listNodeSparkRunsCommand);
+    return;
+  }
+  if (target.dataset.nodesparkConfirm) {
+    void handleUserText("confirm");
+    return;
+  }
+  if (workflow) {
+    void prepareNodeSparkWorkflowFromTap(workflow);
+  }
+});
+
+nodeSparkStatusButton.addEventListener("click", () => {
+  void checkNodeSparkStatus();
+});
+
+nodeSparkWorkflowsButton.addEventListener("click", () => {
+  void runNodeSparkPanelCommand(nodeSparkWorkflowsButton, "Listing workflows", listNodeSparkWorkflowsCommand);
+});
+
+nodeSparkRunsButton.addEventListener("click", () => {
+  void runNodeSparkPanelCommand(nodeSparkRunsButton, "Listing runs", listNodeSparkRunsCommand);
+});
+
+nodeSparkLatestRunButton.addEventListener("click", () => {
+  void runNodeSparkPanelCommand(nodeSparkLatestRunButton, "Checking latest run", latestNodeSparkRunCommand);
+});
+
+pairNodeSparkButton.addEventListener("click", () => {
+  void pairNodeSparkHub();
+});
+
+checkNodeSparkPairingButton.addEventListener("click", () => {
+  void checkNodeSparkStatus();
+});
+
+forgetNodeSparkPairingButton.addEventListener("click", () => {
+  forgetNodeSparkPairing();
+});
+
+testAiButton.addEventListener("click", () => {
+  void testAiConnection();
+});
+
+checkAllConnectionsButton.addEventListener("click", () => {
+  void checkAllConnections();
+});
+
+settingsTabButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    setSettingsTab(button.dataset.settingsTab || "ai");
+  });
+});
+
+discoverHomeAssistantButton.addEventListener("click", () => {
+  void discoverHomeAssistantEntities();
+});
+
+testHomeAssistantButton.addEventListener("click", () => {
+  void testHomeAssistantConnection();
+});
+
+testVoiceButton.addEventListener("click", () => {
+  void testVoiceConnection();
+});
+
+forgetMemoriesButton.addEventListener("click", () => {
+  forgetAllMemoryFromSettings();
+});
+
+exportMemoryButton.addEventListener("click", () => {
+  exportMemoryFromSettings();
+});
+
+importMemoryButton.addEventListener("click", () => {
+  importMemoryFromSettings();
+});
+
+homeAssistantEntitySelect.addEventListener("change", () => {
+  if (!homeAssistantEntitySelect.value) return;
+  homeAssistantLightEntityInput.value = homeAssistantEntitySelect.value;
 });
 
 providerInput.addEventListener("change", () => {
@@ -420,9 +1124,52 @@ saveSettingsButton.addEventListener("click", () => {
     systemPrompt: systemPromptInput.value.trim()
   };
   state.settings = next;
+  state.voiceSettings = readVoiceSettingsFromInputs();
+  state.productSettings = readProductSettingsFromInputs();
+  state.homeAssistantSettings = readHomeAssistantSettingsFromInputs();
+  state.memory = readMemorySettingsFromInputs();
   saveModelSettings(next);
+  saveVoiceSettings(state.voiceSettings);
+  saveProductSettings(state.productSettings);
+  saveHomeAssistantSettings(state.homeAssistantSettings);
+  saveMemory(state.memory);
   refreshModelLabel();
+  refreshAiConnectionPanel();
+  refreshSkillPanel();
+  refreshNodeSparkPairingStatus();
+  refreshVoiceStatus();
+  refreshSystemHealthPanel();
 });
+
+function openSettingsDialog(initialTab = "ai"): void {
+  providerInput.value = resolveModelProvider(state.settings.provider);
+  endpointInput.value = state.settings.endpoint;
+  modelInput.value = state.settings.model;
+  apiKeyInput.value = state.settings.apiKey;
+  temperatureInput.value = String(state.settings.temperature ?? 0.2);
+  systemPromptInput.value = state.settings.systemPrompt ?? "";
+  populateProductSettingsInputs();
+  populateHomeAssistantSettingsInputs();
+  populateMemorySettingsInputs();
+  populateVoiceSettingsInputs();
+  refreshSettingsDisplayStatus();
+  setSettingsTab(initialTab);
+  settingsDialog.showModal();
+}
+
+function setSettingsTab(tabId: string): void {
+  const selectedTab = settingsPanels.some((panel) => panel.dataset.settingsPanel === tabId) ? tabId : "ai";
+  settingsTabButtons.forEach((button) => {
+    const active = button.dataset.settingsTab === selectedTab;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  settingsPanels.forEach((panel) => {
+    const active = panel.dataset.settingsPanel === selectedTab;
+    panel.classList.toggle("active", active);
+    panel.hidden = !active;
+  });
+}
 
 function applyProviderPreset(provider: string): void {
   if (provider === "server") {
@@ -442,6 +1189,246 @@ function applyProviderPreset(provider: string): void {
   }
 }
 
+function populateVoiceSettingsInputs(): void {
+  voiceProviderInput.value = resolveVoiceProvider(state.voiceSettings.provider);
+  elevenLabsApiKeyInput.value = state.voiceSettings.elevenLabsApiKey;
+  elevenLabsVoiceIdInput.value = state.voiceSettings.elevenLabsVoiceId;
+  elevenLabsModelIdInput.value = state.voiceSettings.elevenLabsModelId || "eleven_multilingual_v2";
+  elevenLabsOutputFormatInput.value = state.voiceSettings.elevenLabsOutputFormat || "mp3_44100_128";
+  elevenLabsStabilityInput.value = String(state.voiceSettings.elevenLabsStability ?? 0.48);
+  elevenLabsSimilarityInput.value = String(state.voiceSettings.elevenLabsSimilarityBoost ?? 0.78);
+}
+
+function readVoiceSettingsFromInputs(): VoiceSettings {
+  return {
+    provider: resolveVoiceProvider(voiceProviderInput.value),
+    elevenLabsApiKey: elevenLabsApiKeyInput.value.trim(),
+    elevenLabsVoiceId: elevenLabsVoiceIdInput.value.trim(),
+    elevenLabsModelId: elevenLabsModelIdInput.value.trim() || "eleven_multilingual_v2",
+    elevenLabsOutputFormat: elevenLabsOutputFormatInput.value.trim() || "mp3_44100_128",
+    elevenLabsStability: clampUnit(Number(elevenLabsStabilityInput.value), 0.48),
+    elevenLabsSimilarityBoost: clampUnit(Number(elevenLabsSimilarityInput.value), 0.78)
+  };
+}
+
+function populateProductSettingsInputs(): void {
+  state.productSettings = ensureNodeSparkDeviceId(state.productSettings);
+  synraSkillModeInput.value = resolveSynraSkillMode(state.productSettings.synraSkillMode);
+  nodeSparkAccessInput.value = resolveNodeSparkAccess(state.productSettings.nodeSparkAccess);
+  nodeSparkHubUrlInput.value = state.productSettings.nodeSparkHubUrl;
+  nodeSparkDeviceNameInput.value = state.productSettings.nodeSparkDeviceName || "Synra Standalone Jetson";
+  nodeSparkPairingPinInput.value = "";
+  refreshNodeSparkPairingStatus();
+}
+
+function readProductSettingsFromInputs(): ProductSettings {
+  const previous = ensureNodeSparkDeviceId(state.productSettings);
+  const hubUrl = nodeSparkHubUrlInput.value.trim();
+  const sameHub = hubUrl === previous.nodeSparkHubUrl.trim();
+  return {
+    synraSkillMode: resolveSynraSkillMode(synraSkillModeInput.value),
+    nodeSparkAccess: resolveNodeSparkAccess(nodeSparkAccessInput.value),
+    nodeSparkHubUrl: hubUrl,
+    nodeSparkDeviceId: previous.nodeSparkDeviceId,
+    nodeSparkDeviceName: nodeSparkDeviceNameInput.value.trim() || "Synra Standalone Jetson",
+    nodeSparkHubId: sameHub ? previous.nodeSparkHubId : "",
+    nodeSparkDeviceToken: sameHub ? previous.nodeSparkDeviceToken : "",
+    nodeSparkTokenExpiresAt: sameHub ? previous.nodeSparkTokenExpiresAt : ""
+  };
+}
+
+function resolveNodeSparkAccess(access: string | undefined): NodeSparkAccess {
+  return access === "subscriber" ? "subscriber" : "locked";
+}
+
+function resolveSynraSkillMode(mode: string | undefined): SynraSkillMode {
+  if (mode === "homeAssistant" || mode === "nodeSparkHub") return mode;
+  return "hybrid";
+}
+
+function ensureNodeSparkDeviceId(settings: ProductSettings): ProductSettings {
+  if (settings.nodeSparkDeviceId) return settings;
+  const fallback = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const value = Math.floor(Math.random() * 16);
+    const resolved = char === "x" ? value : (value & 0x3) | 0x8;
+    return resolved.toString(16);
+  });
+  return {
+    ...settings,
+    nodeSparkDeviceId: globalThis.crypto?.randomUUID?.() ?? fallback,
+    nodeSparkDeviceName: settings.nodeSparkDeviceName || "Synra Standalone Jetson"
+  };
+}
+
+function nodeSparkPairingLabel(settings = state.productSettings): string {
+  if (!settings.nodeSparkDeviceToken) return "Not paired";
+  if (!settings.nodeSparkTokenExpiresAt) return "Paired";
+  const expiry = new Date(settings.nodeSparkTokenExpiresAt);
+  if (Number.isNaN(expiry.getTime())) return "Paired";
+  return `Paired until ${expiry.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}`;
+}
+
+function refreshNodeSparkPairingStatus(): void {
+  const paired = Boolean(state.productSettings.nodeSparkDeviceToken);
+  nodeSparkPairingStatusEl.textContent = nodeSparkPairingLabel();
+  nodeSparkPairedHubStatusEl.textContent = paired ? (state.productSettings.nodeSparkHubId || endpointDisplayLabel(state.productSettings.nodeSparkHubUrl)) : "No Hub token";
+}
+
+function populateHomeAssistantSettingsInputs(): void {
+  homeAssistantEnabledInput.value = state.homeAssistantSettings.enabled ? "on" : "off";
+  homeAssistantUrlInput.value = state.homeAssistantSettings.url;
+  homeAssistantTokenInput.value = state.homeAssistantSettings.token;
+  homeAssistantLightEntityInput.value = state.homeAssistantSettings.defaultLightEntity;
+  populateHomeAssistantEntitySelect();
+}
+
+function readHomeAssistantSettingsFromInputs(): HomeAssistantSettings {
+  return {
+    enabled: homeAssistantEnabledInput.value === "on",
+    url: homeAssistantUrlInput.value.trim(),
+    token: homeAssistantTokenInput.value.trim(),
+    defaultLightEntity: homeAssistantLightEntityInput.value.trim(),
+    knownEntities: state.homeAssistantSettings.knownEntities
+  };
+}
+
+function populateMemorySettingsInputs(): void {
+  memoryPreferredNameInput.value = state.memory.preferredName;
+  memoryStyleInput.value = state.memory.style;
+  memoryFactsInput.value = state.memory.savedFacts.join("\n");
+  memoryRoutinesInput.value = state.memory.routines.join("\n");
+  memoryDevicesInput.value = [...state.memory.rooms, ...state.memory.devices, ...state.memory.preferences].join("\n");
+}
+
+function readMemorySettingsFromInputs() {
+  const deviceLines = readMemoryLines(memoryDevicesInput.value);
+  return {
+    preferredName: redactMemoryFact(memoryPreferredNameInput.value).slice(0, 60),
+    style: redactMemoryFact(memoryStyleInput.value).slice(0, 140) || "warm, direct, and useful",
+    savedFacts: readMemoryLines(memoryFactsInput.value).slice(-40),
+    routines: readMemoryLines(memoryRoutinesInput.value).slice(-24),
+    devices: deviceLines.filter((line) => /\b(device|light|lamp|switch|speaker|display|camera|thermostat|sensor)\b/i.test(line)).slice(-24),
+    rooms: deviceLines.filter((line) => /\b(room|office|studio|kitchen|bedroom|living|garage|hall|bath)\b/i.test(line)).slice(-24),
+    preferences: deviceLines.filter((line) => !/\b(device|light|lamp|switch|speaker|display|camera|thermostat|sensor|room|office|studio|kitchen|bedroom|living|garage|hall|bath)\b/i.test(line)).slice(-24)
+  };
+}
+
+function readMemoryLines(value: string): string[] {
+  const seen = new Set<string>();
+  return value
+    .split(/\r?\n/)
+    .map((line) => redactMemoryFact(line.trim()))
+    .filter(Boolean)
+    .filter((line) => {
+      const key = line.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function redactMemoryFact(value: string): string {
+  const trimmed = value.trim().replace(/\s+/g, " ");
+  if (!trimmed) return "";
+  if (/\b(api[_ -]?key|token|password|secret|bearer|private key|ssh key|credit card|social security)\b/i.test(trimmed)) {
+    return "";
+  }
+  return trimmed.slice(0, 240);
+}
+
+function forgetAllMemoryFromSettings(): void {
+  state.memory = {
+    preferredName: "",
+    style: "warm, direct, and useful",
+    savedFacts: [],
+    routines: [],
+    devices: [],
+    rooms: [],
+    preferences: []
+  };
+  saveMemory(state.memory);
+  populateMemorySettingsInputs();
+  setSynraState("idle", "Local memory has been cleared.");
+  void playMotionRoute("confirm", { restart: true, returnToIdle: true });
+}
+
+function exportMemoryFromSettings(): void {
+  state.memory = readMemorySettingsFromInputs();
+  saveMemory(state.memory);
+  const exported = JSON.stringify(state.memory, null, 2);
+  navigator.clipboard?.writeText(exported).then(
+    () => setSynraState("idle", "Memory export copied to clipboard."),
+    () => setSynraState("idle", "Memory export is ready in the dialog.")
+  );
+  memoryFactsInput.value = `${memoryFactsInput.value.trim()}\n\n${exported}`.trim();
+}
+
+function importMemoryFromSettings(): void {
+  const raw = window.prompt("Paste Synra memory JSON to import.");
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw) as Partial<typeof state.memory>;
+    state.memory = {
+      preferredName: redactMemoryFact(String(parsed.preferredName ?? "")),
+      style: redactMemoryFact(String(parsed.style ?? "")) || "warm, direct, and useful",
+      savedFacts: Array.isArray(parsed.savedFacts) ? parsed.savedFacts.map((item) => redactMemoryFact(String(item))).filter(Boolean).slice(-40) : [],
+      routines: Array.isArray(parsed.routines) ? parsed.routines.map((item) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : [],
+      devices: Array.isArray(parsed.devices) ? parsed.devices.map((item) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : [],
+      rooms: Array.isArray(parsed.rooms) ? parsed.rooms.map((item) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : [],
+      preferences: Array.isArray(parsed.preferences) ? parsed.preferences.map((item) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : []
+    };
+    saveMemory(state.memory);
+    populateMemorySettingsInputs();
+    setSynraState("idle", "Memory import completed.");
+  } catch {
+    setSynraState("offline", "That memory import was not valid JSON.");
+  }
+}
+
+function publicHomeAssistantSettings(): Omit<HomeAssistantSettings, "token"> & { tokenConfigured: boolean } {
+  return {
+    enabled: state.homeAssistantSettings.enabled,
+    url: endpointDisplayLabel(state.homeAssistantSettings.url),
+    tokenConfigured: Boolean(state.homeAssistantSettings.token.trim()),
+    defaultLightEntity: state.homeAssistantSettings.defaultLightEntity,
+    knownEntities: state.homeAssistantSettings.knownEntities
+  };
+}
+
+function populateHomeAssistantEntitySelect(): void {
+  const entities = normalizeHomeAssistantEntities(state.homeAssistantSettings.knownEntities);
+  if (entities.length === 0) {
+    homeAssistantEntitySelect.innerHTML = `<option value="">No discovered entities yet</option>`;
+    homeAssistantEntitySelect.value = "";
+    return;
+  }
+  homeAssistantEntitySelect.innerHTML = [
+    `<option value="">Choose a discovered target</option>`,
+    ...entities.map((entity) => `<option value="${escapeHtml(entity.entityId)}">${escapeHtml(entity.name)} (${escapeHtml(entity.entityId)})</option>`)
+  ].join("");
+  homeAssistantEntitySelect.value = entities.some((entity) => entity.entityId === homeAssistantLightEntityInput.value) ? homeAssistantLightEntityInput.value : "";
+}
+
+function normalizeHomeAssistantEntities(entities: HomeAssistantEntity[]): HomeAssistantEntity[] {
+  const seen = new Set<string>();
+  return entities
+    .filter((entity) => entity.entityId && entity.name && entity.domain)
+    .filter((entity) => {
+      if (seen.has(entity.entityId)) return false;
+      seen.add(entity.entityId);
+      return true;
+    })
+    .slice(0, 200);
+}
+
+function resolveVoiceProvider(provider: string | undefined): VoiceProvider {
+  return provider === "elevenLabs" ? "elevenLabs" : "browser";
+}
+
+function clampUnit(value: number, fallback: number): number {
+  return Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : fallback;
+}
+
 function populateAvatarSelect(): void {
   avatarSelect.innerHTML = SYNRA_AVATARS
     .map((avatar) => `<option value="${avatar.id}">${avatar.label}</option>`)
@@ -456,6 +1443,27 @@ function populateBackgroundSelect(): void {
   backgroundSelect.value = resolveBackground(state.visual.backgroundId).id;
 }
 
+function populateQualitySelect(): void {
+  qualitySelect.value = resolveRenderQuality(state.visual.renderQuality);
+}
+
+function applyRenderQuality(quality: RenderQuality): void {
+  state.visual = { ...state.visual, renderQuality: quality };
+  performanceProfile = resolvePerformanceProfile();
+  document.body.dataset.renderQuality = quality;
+  qualitySelect.value = quality;
+  renderQualityStatusEl.textContent = renderQualityLabel(quality);
+  if (quality === "performance") {
+    state.performanceTier = "forced-low";
+  } else {
+    state.performanceTier = "normal";
+  }
+  applyPerformanceTier(state.performanceTier);
+  refreshModelLabel();
+  refreshAiConnectionPanel();
+  refreshSettingsDisplayStatus();
+}
+
 function populateMotionCategorySelect(): void {
   motionCategorySelect.innerHTML = MOTION_CATEGORIES
     .map((category) => `<option value="${category.id}">${category.label}</option>`)
@@ -464,19 +1472,47 @@ function populateMotionCategorySelect(): void {
 }
 
 function populateMotionSelect(): void {
-  const allClips = state.motionPlayer.listClips();
+  const allClips = hubAvatarRuntime ? hubMotionClips : state.motionPlayer.listClips();
   const category = resolveMotionCategory(state.visual.motionCategoryId);
   const clips = filterClipsByCategory(allClips, category);
+  if (hubAvatarRuntime && !hubMotionManifestReady) {
+    motionSelect.innerHTML = `<option value="">Loading motions</option>`;
+    activeMotionEl.textContent = "Motion manifest loading";
+    return;
+  }
   motionSelect.innerHTML = clips
     .map((clip) => `<option value="${clip.id}">${clip.id}</option>`)
     .join("");
-  const fallback = category.id === "all" ? state.motionPlayer.resolveClipId("wave") : clips[0]?.id;
+  const fallback = category.id === "all" ? resolveMotionClipId("wave") : clips[0]?.id;
   const preferred = clips.some((clip) => clip.id === state.visual.motionId) ? state.visual.motionId : fallback ?? "";
   motionSelect.value = preferred;
   activeMotionEl.textContent = `${clips.length} ${category.label.toLowerCase()} ready`;
 }
 
 async function playMotionRoute(actionOrClipId: string, options: { restart?: boolean; loop?: boolean; returnToIdle?: boolean } = {}): Promise<void> {
+  if (hubAvatarRuntime) {
+    try {
+      const mode = modeFromRoute(actionOrClipId);
+      if (mode) {
+        hubAvatarRuntime.setMode(mode, { playAuthoredLoop: true });
+        hubAvatarRuntime.setSpeaking(mode === "speaking");
+      } else if (hubMotionClips.some((clip) => clip.id === actionOrClipId)) {
+        await hubAvatarRuntime.playGeneratedClip(actionOrClipId);
+      } else {
+        hubAvatarRuntime.trigger(actionOrClipId as SynraActionName);
+      }
+      const played = resolveMotionClipId(actionOrClipId) ?? actionOrClipId;
+      activeMotionEl.textContent = played;
+      state.lastDisplayedMotionId = played;
+      const hasMotionOption = [...motionSelect.options].some((option) => option.value === played);
+      if (hasMotionOption && motionSelect.value !== played && resolveMotionClipId(motionSelect.value) !== played) {
+        motionSelect.value = played;
+      }
+    } catch (error) {
+      activeMotionEl.textContent = error instanceof Error ? error.message : "Motion unavailable";
+    }
+    return;
+  }
   const played = await state.motionPlayer.playAction(actionOrClipId, options);
   if (played) {
     activeMotionEl.textContent = played;
@@ -492,13 +1528,39 @@ async function playMotionRoute(actionOrClipId: string, options: { restart?: bool
 
 function filterClipsByCategory(clips: SynraMotionClipSpec[], category: MotionCategory): SynraMotionClipSpec[] {
   if (category.id === "all") return clips;
-  const routeClipIds = new Set((category.routeIds ?? []).map((routeId) => state.motionPlayer.resolveClipId(routeId)).filter(Boolean));
+  const routeClipIds = new Set((category.routeIds ?? []).map((routeId) => resolveMotionClipId(routeId)).filter(Boolean));
   const matches = clips.filter((clip) => {
     if (routeClipIds.has(clip.id)) return true;
     const haystack = `${clip.id} ${clip.label} ${(clip.actionIds ?? []).join(" ")}`.replaceAll("_", "").toLowerCase();
     return (category.match ?? []).some((needle) => haystack.includes(needle.replaceAll("_", "").toLowerCase()));
   });
   return matches.length > 0 ? matches : clips;
+}
+
+async function loadHubMotionManifest(): Promise<void> {
+  if (!hubAvatarRuntime || hubMotionManifestReady) return;
+  const response = await fetch("/motions/synra-motion-manifest.json", { cache: "no-store" });
+  if (!response.ok) throw new Error(`Motion manifest failed: ${response.status}`);
+  const manifest = (await response.json()) as { clips?: SynraMotionClipSpec[]; routes?: Record<string, string> };
+  hubMotionClips = Array.isArray(manifest.clips) ? manifest.clips : [];
+  hubMotionRoutes = new Map(Object.entries(manifest.routes ?? {}));
+  hubMotionManifestReady = true;
+}
+
+function resolveMotionClipId(actionOrClipId: string): string | null {
+  if (hubAvatarRuntime) {
+    if (hubMotionClips.some((clip) => clip.id === actionOrClipId)) return actionOrClipId;
+    return hubMotionRoutes.get(actionOrClipId) ?? null;
+  }
+  return state.motionPlayer.resolveClipId(actionOrClipId);
+}
+
+function modeFromRoute(route: string): SynraMode | null {
+  if (route === "mode:idle" || route === "idle") return "idle";
+  if (route === "mode:listening" || route === "listening") return "listening";
+  if (route === "mode:thinking" || route === "thinking") return "thinking";
+  if (route === "mode:speaking" || route === "speaking") return "speaking";
+  return null;
 }
 
 function resolveInitialAvatarId(): SynraAvatarId {
@@ -512,6 +1574,7 @@ function resolveBackground(backgroundId: string): SynraBackground {
 function applyBackground(background: SynraBackground): void {
   document.documentElement.style.setProperty("--stage-image", `url("${background.url}")`);
   backgroundSelect.value = background.id;
+  refreshSettingsDisplayStatus();
 }
 
 function resolveMotionCategory(categoryId: string): MotionCategory {
@@ -533,6 +1596,7 @@ function applyControlMode(mode: "live" | "manual"): void {
   document.body.dataset.controlMode = mode;
   controlModeButton.textContent = mode === "manual" ? "Live Mode" : "Show Controls";
   controlModeButton.title = mode === "manual" ? "Hide tuning controls" : "Show tuning controls";
+  refreshSettingsDisplayStatus();
 }
 
 async function playManualMotion(motionId: string): Promise<void> {
@@ -552,11 +1616,27 @@ async function loadAvatarById(avatarId: SynraAvatarId): Promise<void> {
   const avatar = getSynraAvatar(avatarId);
   avatarSelect.value = avatar.id;
   setSynraState("idle", `Loading ${avatar.label}.`);
+  if (hubAvatarRuntime) {
+    await hubAvatarRuntime.setAvatar(avatar.url, avatar.label);
+    state.visual = { ...state.visual, avatarId: avatar.id };
+    saveVisualSettings(state.visual);
+    setSynraState("idle", `${avatar.label} is ready.`);
+    if (runtimeMode === "kiosk") {
+      void playMotionRoute(KIOSK_IDLE_ROUTE, { loop: true, restart: true });
+    } else {
+      void playMotionRoute("wave", { restart: true, returnToIdle: true });
+    }
+    return;
+  }
   await loadAvatar(avatar.url);
   state.visual = { ...state.visual, avatarId: avatar.id };
   saveVisualSettings(state.visual);
   setSynraState("idle", `${avatar.label} is ready.`);
-  void playMotionRoute("wave", { restart: true, returnToIdle: true });
+  if (runtimeMode === "kiosk") {
+    void playMotionRoute(KIOSK_IDLE_ROUTE, { loop: true, restart: true });
+  } else {
+    void playMotionRoute("wave", { restart: true, returnToIdle: true });
+  }
 }
 
 async function loadAvatar(url: string): Promise<void> {
@@ -569,13 +1649,47 @@ async function loadAvatar(url: string): Promise<void> {
   const gltf = await loader.loadAsync(url);
   const vrm = gltf.userData.vrm as VRM;
   VRMUtils.removeUnnecessaryVertices(gltf.scene);
-  VRMUtils.removeUnnecessaryJoints(gltf.scene);
+  VRMUtils.combineSkeletons(gltf.scene);
+  VRMUtils.combineMorphs(vrm);
+  vrm.humanoid.resetNormalizedPose();
   vrm.scene.rotation.y = 0;
+  prepareVrmForPreview(vrm);
   normalizeAvatarStagePlacement(vrm.scene);
   scene.add(vrm.scene);
   state.vrm = vrm;
+  updateContactShadow();
   await state.motionPlayer.boot(vrm);
+  state.motionPlayer.setReturnToIdleRoute(runtimeMode === "kiosk" ? KIOSK_IDLE_ROUTE : "mode:idle");
   populateMotionSelect();
+}
+
+function prepareVrmForPreview(vrm: VRM): void {
+  vrm.scene.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.frustumCulled = false;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const material of materials) {
+      if (!material) continue;
+      sharpenAvatarMaterialTextures(material);
+      material.needsUpdate = true;
+    }
+  });
+}
+
+function sharpenAvatarMaterialTextures(material: THREE.Material): void {
+  const maxAnisotropy = renderer?.capabilities.getMaxAnisotropy() ?? 1;
+  const materialRecord = material as unknown as Record<string, unknown>;
+  for (const value of Object.values(materialRecord)) {
+    if (!(value instanceof THREE.Texture)) continue;
+    value.generateMipmaps = true;
+    value.minFilter = THREE.LinearMipmapLinearFilter;
+    value.magFilter = THREE.LinearFilter;
+    value.anisotropy = Math.max(value.anisotropy || 1, Math.min(maxAnisotropy, 8));
+    value.needsUpdate = true;
+  }
 }
 
 function normalizeAvatarStagePlacement(root: THREE.Object3D): void {
@@ -590,8 +1704,8 @@ function normalizeAvatarStagePlacement(root: THREE.Object3D): void {
   box.getCenter(center);
 
   if (size.y > 0.001) {
-    const targetHeight = 2.05;
-    const scale = THREE.MathUtils.clamp(targetHeight / size.y, 0.78, 1.62);
+    const targetHeight = runtimeMode === "kiosk" ? STAGE_AVATAR_HEIGHT.kiosk : STAGE_AVATAR_HEIGHT.interactive;
+    const scale = THREE.MathUtils.clamp(targetHeight / size.y, 0.74, 1.56);
     root.scale.setScalar(scale);
     root.updateMatrixWorld(true);
   }
@@ -599,20 +1713,21 @@ function normalizeAvatarStagePlacement(root: THREE.Object3D): void {
   const scaledBox = new THREE.Box3().setFromObject(root);
   const scaledCenter = new THREE.Vector3();
   scaledBox.getCenter(scaledCenter);
-  root.position.set(-scaledCenter.x, 0.96 - scaledCenter.y, -scaledCenter.z);
+  root.position.set(-scaledCenter.x, 0.015 - scaledBox.min.y, -scaledCenter.z);
 }
 
 async function handleUserText(text: string): Promise<void> {
   pushMessage("user", text);
-  const requestRoute = classifySynraRequest(text);
-  state.lastRouteLabel = requestRoute.label;
   const localResult = await tryHandleLocalCommand(text);
   if (localResult) {
-    pushMessage("synra", localResult.text);
+    state.lastRouteLabel = localResult.routeLabel ?? "direct";
+    pushMessageWithCard("synra", localResult.text, localResult.card);
     if (localResult.motion) void playMotionRoute(localResult.motion, { restart: true, returnToIdle: true });
     speak(localResult.text);
     return;
   }
+  const requestRoute = classifySynraRequest(text);
+  state.lastRouteLabel = requestRoute.label;
   setSynraState("thinking", "Thinking.");
   let reply = "";
   try {
@@ -629,6 +1744,11 @@ async function tryHandleLocalCommand(text: string): Promise<LocalCommandResult |
   const normalized = text.trim().toLowerCase();
   if (!normalized) return null;
 
+  if (/^(stop|stop talking|stop speaking|quiet|be quiet|pause voice|cancel voice|stop listening)$/.test(normalized)) {
+    stopVoiceActivity("Voice stopped.");
+    return { text: "Voice stopped.", motion: "confirm" };
+  }
+
   const pendingResult = await tryHandlePendingAction(normalized);
   if (pendingResult) return pendingResult;
 
@@ -642,32 +1762,79 @@ async function tryHandleLocalCommand(text: string): Promise<LocalCommandResult |
 
   if (/^(synra[, ]+)?(help|commands|what can you do|what can i say)\??$/.test(normalized)) {
     return {
-      text: "You can ask for status, voice status, camera status, switch backgrounds, switch avatars, show or hide controls, set low or normal performance mode, remember a fact, clear memories, or control configured lights with confirmation.",
+      text: "Free Synra can talk, remember approved preferences, report voice and camera status, switch avatars and backgrounds, tune render quality, and control configured Home Assistant lights with confirmation. NodeSpark Command Center is available as a subscriber skill.",
       motion: "present"
     };
+  }
+
+  if (/\b(about synra|who made you|who built you|who created you|who is your developer|who owns you|ownership|developer|synryzen)\b/.test(normalized)) {
+    return {
+      text: "Synra Standalone is developed by Matthew C Elliott at Synryzen. I can run as a companion assistant, connect to Home Assistant when configured, and optionally connect to NodeSparkHub as a subscriber skill.",
+      motion: "present",
+      routeLabel: "About Synra"
+    };
+  }
+
+  if (isNodeSparkCommandCenterRequest(normalized)) {
+    return nodeSparkCommandCenterCommand(normalized);
   }
 
   if (/^(synra[, ]+)?(status|health|system status|jetson status)\??$/.test(normalized)) {
     return systemStatusCommand();
   }
 
+  if (/\b(date|time|clock|today)\b/.test(normalized) && /\b(what|tell|show|status|check|is)\b/.test(normalized)) {
+    return localToolCommand("date_time");
+  }
+
+  if (/\b(network|wifi|ip address|connection)\b/.test(normalized) && /\b(status|check|show|what|tell)\b/.test(normalized)) {
+    return localToolCommand("network_status");
+  }
+
   if (/\b(camera|vision|see|eyes)\b/.test(normalized) && /\b(status|check|available|permission|can you|enable|turn on)\b/.test(normalized)) {
+    if (/\b(enable|turn on|open|allow|vision on|camera on)\b/.test(normalized)) {
+      return setVisionEnabled(true);
+    }
     return cameraStatusCommand(/\b(enable|turn on|open|allow)\b/.test(normalized));
   }
 
-  if (/\b(voice|audio|microphone|mic|speak|listen)\b/.test(normalized) && /\b(status|check|available|permission|can you|enable|turn on)\b/.test(normalized)) {
+  if (/\b(what do you see|look at this|analyze view|analyze camera|describe the view|use vision)\b/.test(normalized)) {
+    return analyzeVisionView();
+  }
+
+  if (/\b(camera|vision|eyes)\b/.test(normalized) && /\b(off|disable|close|stop)\b/.test(normalized)) {
+    return setVisionEnabled(false);
+  }
+
+  if (/\b(voice|audio|microphone|mic|speaker|speakers|sound|speak|listen)\b/.test(normalized) && /\b(status|check|available|permission|diagnostics|devices|can you|enable|turn on)\b/.test(normalized)) {
     return voiceStatusCommand(/\b(microphone|mic|listen|enable|turn on|open|allow)\b/.test(normalized));
   }
 
   if (/\b(clear|forget|delete)\b.*\b(memories|memory|remembered facts)\b/.test(normalized)) {
-    state.memory = { ...state.memory, savedFacts: [] };
+    state.memory = { ...state.memory, savedFacts: [], routines: [], devices: [], rooms: [], preferences: [] };
     saveMemory(state.memory);
     return { text: "I cleared the remembered facts I was storing locally.", motion: "confirm" };
   }
 
+  const nameMatch = text.match(/\b(?:call me|my name is)\s+([a-zA-Z][a-zA-Z0-9 .'-]{1,40})[.?!]?$/i);
+  if (nameMatch?.[1]) {
+    const preferredName = nameMatch[1].trim().replace(/[.?!]+$/, "");
+    state.memory = { ...state.memory, preferredName };
+    saveMemory(state.memory);
+    return { text: `Got it. I will call you ${preferredName}.`, motion: "confirm" };
+  }
+
+  const styleMatch = text.match(/\b(?:talk to me|respond|answer|be)\s+(?:in a\s+)?(.+?)(?:\s+style)?[.?!]?$/i);
+  if (styleMatch?.[1] && /\b(style|tone|direct|short|detailed|casual|professional|friendly|technical|simple)\b/i.test(text)) {
+    const style = styleMatch[1].trim().replace(/[.?!]+$/, "").slice(0, 120);
+    state.memory = { ...state.memory, style };
+    saveMemory(state.memory);
+    return { text: `I will use a ${style} style.`, motion: "confirm" };
+  }
+
   const rememberMatch = text.match(/\bremember(?: that)?\s+(.+)/i);
   if (rememberMatch?.[1]) {
-    const fact = rememberMatch[1].trim().replace(/[.?!]+$/, "");
+    const fact = redactMemoryFact(rememberMatch[1].trim().replace(/[.?!]+$/, ""));
     if (fact.length < 3) return { text: "Tell me the full thing you want me to remember.", motion: "ask_question" };
     const savedFacts = [...state.memory.savedFacts.filter((saved) => saved.toLowerCase() !== fact.toLowerCase()), fact].slice(-24);
     state.memory = { ...state.memory, savedFacts };
@@ -702,18 +1869,37 @@ async function tryHandleLocalCommand(text: string): Promise<LocalCommandResult |
     return { text: "Live mode is on.", motion: "confirm" };
   }
 
-  if (/\b(low power|low performance|quality low|performance low)\b/.test(normalized)) {
+  if (/\b(make her sharper|make synra sharper|sharper|less blurry|fix blur|high quality|quality sharp|sharp quality|render sharp)\b/.test(normalized)) {
+    applyRenderQuality("sharp");
+    return { text: "Sharp render quality is on.", motion: "confirm" };
+  }
+
+  if (/\b(balanced quality|quality balanced|normal quality|render balanced)\b/.test(normalized)) {
+    applyRenderQuality("balanced");
+    return { text: "Balanced render quality is on.", motion: "confirm" };
+  }
+
+  if (/\b(low power|low performance|quality low|performance low|performance quality|render performance)\b/.test(normalized)) {
+    applyRenderQuality("performance");
     applyPerformanceTier("forced-low");
-    return { text: "Low-cost performance mode is on.", motion: "confirm" };
+    return { text: "Performance render quality is on.", motion: "confirm" };
   }
 
   if (/\b(normal performance|quality normal|restore performance|performance normal)\b/.test(normalized)) {
+    applyRenderQuality("balanced");
     applyPerformanceTier("normal");
-    return { text: "Normal visual mode is back on.", motion: "confirm" };
+    return { text: "Balanced visual mode is back on.", motion: "confirm" };
   }
 
-  const lightAction = matchLightAction(normalized);
-  if (lightAction) return prepareSmartHomeLightCommand(lightAction);
+  if (isListHomeAssistantTargetsRequest(normalized)) {
+    return listHomeAssistantTargetsCommand();
+  }
+
+  const defaultTarget = matchHomeAssistantDefaultRequest(normalized);
+  if (defaultTarget) return setHomeAssistantDefaultCommand(defaultTarget);
+
+  const smartHomeAction = matchLightAction(normalized) ?? matchSmartHomeActionForKnownEntity(normalized);
+  if (smartHomeAction) return prepareSmartHomeLightCommand(smartHomeAction, normalized);
 
   return null;
 }
@@ -737,7 +1923,8 @@ async function tryHandlePendingAction(normalized: string): Promise<LocalCommandR
   if (/^(confirm|yes|do it|go|proceed|okay|ok)$/.test(normalized)) {
     const action = state.pendingAction;
     state.pendingAction = null;
-    if (action.type === "smart_home") return smartHomeLightCommand(action.action);
+    if (action.type === "smart_home") return smartHomeLightCommand(action.action, action.entityId);
+    if (action.type === "nodespark_workflow") return runNodeSparkWorkflowCommand(action.workflowName);
   }
   return null;
 }
@@ -759,11 +1946,53 @@ async function systemStatusCommand(): Promise<LocalCommandResult> {
     const smartHome = health.smartHomeConfigured ? "smart home configured" : "smart home not configured";
     updateServerVisionStatus(summarizeVisionDiagnostics(health));
     return {
-      text: `System is online. Model: ${health.model ?? state.settings.model}. Uptime: ${uptime}. Performance: ${state.performanceTier}. Voice: ${state.voiceStatus}. Vision: ${combinedVisionStatus()}. ${smartHome}.`,
+      text: `System is online. Model: ${health.model ?? state.settings.model}. Uptime: ${uptime}. Render quality: ${renderQualityLabel(state.visual.renderQuality)}. Performance: ${state.performanceTier}. Voice: ${state.voiceStatus}. Vision: ${combinedVisionStatus()}. ${smartHome}.`,
       motion: "present"
     };
   } catch {
-    return { text: `I am running locally. Performance: ${state.performanceTier}. Voice: ${state.voiceStatus}. Vision: ${combinedVisionStatus()}.`, motion: "present" };
+    return { text: `I am running locally. Render quality: ${renderQualityLabel(state.visual.renderQuality)}. Performance: ${state.performanceTier}. Voice: ${state.voiceStatus}. Vision: ${combinedVisionStatus()}.`, motion: "present" };
+  }
+}
+
+async function localToolCommand(tool: "system_status" | "network_status" | "date_time"): Promise<LocalCommandResult> {
+  try {
+    const response = await fetch("/api/tools/local", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tool })
+    });
+    const data = (await response.json()) as { ok?: boolean; error?: string; result?: Record<string, unknown> };
+    if (!data.ok) return { text: `Local tool failed: ${data.error ?? "unknown error"}`, motion: "concerned" };
+    const result = data.result ?? {};
+    if (tool === "date_time") {
+      return { text: `Local time is ${String(result.localTime ?? "unknown")}.`, motion: "present" };
+    }
+    if (tool === "network_status") {
+      const addresses = Array.isArray(result.addresses) ? result.addresses.join(", ") : "no IP address reported";
+      return { text: `Network status: hostname ${String(result.hostname ?? "unknown")}; addresses ${addresses}.`, motion: "present" };
+    }
+    const memory = result.memory as { usedPercent?: number; availableMb?: number } | undefined;
+    const load = Array.isArray(result.loadAverage) ? result.loadAverage.join(", ") : "unavailable";
+    return { text: `System status: ${String(result.hostname ?? "Jetson")} on ${String(result.machine ?? "unknown hardware")}. Load average ${load}. Memory ${memory?.usedPercent ?? "unknown"} percent used.`, motion: "present" };
+  } catch {
+    return { text: "The local tool bridge is not reachable right now.", motion: "concerned" };
+  }
+}
+
+async function runQuickLocalTool(tool: "system_status" | "network_status" | "date_time"): Promise<void> {
+  const button = tool === "system_status" ? systemStatusButton : tool === "network_status" ? networkStatusButton : dateTimeButton;
+  const previousText = button.textContent || "Run";
+  button.disabled = true;
+  button.textContent = "Checking";
+  setSynraState("thinking", "Checking local status.");
+  try {
+    const result = await localToolCommand(tool);
+    pushMessage("synra", result.text);
+    setSynraState("idle", result.text);
+    if (result.motion) void playMotionRoute(result.motion, { restart: true, returnToIdle: true });
+  } finally {
+    button.disabled = false;
+    button.textContent = previousText;
   }
 }
 
@@ -779,16 +2008,122 @@ async function cameraStatusCommand(requestAccess: boolean): Promise<LocalCommand
   return { text: `Vision status: ${combinedVisionStatus()}. Say enable camera if you want me to request browser access.`, motion: "look_camera" };
 }
 
+async function setVisionEnabled(enabled: boolean): Promise<LocalCommandResult> {
+  if (!enabled) {
+    stopVisionStream();
+    updateVisionStatus("Camera off");
+    visionToggleButton.textContent = "Vision Off";
+    visionToggleButton.dataset.active = "false";
+    return { text: "Vision is off. Camera tracks are stopped.", motion: "confirm" };
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    updateVisionStatus("Camera API unavailable");
+    visionToggleButton.textContent = "Vision Off";
+    visionToggleButton.dataset.active = "false";
+    return { text: "Vision cannot turn on because this browser does not expose camera access.", motion: "concerned" };
+  }
+
+  try {
+    stopVisionStream();
+    activeVisionStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+    updateVisionStatus("Camera on");
+    visionToggleButton.textContent = "Vision On";
+    visionToggleButton.dataset.active = "true";
+    await refreshServerVisionStatus();
+    return { text: "Vision is on. I am not storing frames.", motion: "look_camera" };
+  } catch {
+    stopVisionStream();
+    updateVisionStatus("Camera blocked");
+    visionToggleButton.textContent = "Vision Off";
+    visionToggleButton.dataset.active = "false";
+    await refreshServerVisionStatus();
+    return { text: "Vision could not turn on. Check browser permission and the Jetson camera connection.", motion: "concerned" };
+  }
+}
+
+async function analyzeVisionView(): Promise<LocalCommandResult> {
+  visionAnalyzeButton.disabled = true;
+  const previousText = visionAnalyzeButton.textContent || "Analyze View";
+  visionAnalyzeButton.textContent = "Analyzing";
+  setSynraState("thinking", "Analyzing the camera view.");
+  try {
+    if (!activeVisionStream) {
+      const enabled = await setVisionEnabled(true);
+      if (!activeVisionStream) return enabled;
+    }
+    const imageBase64 = await captureVisionFrame();
+    const response = await fetch("/api/vision/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        imageBase64,
+        prompt: "Describe what Synra can see. Keep it concise and helpful.",
+        endpoint: resolveModelProvider(state.settings.provider) === "server" ? "" : state.settings.endpoint,
+        model: resolveModelProvider(state.settings.provider) === "server" ? "" : state.settings.model,
+        apiKey: resolveModelProvider(state.settings.provider) === "server" ? "" : state.settings.apiKey
+      })
+    });
+    const result = (await response.json()) as { ok?: boolean; text?: string; error?: string };
+    if (!result.ok || !result.text) {
+      return { text: `Vision analysis is not ready: ${result.error ?? "the vision model did not respond."}`, motion: "concerned" };
+    }
+    return { text: result.text, motion: "look_camera" };
+  } catch {
+    return { text: "Vision analysis could not capture a transient frame in this browser.", motion: "concerned" };
+  } finally {
+    visionAnalyzeButton.disabled = false;
+    visionAnalyzeButton.textContent = previousText;
+  }
+}
+
+async function runVisionAnalyzeButton(): Promise<void> {
+  const result = await analyzeVisionView();
+  pushMessage("synra", result.text);
+  setSynraState(result.motion === "concerned" ? "offline" : "idle", result.text);
+  if (result.motion) void playMotionRoute(result.motion, { restart: true, returnToIdle: true });
+  speak(result.text);
+}
+
+async function captureVisionFrame(): Promise<string> {
+  if (!activeVisionStream) throw new Error("Vision is off.");
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.srcObject = activeVisionStream;
+  await video.play();
+  await new Promise((resolve) => window.setTimeout(resolve, 160));
+  const width = Math.min(960, video.videoWidth || 640);
+  const height = Math.max(1, Math.round(width * ((video.videoHeight || 480) / (video.videoWidth || 640))));
+  const frameCanvas = document.createElement("canvas");
+  frameCanvas.width = width;
+  frameCanvas.height = height;
+  const context = frameCanvas.getContext("2d");
+  if (!context) throw new Error("Canvas capture is unavailable.");
+  context.drawImage(video, 0, 0, width, height);
+  video.pause();
+  video.srcObject = null;
+  return frameCanvas.toDataURL("image/jpeg", 0.72);
+}
+
+function stopVisionStream(): void {
+  if (!activeVisionStream) return;
+  for (const track of activeVisionStream.getTracks()) track.stop();
+  activeVisionStream = null;
+}
+
 async function voiceStatusCommand(requestAccess: boolean): Promise<LocalCommandResult> {
   refreshVoiceStatus();
+  const diagnostics = await audioDeviceDiagnostics();
   if (!requestAccess) {
-    return { text: `Voice status: ${state.voiceStatus}. Say listen or press the microphone button when you want me to request microphone access.`, motion: "present" };
+    return { text: `Voice status: ${state.voiceStatus}. ${diagnostics}. Say listen or press the microphone button when you want me to request microphone access.`, motion: "present" };
   }
   const micReady = await ensureMicrophoneReady();
   refreshVoiceStatus();
+  const refreshedDiagnostics = await audioDeviceDiagnostics();
   return micReady
-    ? { text: `Microphone access is available. Voice status: ${state.voiceStatus}.`, motion: "confirm" }
-    : { text: "Microphone access is not available right now. Check Chromium media permissions and the Jetson audio input.", motion: "concerned" };
+    ? { text: `Microphone access is available. Voice status: ${state.voiceStatus}. ${refreshedDiagnostics}.`, motion: "confirm" }
+    : { text: `Microphone access is not available right now. ${refreshedDiagnostics}. Check Chromium media permissions and the Jetson audio input.`, motion: "concerned" };
 }
 
 async function ensureCameraReady(): Promise<boolean> {
@@ -807,23 +2142,447 @@ async function ensureCameraReady(): Promise<boolean> {
   }
 }
 
-async function prepareSmartHomeLightCommand(action: "turn_on" | "turn_off" | "toggle"): Promise<LocalCommandResult> {
+async function prepareSmartHomeLightCommand(action: "turn_on" | "turn_off" | "toggle", normalized = ""): Promise<LocalCommandResult> {
+  if (!nodeSparkModeAllowsHomeAssistant()) {
+    return { text: "Synra is currently in NodeSparkHub Controller focus. Switch to Hybrid or Home Assistant companion to control smart-home devices.", motion: "ask_question" };
+  }
   const configured = await smartHomeIsConfigured();
-  if (!configured) return smartHomeLightCommand(action);
-  const label = action === "toggle" ? "toggle lights" : `turn lights ${action === "turn_on" ? "on" : "off"}`;
+  const target = matchHomeAssistantEntity(normalized);
+  if (!configured) return smartHomeLightCommand(action, target?.entityId);
+  const targetLabel = target?.name ?? homeAssistantDefaultEntityLabel();
+  const label = action === "toggle" ? `toggle ${targetLabel}` : `turn ${targetLabel} ${action === "turn_on" ? "on" : "off"}`;
+  const risk = smartHomeRiskLevel(action, target?.entityId ?? state.homeAssistantSettings.defaultLightEntity);
   state.pendingAction = {
     type: "smart_home",
     action,
     label,
+    entityId: target?.entityId,
     createdAt: performance.now()
   };
   return {
-    text: `Ready to ${label}. Say confirm to run it, or cancel to stop.`,
+    text: `Ready to ${label}. Risk: ${risk}. Say confirm to run it, or cancel to stop.`,
     motion: "ask_question"
   };
 }
 
+function isNodeSparkCommandCenterRequest(normalized: string): boolean {
+  return /\b(nodespark|node spark|nodesparkhub|node spark hub|command center|workflow|workflows|automation|automations)\b/.test(normalized);
+}
+
+async function nodeSparkCommandCenterCommand(normalized: string): Promise<LocalCommandResult> {
+  const access = resolveNodeSparkAccess(state.productSettings.nodeSparkAccess);
+  const hubUrl = state.productSettings.nodeSparkHubUrl.trim();
+  const isPaired = Boolean(state.productSettings.nodeSparkDeviceToken);
+  if (access !== "subscriber") {
+    return {
+      text: "NodeSpark Command Center is a premium Synra skill for NodeSpark subscribers. Free Synra still works for conversation, memory, voice, camera status, and Home Assistant control. Open Skills when you are ready to connect NodeSpark.",
+      motion: "present",
+      routeLabel: "NodeSpark Command Center"
+    };
+  }
+  if (!hubUrl) {
+    return {
+      text: "NodeSpark Command Center is enabled, but no NodeSparkHub URL is configured yet. Add the Hub URL in Skills before I check workflows or Hub status.",
+      motion: "ask_question",
+      routeLabel: "NodeSpark Command Center"
+    };
+  }
+  if (!isPaired) {
+    return {
+      text: `NodeSparkHub is configured at ${endpointDisplayLabel(hubUrl)}, but this Synra device is not paired yet. Generate a pairing PIN in NodeSparkHub and enter it in Synra's NodeSparkHub settings.`,
+      motion: "ask_question",
+      routeLabel: "NodeSpark Command Center"
+    };
+  }
+  if (/\b(workflows?|automations?)\b/.test(normalized) && /\b(list|show|what|available|which)\b/.test(normalized)) {
+    return listNodeSparkWorkflowsCommand();
+  }
+  if (/\b(runs?|history|recent)\b/.test(normalized) && /\b(list|show|latest|recent|last|history)\b/.test(normalized)) {
+    return /\b(latest|last)\b/.test(normalized) ? latestNodeSparkRunCommand() : listNodeSparkRunsCommand();
+  }
+  if (/\b(run|start|execute|launch|trigger)\b/.test(normalized)) {
+    return prepareNodeSparkWorkflowRunCommand(normalized);
+  }
+  if (/\b(status|health|online|connected|connect|connection|linked|available|check)\b/.test(normalized)) {
+    return checkNodeSparkStatusCommand();
+  }
+  return {
+    text: `NodeSpark Command Center is paired with ${endpointDisplayLabel(hubUrl)}. Ask me to check NodeSpark status and I will verify the Hub endpoint directly.`,
+    motion: "confirm",
+    routeLabel: "NodeSpark Command Center"
+  };
+}
+
+function nodeSparkModeAllowsHub(): boolean {
+  return resolveSynraSkillMode(state.productSettings.synraSkillMode) !== "homeAssistant";
+}
+
+function nodeSparkModeAllowsHomeAssistant(): boolean {
+  return resolveSynraSkillMode(state.productSettings.synraSkillMode) !== "nodeSparkHub";
+}
+
+function nodeSparkWorkflowNameFromText(normalized: string): string {
+  const match = normalized.match(/\b(?:run|start|execute|launch|trigger)\s+(?:the\s+)?(?:workflow|automation)?\s*["']?([^"']{3,80})["']?$/);
+  return (match?.[1] ?? "").replace(/\b(workflow|automation)$/i, "").trim();
+}
+
+function normalizeNodeSparkWorkflow(value: string | NodeSparkWorkflowSummary): NodeSparkWorkflowSummary {
+  if (typeof value === "string") {
+    const name = value.trim();
+    return { name, status: name ? "available" : "", detail: "NodeSparkHub workflow" };
+  }
+  return {
+    id: value.id?.trim(),
+    name: value.name?.trim() || value.id?.trim() || "Unnamed workflow",
+    status: value.status?.trim() || "available",
+    detail: value.detail?.trim() || "NodeSparkHub workflow",
+    lastRun: value.lastRun?.trim()
+  };
+}
+
+function nodeSparkWorkflowStatusLabel(workflow: NodeSparkWorkflowSummary): string {
+  const status = (workflow.status || "available").toLowerCase();
+  if (status.includes("disable") || status.includes("off")) return "Disabled";
+  if (status.includes("run") || status.includes("active")) return "Active";
+  if (status.includes("ready")) return "Ready";
+  return workflow.status || "Available";
+}
+
+function nodeSparkWorkflowStatusClass(workflow: NodeSparkWorkflowSummary): string {
+  const status = (workflow.status || "").toLowerCase();
+  if (status.includes("disable") || status.includes("off") || status.includes("error")) return "muted";
+  if (status.includes("run") || status.includes("active") || status.includes("ready")) return "ready";
+  return "available";
+}
+
+function nodeSparkWorkflowSubtext(workflow: NodeSparkWorkflowSummary): string {
+  const detail = workflow.detail && workflow.detail !== "NodeSparkHub workflow" ? workflow.detail : "";
+  const lastRun = workflow.lastRun ? `Last activity ${workflow.lastRun}` : "";
+  return detail || lastRun || "Tap to prepare. Synra will ask before anything starts.";
+}
+
+async function callNodeSparkAction(action: string, workflowName = ""): Promise<NodeSparkActionResponse> {
+  const settings = state.productSettings;
+  const response = await fetch("/api/nodespark/action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action,
+      workflowName,
+      hubUrl: settings.nodeSparkHubUrl.trim(),
+      deviceToken: settings.nodeSparkDeviceToken.trim(),
+      deviceId: settings.nodeSparkDeviceId,
+      deviceName: settings.nodeSparkDeviceName
+    })
+  });
+  return (await response.json()) as NodeSparkActionResponse;
+}
+
+async function listNodeSparkWorkflowsCommand(): Promise<LocalCommandResult> {
+  if (!nodeSparkModeAllowsHub()) return { text: "Synra is currently in Home Assistant companion focus. Switch to Hybrid or NodeSparkHub Controller to use Hub workflows.", motion: "ask_question", routeLabel: "NodeSpark Command Center" };
+  setConnectionTruth("nodeSpark", "checking", "Listing workflows");
+  try {
+    const result = await callNodeSparkAction("workflows");
+    if (!result.ok) {
+      setConnectionTruth("nodeSpark", "unreachable", result.error ?? "Workflow list failed");
+      return { text: `I could not list NodeSparkHub workflows: ${result.error ?? "unknown error"}`, motion: "concerned", routeLabel: "NodeSpark Command Center" };
+    }
+    setConnectionTruth("nodeSpark", "reachable", `${result.count ?? result.workflows?.length ?? 0} workflows`);
+    const workflows = (result.workflows ?? [])
+      .map(normalizeNodeSparkWorkflow)
+      .filter((workflow) => workflow.name)
+      .slice(0, 10);
+    const hubLabel = endpointDisplayLabel(state.productSettings.nodeSparkHubUrl);
+    return {
+      text: workflows.length ? `I found ${result.count ?? workflows.length} NodeSparkHub workflows from ${hubLabel}. Tap one and I will prepare it without starting anything yet.` : "NodeSparkHub is connected, but I did not find saved workflows yet.",
+      motion: "present",
+      routeLabel: "NodeSpark Command Center",
+      card: { kind: "nodespark_workflows", workflows, total: result.count ?? workflows.length, hubLabel, generatedAt: new Date().toISOString() }
+    };
+  } catch {
+    setConnectionTruth("nodeSpark", "unreachable", "Local bridge could not list workflows");
+    return { text: "I could not reach the local bridge to list NodeSparkHub workflows.", motion: "concerned", routeLabel: "NodeSpark Command Center" };
+  }
+}
+
+async function prepareNodeSparkWorkflowFromTap(workflowName: string): Promise<void> {
+  const result = await prepareNodeSparkWorkflowRunCommand(`run workflow ${workflowName}`);
+  pushMessageWithCard("synra", result.text, result.card);
+  setSynraState("idle", result.text);
+  if (result.motion) void playMotionRoute(result.motion, { restart: true, returnToIdle: true });
+}
+
+async function listNodeSparkRunsCommand(): Promise<LocalCommandResult> {
+  setConnectionTruth("nodeSpark", "checking", "Listing recent runs");
+  try {
+    const result = await callNodeSparkAction("runs");
+    if (!result.ok) {
+      setConnectionTruth("nodeSpark", "unreachable", result.error ?? "Run list failed");
+      return { text: `I could not list NodeSparkHub runs: ${result.error ?? "unknown error"}`, motion: "concerned", routeLabel: "NodeSpark Command Center" };
+    }
+    const runs = (result.runs ?? []).slice(0, 5);
+    setConnectionTruth("nodeSpark", "reachable", `${result.count ?? runs.length} runs`);
+    return {
+      text: runs.length ? `Recent NodeSparkHub runs: ${runs.map(formatNodeSparkRun).join("; ")}.` : "NodeSparkHub is connected, but there are no recent runs yet.",
+      motion: "present",
+      routeLabel: "NodeSpark Command Center"
+    };
+  } catch {
+    setConnectionTruth("nodeSpark", "unreachable", "Local bridge could not list runs");
+    return { text: "I could not reach the local bridge to list NodeSparkHub runs.", motion: "concerned", routeLabel: "NodeSpark Command Center" };
+  }
+}
+
+async function latestNodeSparkRunCommand(): Promise<LocalCommandResult> {
+  setConnectionTruth("nodeSpark", "checking", "Checking latest run");
+  try {
+    const result = await callNodeSparkAction("latestRun");
+    if (!result.ok) {
+      setConnectionTruth("nodeSpark", "unreachable", result.error ?? "Latest run failed");
+      return { text: `I could not read the latest NodeSparkHub run: ${result.error ?? "unknown error"}`, motion: "concerned", routeLabel: "NodeSpark Command Center" };
+    }
+    setConnectionTruth("nodeSpark", "reachable", "Latest run reachable");
+    return { text: `Latest NodeSparkHub run: ${formatNodeSparkRun(result.run)}.`, motion: "present", routeLabel: "NodeSpark Command Center" };
+  } catch {
+    setConnectionTruth("nodeSpark", "unreachable", "Local bridge could not check latest run");
+    return { text: "I could not reach the local bridge to check the latest NodeSparkHub run.", motion: "concerned", routeLabel: "NodeSpark Command Center" };
+  }
+}
+
+async function prepareNodeSparkWorkflowRunCommand(normalized: string): Promise<LocalCommandResult> {
+  if (!nodeSparkModeAllowsHub()) return { text: "Synra is currently in Home Assistant companion focus. Switch to Hybrid or NodeSparkHub Controller before running Hub workflows.", motion: "ask_question", routeLabel: "NodeSpark Command Center" };
+  const workflowName = nodeSparkWorkflowNameFromText(normalized);
+  if (!workflowName) {
+    return { text: "Tell me the exact NodeSparkHub workflow name to run. I will ask for confirmation before it starts.", motion: "ask_question", routeLabel: "NodeSpark Command Center" };
+  }
+  state.pendingAction = {
+    type: "nodespark_workflow",
+    workflowName,
+    label: `run NodeSparkHub workflow ${workflowName}`,
+    createdAt: performance.now()
+  };
+  const hubLabel = endpointDisplayLabel(state.productSettings.nodeSparkHubUrl);
+  return {
+    text: `I prepared ${workflowName}. Nothing has started yet. Review the card, then choose Run Workflow or Cancel.`,
+    motion: "ask_question",
+    routeLabel: "NodeSpark Command Center",
+    card: {
+      kind: "nodespark_confirmation",
+      workflowName,
+      risk: "medium",
+      effect: "Starts this workflow on NodeSparkHub using this paired Synra device token.",
+      hubLabel
+    }
+  };
+}
+
+async function runNodeSparkWorkflowCommand(workflowName: string): Promise<LocalCommandResult> {
+  setConnectionTruth("nodeSpark", "checking", `Running ${workflowName}`);
+  try {
+    const result = await callNodeSparkAction("runWorkflow", workflowName);
+    if (!result.ok) {
+      setConnectionTruth("nodeSpark", "unreachable", result.error ?? "Workflow run failed");
+      return {
+        text: `NodeSparkHub did not start ${workflowName}: ${result.error ?? "unknown error"}`,
+        motion: "concerned",
+        routeLabel: "NodeSpark Command Center",
+        card: { kind: "nodespark_run_result", workflowName, status: "failed", error: result.error ?? "unknown error", hubLabel: endpointDisplayLabel(state.productSettings.nodeSparkHubUrl) }
+      };
+    }
+    setConnectionTruth("nodeSpark", "reachable", `Started ${workflowName}`);
+    return {
+      text: `NodeSparkHub accepted the run for ${workflowName}. ${formatNodeSparkRun(result.run)}`,
+      motion: "confirm",
+      routeLabel: "NodeSpark Command Center",
+      card: { kind: "nodespark_run_result", workflowName, status: "started", run: result.run, hubLabel: endpointDisplayLabel(state.productSettings.nodeSparkHubUrl) }
+    };
+  } catch {
+    setConnectionTruth("nodeSpark", "unreachable", "Local bridge could not run workflow");
+    return {
+      text: `I could not reach the local bridge to run ${workflowName}.`,
+      motion: "concerned",
+      routeLabel: "NodeSpark Command Center",
+      card: { kind: "nodespark_run_result", workflowName, status: "failed", error: "Local bridge could not run workflow", hubLabel: endpointDisplayLabel(state.productSettings.nodeSparkHubUrl) }
+    };
+  }
+}
+
+function formatNodeSparkRun(run: NodeSparkActionResponse["run"]): string {
+  if (!run) return "no run details";
+  const workflow = run.workflow || "workflow";
+  const status = run.status || "status unknown";
+  const id = run.id ? ` (${run.id.slice(0, 8)})` : "";
+  return `${workflow} is ${status}${id}`;
+}
+
+async function pairNodeSparkHub(): Promise<void> {
+  const next = readProductSettingsFromInputs();
+  const hubUrl = next.nodeSparkHubUrl.trim();
+  const code = nodeSparkPairingPinInput.value.trim();
+  if (!hubUrl) {
+    setConnectionTruth("nodeSpark", "not-configured", "Add NodeSparkHub URL");
+    nodeSparkPairingStatusEl.textContent = "Add Hub URL first";
+    return;
+  }
+  if (!code) {
+    setConnectionTruth("nodeSpark", "not-configured", "Enter Hub PIN");
+    nodeSparkPairingStatusEl.textContent = "Enter Hub PIN";
+    return;
+  }
+  const previousText = pairNodeSparkButton.textContent || "Pair with PIN";
+  pairNodeSparkButton.disabled = true;
+  pairNodeSparkButton.textContent = "Pairing";
+  setConnectionTruth("nodeSpark", "checking", "Pairing with Hub");
+  try {
+    const response = await fetch("/api/nodespark/pair", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        hubUrl,
+        code,
+        deviceId: next.nodeSparkDeviceId,
+        deviceName: next.nodeSparkDeviceName
+      })
+    });
+    const result = (await response.json()) as { ok?: boolean; error?: string; hubId?: string; deviceToken?: string; expiresAt?: string };
+    if (!result.ok || !result.deviceToken) {
+      setConnectionTruth("nodeSpark", "unreachable", result.error ?? "Pairing failed");
+      nodeSparkPairingStatusEl.textContent = result.error ?? "Pairing failed";
+      return;
+    }
+    state.productSettings = {
+      ...next,
+      nodeSparkAccess: "subscriber",
+      nodeSparkHubId: result.hubId ?? "",
+      nodeSparkDeviceToken: result.deviceToken,
+      nodeSparkTokenExpiresAt: result.expiresAt ?? ""
+    };
+    nodeSparkAccessInput.value = "subscriber";
+    nodeSparkPairingPinInput.value = "";
+    saveProductSettings(state.productSettings);
+    refreshNodeSparkPairingStatus();
+    refreshSkillPanel();
+    setConnectionTruth("nodeSpark", "reachable", nodeSparkPairingLabel());
+    pushMessage("synra", "NodeSparkHub pairing is complete. I can now verify Hub status with this device token.");
+  } catch {
+    setConnectionTruth("nodeSpark", "unreachable", "Pairing bridge failed");
+    nodeSparkPairingStatusEl.textContent = "Pairing bridge failed";
+  } finally {
+    pairNodeSparkButton.disabled = false;
+    pairNodeSparkButton.textContent = previousText;
+    refreshSystemHealthPanel();
+  }
+}
+
+function forgetNodeSparkPairing(): void {
+  state.productSettings = {
+    ...readProductSettingsFromInputs(),
+    nodeSparkHubId: "",
+    nodeSparkDeviceToken: "",
+    nodeSparkTokenExpiresAt: ""
+  };
+  nodeSparkPairingPinInput.value = "";
+  saveProductSettings(state.productSettings);
+  refreshNodeSparkPairingStatus();
+  refreshSkillPanel();
+  setConnectionTruth("nodeSpark", state.productSettings.nodeSparkHubUrl ? "configured" : "not-configured", state.productSettings.nodeSparkHubUrl ? "Hub URL saved; pairing cleared" : "Optional subscriber skill");
+  refreshSystemHealthPanel();
+  pushMessage("synra", "NodeSparkHub pairing was forgotten on this Synra device. The Hub URL is still saved, but I will need a new PIN before I can connect as a paired device.");
+}
+
+async function checkNodeSparkStatusCommand(): Promise<LocalCommandResult> {
+  const access = resolveNodeSparkAccess(state.productSettings.nodeSparkAccess);
+  const hubUrl = state.productSettings.nodeSparkHubUrl.trim();
+  const deviceToken = state.productSettings.nodeSparkDeviceToken.trim();
+  if (access !== "subscriber") {
+    setConnectionTruth("nodeSpark", "not-configured", "Subscriber access is off");
+    return {
+      text: "NodeSpark status checks are part of the subscriber Command Center skill. Free Synra remains separate for companion and Home Assistant use.",
+      motion: "present",
+      routeLabel: "NodeSpark Command Center"
+    };
+  }
+  if (!hubUrl) {
+    setConnectionTruth("nodeSpark", "not-configured", "Add NodeSparkHub URL");
+    return { text: "Add a NodeSparkHub URL in Skills before I check Hub status.", motion: "ask_question", routeLabel: "NodeSpark Command Center" };
+  }
+  if (!deviceToken) {
+    setConnectionTruth("nodeSpark", "configured", "Pair with Hub PIN");
+    return { text: "NodeSparkHub URL is saved, but this Synra device is not paired yet. Generate a PIN in NodeSparkHub, enter it in Synra settings, then I can connect with a device token.", motion: "ask_question", routeLabel: "NodeSpark Command Center" };
+  }
+  setConnectionTruth("nodeSpark", "checking", endpointDisplayLabel(hubUrl));
+  try {
+    const response = await fetch("/api/nodespark/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hubUrl, deviceToken })
+    });
+    const result = (await response.json()) as { ok?: boolean; error?: string; service?: string; version?: string; status?: string; path?: string };
+    if (!result.ok) {
+      setConnectionTruth("nodeSpark", "unreachable", result.error ?? "NodeSparkHub did not respond");
+      return { text: `NodeSparkHub status check failed: ${result.error ?? "unknown error"}`, motion: "concerned", routeLabel: "NodeSpark Command Center" };
+    }
+    setConnectionTruth("nodeSpark", "reachable", result.service ? `${result.service}${result.version ? ` ${result.version}` : ""}` : "NodeSparkHub status reachable");
+    return {
+      text: `NodeSparkHub is ${result.status ?? "online"}${result.service ? ` as ${result.service}` : ""}${result.version ? ` version ${result.version}` : ""}. Status endpoint: ${result.path ?? "detected"}.`,
+      motion: "confirm",
+      routeLabel: "NodeSpark Command Center"
+    };
+  } catch {
+    setConnectionTruth("nodeSpark", "unreachable", "Local bridge could not reach NodeSparkHub");
+    return { text: "NodeSparkHub status check could not reach the local bridge.", motion: "concerned", routeLabel: "NodeSpark Command Center" };
+  }
+}
+
+async function checkNodeSparkStatus(): Promise<void> {
+  const previousText = nodeSparkStatusButton.textContent || "NodeSpark";
+  nodeSparkStatusButton.disabled = true;
+  nodeSparkStatusButton.textContent = "Checking";
+  setSynraState("thinking", "Checking NodeSparkHub.");
+  try {
+    const result = await checkNodeSparkStatusCommand();
+    pushMessageWithCard("synra", result.text, result.card);
+    setSynraState("idle", result.text);
+    if (result.motion) void playMotionRoute(result.motion, { restart: true, returnToIdle: true });
+  } finally {
+    nodeSparkStatusButton.disabled = false;
+    nodeSparkStatusButton.textContent = previousText;
+  }
+}
+
+async function runNodeSparkPanelCommand(button: HTMLButtonElement, progress: string, command: () => Promise<LocalCommandResult>): Promise<void> {
+  const previousText = button.textContent || "Hub";
+  button.disabled = true;
+  button.textContent = "Wait";
+  nodeSparkActionHintEl.textContent = progress;
+  setSynraState("thinking", progress);
+  try {
+    const result = await command();
+    pushMessageWithCard("synra", result.text, result.card);
+    nodeSparkActionHintEl.textContent = result.routeLabel ? "Hub action complete." : "Action complete.";
+    setSynraState(result.motion === "concerned" ? "offline" : "idle", result.text);
+    if (result.motion) void playMotionRoute(result.motion, { restart: true, returnToIdle: true });
+  } finally {
+    button.disabled = false;
+    button.textContent = previousText;
+    refreshSkillPanel();
+  }
+}
+
+async function runNodeSparkChatCardCommand(command: () => Promise<LocalCommandResult>): Promise<void> {
+  setSynraState("thinking", "Checking NodeSparkHub.");
+  try {
+    const result = await command();
+    pushMessageWithCard("synra", result.text, result.card);
+    setSynraState(result.motion === "concerned" ? "offline" : "idle", result.text);
+    if (result.motion) void playMotionRoute(result.motion, { restart: true, returnToIdle: true });
+  } finally {
+    refreshSkillPanel();
+  }
+}
+
 async function smartHomeIsConfigured(): Promise<boolean> {
+  if (homeAssistantSettingsReady(state.homeAssistantSettings)) return true;
   try {
     const response = await fetch("/api/health", { cache: "no-store" });
     const health = (await response.json()) as { smartHomeConfigured?: boolean };
@@ -833,29 +2592,120 @@ async function smartHomeIsConfigured(): Promise<boolean> {
   }
 }
 
-async function smartHomeLightCommand(action: "turn_on" | "turn_off" | "toggle"): Promise<LocalCommandResult> {
+async function smartHomeLightCommand(action: "turn_on" | "turn_off" | "toggle", entityId?: string): Promise<LocalCommandResult> {
   setSynraState("thinking", "Checking smart home.");
   try {
     const response = await fetch("/api/tools/smart-home", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action })
+      body: JSON.stringify({ action, entityId, homeAssistant: homeAssistantToolPayload() })
     });
-    const result = (await response.json()) as { ok?: boolean; configured?: boolean; entityId?: string; error?: string };
+    const result = (await response.json()) as { ok?: boolean; configured?: boolean; entityId?: string; error?: string; risk?: string };
     if (result.ok) {
-      const target = result.entityId ?? "the light";
-      const text = action === "toggle" ? `Done. I toggled ${target}.` : `Done. I turned ${target} ${action === "turn_on" ? "on" : "off"}.`;
+      const target = friendlyHomeAssistantTargetName(result.entityId);
+      const risk = result.risk ? ` Risk was ${result.risk}.` : "";
+      const text = action === "toggle" ? `Done. I toggled ${target}.${risk}` : `Done. I turned ${target} ${action === "turn_on" ? "on" : "off"}.${risk}`;
       return { text, motion: "confirm" };
     }
     return {
       text: result.configured === false
-        ? "Smart home control is not configured yet. Add Home Assistant URL, token, and a default light entity to Synra's Jetson environment."
+        ? "Smart home control is not configured yet. Open Skills and add your Home Assistant URL, token, and default light entity."
         : `I could not control the light: ${result.error ?? "the smart-home tool did not complete."}`,
       motion: "concerned"
     };
   } catch {
     return { text: "I could not reach the smart-home tool right now.", motion: "concerned" };
   }
+}
+
+function smartHomeRiskLevel(action: "turn_on" | "turn_off" | "toggle", entityId: string): "low" | "medium" | "high" {
+  const domain = entityId.split(".", 1)[0]?.toLowerCase() ?? "";
+  if (["lock", "cover", "alarm_control_panel"].includes(domain)) return "high";
+  if (["scene", "script", "climate"].includes(domain)) return "medium";
+  if (["light", "switch", "input_boolean"].includes(domain) && ["turn_on", "turn_off", "toggle"].includes(action)) return "low";
+  return "medium";
+}
+
+function homeAssistantSettingsReady(settings: HomeAssistantSettings): boolean {
+  return settings.enabled && Boolean(settings.url.trim()) && Boolean(settings.token.trim());
+}
+
+function homeAssistantToolPayload(): Partial<HomeAssistantSettings> | null {
+  if (!homeAssistantSettingsReady(state.homeAssistantSettings)) return null;
+  return {
+    enabled: true,
+    url: state.homeAssistantSettings.url.trim(),
+    token: state.homeAssistantSettings.token.trim(),
+    defaultLightEntity: state.homeAssistantSettings.defaultLightEntity.trim(),
+    knownEntities: state.homeAssistantSettings.knownEntities
+  };
+}
+
+function homeAssistantDefaultEntityLabel(): string {
+  const entityId = state.homeAssistantSettings.defaultLightEntity.trim();
+  const entity = state.homeAssistantSettings.knownEntities.find((known) => known.entityId === entityId);
+  if (entity) return entity.name;
+  return entityId ? entityId : "the default smart-home target";
+}
+
+function friendlyHomeAssistantTargetName(entityId: string | undefined): string {
+  const id = (entityId ?? state.homeAssistantSettings.defaultLightEntity).trim();
+  if (!id) return "the smart-home target";
+  const entity = state.homeAssistantSettings.knownEntities.find((known) => known.entityId === id);
+  return entity?.name ?? id;
+}
+
+function matchHomeAssistantEntity(normalized: string): HomeAssistantEntity | null {
+  if (!normalized) return null;
+  const candidates = normalizeHomeAssistantEntities(state.homeAssistantSettings.knownEntities);
+  return candidates.find((entity) => {
+    const entityWords = entity.entityId.replace(/^[^.]+\./, "").replaceAll("_", " ").toLowerCase();
+    const name = entity.name.toLowerCase();
+    return normalized.includes(entity.entityId.toLowerCase()) || normalized.includes(entityWords) || normalized.includes(name);
+  }) ?? null;
+}
+
+function isListHomeAssistantTargetsRequest(normalized: string): boolean {
+  return /\b(list|show|what|which)\b/.test(normalized)
+    && /\b(home assistant|smart home|devices|targets|entities|lights|switches|scenes|scripts)\b/.test(normalized);
+}
+
+function listHomeAssistantTargetsCommand(): LocalCommandResult {
+  const entities = normalizeHomeAssistantEntities(state.homeAssistantSettings.knownEntities);
+  if (entities.length === 0) {
+    return {
+      text: "I do not have discovered Home Assistant targets yet. Open Skills, connect Home Assistant, then press Discover Home.",
+      motion: "ask_question"
+    };
+  }
+  const shown = entities.slice(0, 12).map((entity) => `${entity.name} (${entity.entityId})`);
+  const suffix = entities.length > shown.length ? `, and ${entities.length - shown.length} more.` : ".";
+  return {
+    text: `I can target ${shown.join(", ")}${suffix}`,
+    motion: "present"
+  };
+}
+
+function matchHomeAssistantDefaultRequest(normalized: string): HomeAssistantEntity | null {
+  if (!/\b(default|main|primary)\b/.test(normalized)) return null;
+  if (!/\b(set|use|make|choose|select)\b/.test(normalized)) return null;
+  if (!/\b(home assistant|smart home|target|device|light|switch|scene|script)\b/.test(normalized)) return null;
+  return matchHomeAssistantEntity(normalized);
+}
+
+function setHomeAssistantDefaultCommand(entity: HomeAssistantEntity): LocalCommandResult {
+  state.homeAssistantSettings = {
+    ...state.homeAssistantSettings,
+    defaultLightEntity: entity.entityId
+  };
+  homeAssistantLightEntityInput.value = entity.entityId;
+  saveHomeAssistantSettings(state.homeAssistantSettings);
+  populateHomeAssistantEntitySelect();
+  refreshSkillPanel();
+  return {
+    text: `${entity.name} is now the default Home Assistant target.`,
+    motion: "confirm"
+  };
 }
 
 function matchBackground(normalized: string): SynraBackground | null {
@@ -873,14 +2723,86 @@ function matchAvatar(normalized: string): SynraAvatarId | null {
 }
 
 function matchLightAction(normalized: string): "turn_on" | "turn_off" | "toggle" | null {
-  if (!/\b(light|lights|lamp|lamps)\b/.test(normalized)) return null;
-  if (/\b(toggle|switch)\b/.test(normalized)) return "toggle";
-  if (/\b(on|enable)\b/.test(normalized)) return "turn_on";
-  if (/\b(off|disable)\b/.test(normalized)) return "turn_off";
+  if (!/\b(light|lights|lamp|lamps|switch|switches|scene|scenes|script|scripts)\b/.test(normalized)) return null;
+  return parseSmartHomeAction(normalized, true);
+}
+
+function matchSmartHomeActionForKnownEntity(normalized: string): "turn_on" | "turn_off" | "toggle" | null {
+  if (!matchHomeAssistantEntity(normalized)) return null;
+  return parseSmartHomeAction(normalized, false);
+}
+
+function parseSmartHomeAction(normalized: string, allowSwitchAsToggle: boolean): "turn_on" | "turn_off" | "toggle" | null {
+  if (/\b(on|enable|activate|open)\b/.test(normalized)) return "turn_on";
+  if (/\b(off|disable|deactivate|close)\b/.test(normalized)) return "turn_off";
+  if (/\b(toggle)\b/.test(normalized)) return "toggle";
+  if (allowSwitchAsToggle && /\bswitch\b/.test(normalized)) return "toggle";
   return null;
 }
 
 function speak(text: string): void {
+  const serial = ++speechSerial;
+  stopElevenLabsAudio();
+  clearSpeechFallback();
+  if (state.voiceSettings.provider === "elevenLabs" && state.voiceSettings.elevenLabsApiKey && state.voiceSettings.elevenLabsVoiceId) {
+    void playElevenLabsSpeech(text, serial);
+    return;
+  }
+  fallbackToBrowserSpeech(text, serial);
+}
+
+async function playElevenLabsSpeech(text: string, serial: number): Promise<void> {
+  clearSpeechFallback();
+  const abort = new AbortController();
+  activeSpeechAbort = abort;
+  updateVoiceStatus("ElevenLabs loading");
+  setSynraState("speaking", text);
+  armSpeechFallback(text);
+  try {
+    const response = await fetch("/api/tts/elevenlabs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: abort.signal,
+      body: JSON.stringify({
+        text,
+        apiKey: state.voiceSettings.elevenLabsApiKey,
+        voiceId: state.voiceSettings.elevenLabsVoiceId,
+        modelId: state.voiceSettings.elevenLabsModelId,
+        outputFormat: state.voiceSettings.elevenLabsOutputFormat,
+        stability: state.voiceSettings.elevenLabsStability,
+        similarityBoost: state.voiceSettings.elevenLabsSimilarityBoost
+      })
+    });
+    const data = await response.json() as { ok?: boolean; error?: string; audioBase64?: string; mimeType?: string };
+    if (serial !== speechSerial) return;
+    if (!data.ok || !data.audioBase64) throw new Error(data.error || "ElevenLabs returned no audio.");
+    const audioUrl = URL.createObjectURL(base64ToBlob(data.audioBase64, data.mimeType || "audio/mpeg"));
+    const audio = new Audio(audioUrl);
+    activeSpeechAudio = audio;
+    audio.onplay = () => {
+      if (serial === speechSerial) updateVoiceStatus("ElevenLabs speaking");
+    };
+    audio.onended = () => {
+      if (activeSpeechAudio === audio) activeSpeechAudio = null;
+      URL.revokeObjectURL(audioUrl);
+      if (serial === speechSerial) finishSpeech(text);
+    };
+    audio.onerror = () => {
+      if (activeSpeechAudio === audio) activeSpeechAudio = null;
+      URL.revokeObjectURL(audioUrl);
+      if (serial === speechSerial) fallbackToBrowserSpeech(text, serial);
+    };
+    await audio.play();
+  } catch (error) {
+    if (abort.signal.aborted || serial !== speechSerial) return;
+    updateVoiceStatus("ElevenLabs fallback");
+    fallbackToBrowserSpeech(text, serial);
+  } finally {
+    if (activeSpeechAbort === abort) activeSpeechAbort = null;
+  }
+}
+
+function fallbackToBrowserSpeech(text: string, serial = speechSerial): void {
   clearSpeechFallback();
   if (!("speechSynthesis" in window)) {
     updateVoiceStatus("Text only");
@@ -894,14 +2816,54 @@ function speak(text: string): void {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = 0.96;
   utterance.pitch = 1.04;
-  utterance.onstart = () => setSynraState("speaking", text);
-  utterance.onend = () => finishSpeech(text);
+  utterance.onstart = () => {
+    if (serial === speechSerial) setSynraState("speaking", text);
+  };
+  utterance.onend = () => {
+    if (serial === speechSerial) finishSpeech(text);
+  };
   utterance.onerror = () => {
+    if (serial !== speechSerial) return;
     updateVoiceStatus("Speech blocked");
     finishSpeech(text);
   };
   armSpeechFallback(text);
   speechSynthesis.speak(utterance);
+}
+
+function stopVoiceActivity(caption = "Voice stopped."): void {
+  speechSerial += 1;
+  clearSpeechFallback();
+  stopElevenLabsAudio();
+  activeSpeechAbort?.abort();
+  activeSpeechAbort = null;
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  if (activeRecognition) {
+    try {
+      activeRecognition.abort?.();
+      activeRecognition.stop?.();
+    } catch {
+      // Some Chromium speech backends throw when stopped outside an active session.
+    }
+    activeRecognition = null;
+  }
+  listenButton.disabled = false;
+  updateVoiceStatus("Stopped");
+  setSynraState("idle", caption);
+}
+
+function stopElevenLabsAudio(): void {
+  if (!activeSpeechAudio) return;
+  activeSpeechAudio.pause();
+  URL.revokeObjectURL(activeSpeechAudio.src);
+  activeSpeechAudio = null;
+}
+
+function base64ToBlob(base64: string, mimeType: string): Blob {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: mimeType });
 }
 
 function armSpeechFallback(text: string): void {
@@ -943,6 +2905,7 @@ async function startListening(): Promise<void> {
     return;
   }
   const recognition = new SpeechRecognitionCtor();
+  activeRecognition = recognition;
   recognition.continuous = false;
   recognition.interimResults = false;
   recognition.lang = "en-US";
@@ -951,10 +2914,12 @@ async function startListening(): Promise<void> {
     setSynraState("listening", "Listening.");
   };
   recognition.onerror = () => {
+    activeRecognition = null;
     updateVoiceStatus("Listen stopped");
     setSynraState("idle", "Listening stopped.");
   };
   recognition.onend = () => {
+    if (activeRecognition === recognition) activeRecognition = null;
     refreshVoiceStatus();
     if (state.synra === "listening") setSynraState("idle", "Ready.");
   };
@@ -981,6 +2946,12 @@ async function ensureMicrophoneReady(): Promise<boolean> {
 }
 
 function refreshVoiceStatus(): void {
+  if (state.voiceSettings.provider === "elevenLabs") {
+    const configured = Boolean(state.voiceSettings.elevenLabsApiKey && state.voiceSettings.elevenLabsVoiceId);
+    updateVoiceStatus(configured ? "ElevenLabs ready" : "ElevenLabs needs setup");
+    setConnectionTruth("voice", configured ? "ready" : "not-configured", configured ? "ElevenLabs configured" : "Add ElevenLabs API key and voice ID");
+    return;
+  }
   const canSpeak = "speechSynthesis" in window;
   const canListen = Boolean(
     (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }).SpeechRecognition ||
@@ -990,11 +2961,26 @@ function refreshVoiceStatus(): void {
   else if (canSpeak) updateVoiceStatus("Speak ready");
   else if (canListen) updateVoiceStatus("Listen ready");
   else updateVoiceStatus("Text ready");
+  setConnectionTruth("voice", canSpeak || canListen ? "ready" : "configured", canSpeak || canListen ? "Browser voice path available" : "Text input is available");
 }
 
 function updateVoiceStatus(label: string): void {
   state.voiceStatus = label;
   voiceStateEl.textContent = label;
+}
+
+async function audioDeviceDiagnostics(): Promise<string> {
+  if (!navigator.mediaDevices?.enumerateDevices) return "Audio devices: browser device list unavailable.";
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const inputs = devices.filter((device) => device.kind === "audioinput");
+    const outputs = devices.filter((device) => device.kind === "audiooutput");
+    const inputLabel = inputs.length === 1 ? "1 input" : `${inputs.length} inputs`;
+    const outputLabel = outputs.length === 1 ? "1 output" : `${outputs.length} outputs`;
+    return `Audio devices: ${inputLabel}, ${outputLabel}.`;
+  } catch {
+    return "Audio devices: permission or browser policy blocked device diagnostics.";
+  }
 }
 
 async function refreshVisionStatus(): Promise<void> {
@@ -1029,6 +3015,11 @@ async function refreshVisionStatus(): Promise<void> {
 function updateVisionStatus(label: string): void {
   state.visionStatus = label;
   visionStateEl.textContent = compactVisionStatus();
+  visionToggleButton.textContent = activeVisionStream ? "Vision On" : "Vision Off";
+  visionToggleButton.dataset.active = activeVisionStream ? "true" : "false";
+  const normalized = label.toLowerCase();
+  const status: ConnectionTruthStatus = activeVisionStream ? "reachable" : normalized.includes("blocked") ? "permission-needed" : normalized.includes("unavailable") ? "unreachable" : "off";
+  setConnectionTruth("vision", status, activeVisionStream ? "Camera stream active" : label);
 }
 
 async function refreshServerVisionStatus(): Promise<void> {
@@ -1081,8 +3072,7 @@ function combinedVisionStatus(): string {
 
 function render(now: number): void {
   requestAnimationFrame(render);
-  if (now - state.lastRenderAt < performanceProfile.frameIntervalMs) return;
-  state.lastRenderAt = now;
+  if (shouldSkipStandaloneFrame(now)) return;
   const delta = state.clock.getDelta();
   updatePerformance(now);
   updateTelemetry(now);
@@ -1090,6 +3080,25 @@ function render(now: number): void {
   updateAvatar(delta, now);
   updateIdleLife(now);
   renderer.render(scene, camera);
+}
+
+function shouldSkipStandaloneFrame(now: number): boolean {
+  if (performanceProfile.frameIntervalMs <= 0) return false;
+  if (state.lastRenderAt <= 0) {
+    state.lastRenderAt = now;
+    return false;
+  }
+  const elapsedMs = now - state.lastRenderAt;
+  const toleranceMs = 1.25;
+  if (elapsedMs + toleranceMs < performanceProfile.frameIntervalMs) return true;
+
+  if (elapsedMs > 250) {
+    state.lastRenderAt = now;
+    return false;
+  }
+  const intervals = Math.max(1, Math.floor((elapsedMs + toleranceMs) / performanceProfile.frameIntervalMs));
+  state.lastRenderAt += intervals * performanceProfile.frameIntervalMs;
+  return false;
 }
 
 function createRenderer(): THREE.WebGLRenderer | null {
@@ -1147,6 +3156,42 @@ function updateAvatar(delta: number, now: number): void {
   }
   syncMotionStatus();
   vrm.update(delta);
+  updateContactShadow();
+}
+
+function installContactShadow(): void {
+  const textureCanvas = document.createElement("canvas");
+  textureCanvas.width = 128;
+  textureCanvas.height = 128;
+  const context = textureCanvas.getContext("2d");
+  if (context) {
+    const gradient = context.createRadialGradient(64, 64, 6, 64, 64, 58);
+    gradient.addColorStop(0, "rgba(0, 0, 0, 0.34)");
+    gradient.addColorStop(0.58, "rgba(0, 0, 0, 0.14)");
+    gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 128, 128);
+  }
+  const texture = new THREE.CanvasTexture(textureCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const geometry = new THREE.PlaneGeometry(0.92, 0.34);
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    depthWrite: false
+  });
+  contactShadow = new THREE.Mesh(geometry, material);
+  contactShadow.name = "SynraContactShadow";
+  contactShadow.rotation.x = -Math.PI / 2;
+  contactShadow.position.set(0, 0.006, 0.03);
+  contactShadow.renderOrder = -1;
+  scene.add(contactShadow);
+}
+
+function updateContactShadow(): void {
+  if (!contactShadow || !state.vrm) return;
+  contactShadow.position.x = state.vrm.scene.position.x;
+  contactShadow.position.z = state.vrm.scene.position.z + 0.025;
 }
 
 function syncMotionStatus(): void {
@@ -1218,15 +3263,20 @@ function updatePerformanceTier(avgFps: number, now: number): void {
 function updateTelemetry(now: number): void {
   if (!telemetryEnabled || now - state.lastTelemetryAt < 5000) return;
   state.lastTelemetryAt = now;
+  const renderBuffer = renderer ? renderer.getDrawingBufferSize(new THREE.Vector2()) : null;
+  const hubHealth = hubAvatarRuntime?.runtimeHealth() ?? null;
   const payload = {
     fps: state.fps,
-    targetFps: performanceProfile.targetFps,
-    renderScale: resolveEffectivePixelRatio(),
+    targetFps: hubHealth?.targetFps ?? performanceProfile.targetFps,
+    renderScale: hubHealth?.adaptivePixelRatio ?? resolveEffectivePixelRatio(),
+    renderWidth: renderBuffer?.x ?? hubHealth?.canvasWidth,
+    renderHeight: renderBuffer?.y ?? hubHealth?.canvasHeight,
     performanceTier: state.performanceTier,
+    renderQuality: state.visual.renderQuality,
     synraState: state.synra,
     avatarId: state.visual.avatarId,
-    activeMotion: state.motionPlayer.snapshot.activeClipId,
-    webgl: renderer ? "available" : "unavailable",
+    activeMotion: currentHubMotionId() ?? state.motionPlayer.snapshot.activeClipId,
+    webgl: renderer || hubHealth?.webglReady ? "available" : "unavailable",
     runtimeMode,
     route: state.lastRouteLabel,
     messageCount: state.messages.length
@@ -1240,7 +3290,8 @@ function updateTelemetry(now: number): void {
 }
 
 function updateIdleLife(now: number): void {
-  if (state.synra !== "idle" || !state.motionPlayer.snapshot.ready) return;
+  if (state.synra !== "idle") return;
+  if (!hubAvatarRuntime && !state.motionPlayer.snapshot.ready) return;
   if (now < state.nextLifeMotionAt) return;
   state.lastLifeMotionAt = now;
   state.nextLifeMotionAt = now + randomBetween(runtimeMode === "kiosk" ? 22000 : 16000, runtimeMode === "kiosk" ? 42000 : 30000);
@@ -1248,6 +3299,7 @@ function updateIdleLife(now: number): void {
     state.lastPresenceNudgeAt = now;
     captionEl.textContent = PRESENCE_NUDGES[Math.floor(Math.random() * PRESENCE_NUDGES.length)];
   }
+  if (runtimeMode === "kiosk") return;
   const route = IDLE_LIFE_GESTURES[Math.floor(Math.random() * IDLE_LIFE_GESTURES.length)];
   void playMotionRoute(route, { restart: true, returnToIdle: true });
 }
@@ -1257,18 +3309,32 @@ function randomBetween(min: number, max: number): number {
 }
 
 function setSynraState(next: SynraState, caption: string): void {
+  const previousState = state.synra;
   state.synra = next;
   document.body.dataset.synraState = next;
   statusEl.textContent = next.charAt(0).toUpperCase() + next.slice(1);
+  chatStatusEl.textContent = next === "idle" ? "Ready" : next.charAt(0).toUpperCase() + next.slice(1);
   presenceStateEl.textContent = next === "idle" ? "Ready" : next.charAt(0).toUpperCase() + next.slice(1);
   captionEl.textContent = caption;
+  const shouldRestartStateMotion = previousState !== next || state.lastRenderedSynraState !== next;
+  state.lastRenderedSynraState = next;
+  if (!shouldRestartStateMotion) return;
   const route = routeForSynraState(next);
+  if (hubAvatarRuntime) {
+    hubAvatarRuntime.setMode(modeFromState(next), { playAuthoredLoop: true });
+    hubAvatarRuntime.setSpeaking(next === "speaking");
+    if (route && !route.startsWith("mode:")) void playMotionRoute(route, { loop: true, restart: next !== "idle" });
+    return;
+  }
   if (route && state.motionPlayer.snapshot.ready) void playMotionRoute(route, { loop: true, restart: next !== "idle" });
 }
 
 function routeForSynraState(next: SynraState): string | null {
-  const available = STATE_MOTION_VARIETY[next].filter((route) => Boolean(state.motionPlayer.resolveClipId(route)));
+  const available = STATE_MOTION_VARIETY[next].filter((route) => Boolean(resolveMotionClipId(route)));
   if (available.length === 0) return null;
+  if (runtimeMode === "kiosk" && next === "idle") {
+    return available.includes(KIOSK_IDLE_ROUTE) ? KIOSK_IDLE_ROUTE : available[0];
+  }
   const previous = state.lastAutoMotionByState[next];
   let nextRoute = available[Math.floor(Math.random() * available.length)];
   if (available.length > 1 && nextRoute === previous) {
@@ -1278,14 +3344,189 @@ function routeForSynraState(next: SynraState): string | null {
   return nextRoute;
 }
 
+function modeFromState(next: SynraState): SynraMode {
+  if (next === "listening") return "listening";
+  if (next === "thinking") return "thinking";
+  if (next === "speaking") return "speaking";
+  return "idle";
+}
+
+function currentHubMotionId(): string | null {
+  const debug = hubAvatarRuntime?.debugState() as { authoredMotion?: { channels?: Record<string, { clipId?: string }> } } | undefined;
+  const channels = debug?.authoredMotion?.channels;
+  return channels?.gesture?.clipId ?? channels?.gaze?.clipId ?? channels?.base?.clipId ?? null;
+}
+
 function pushMessage(role: SynraMessage["role"], text: string): void {
+  pushMessageWithCard(role, text);
+}
+
+function pushMessageWithCard(role: SynraMessage["role"], text: string, card?: ChatCard): string {
+  const id = createId();
   state.messages.push({
-    id: createId(),
+    id,
     role,
     text,
     createdAt: new Date().toISOString()
   });
   state.messages = state.messages.slice(-24);
+  if (card) chatCardRegistry.set(id, card);
+  pruneChatCardRegistry();
+  renderChatMessages();
+  return id;
+}
+
+function pruneChatCardRegistry(): void {
+  const activeIds = new Set(state.messages.map((message) => message.id));
+  for (const id of chatCardRegistry.keys()) {
+    if (!activeIds.has(id)) chatCardRegistry.delete(id);
+  }
+}
+
+function renderChatMessages(): void {
+  if (state.messages.length === 0) {
+    chatLogEl.innerHTML = `<div class="chat-empty">Ask Synra anything.</div>`;
+    return;
+  }
+  chatLogEl.innerHTML = state.messages
+    .map((message) => {
+      const role = message.role === "user" ? "You" : message.role === "synra" ? "Synra" : "System";
+      const time = shortTime(message.createdAt);
+      return `
+        <article class="chat-bubble ${message.role}">
+          <div class="chat-meta">
+            <span>${role}</span>
+            <time>${time}</time>
+          </div>
+          <p>${escapeHtml(message.text)}</p>
+          ${renderChatCard(message.id)}
+        </article>
+      `;
+    })
+    .join("");
+  chatLogEl.scrollTop = chatLogEl.scrollHeight;
+}
+
+function renderChatCard(messageId: string): string {
+  const card = chatCardRegistry.get(messageId);
+  if (!card) return "";
+  if (card.kind === "nodespark_workflows") return renderNodeSparkWorkflowCard(card);
+  if (card.kind === "nodespark_confirmation") return renderNodeSparkConfirmationCard(card);
+  return renderNodeSparkRunResultCard(card);
+}
+
+function renderNodeSparkWorkflowCard(card: Extract<ChatCard, { kind: "nodespark_workflows" }>): string {
+  if (card.workflows.length === 0) {
+    return `
+      <div class="hub-card empty guided">
+        <div class="hub-card-header">
+          <strong>No workflows yet</strong>
+          <span>${escapeHtml(card.hubLabel)}</span>
+        </div>
+        <p>Create workflows in NodeSparkHub, then refresh this list.</p>
+        <div class="hub-card-actions">
+          <button type="button" data-nodespark-refresh="1">Refresh</button>
+          <button type="button" data-nodespark-runs="1">Recent Runs</button>
+        </div>
+      </div>
+    `;
+  }
+  return `
+    <div class="hub-card guided workflow-guide">
+      <div class="hub-card-header">
+        <strong>${card.total} workflows</strong>
+        <span>${escapeHtml(card.hubLabel)} · ${escapeHtml(shortTime(card.generatedAt))}</span>
+      </div>
+      <p class="hub-card-note">Tap a workflow to prepare it. Synra will show a confirmation card before NodeSparkHub starts anything.</p>
+      <div class="workflow-card-list">
+        ${card.workflows
+          .map((workflow) => `
+            <button type="button" class="workflow-card-button" data-nodespark-workflow="${escapeAttribute(workflow.name)}">
+              <span class="workflow-card-title">
+                <strong>${escapeHtml(workflow.name)}</strong>
+                <em class="${nodeSparkWorkflowStatusClass(workflow)}">${escapeHtml(nodeSparkWorkflowStatusLabel(workflow))}</em>
+              </span>
+              <span class="workflow-card-subtitle">${escapeHtml(nodeSparkWorkflowSubtext(workflow))}</span>
+              <span class="workflow-card-action">Prepare</span>
+            </button>
+          `)
+          .join("")}
+      </div>
+      <div class="hub-card-actions">
+        <button type="button" data-nodespark-refresh="1">Refresh</button>
+        <button type="button" data-nodespark-runs="1">Recent Runs</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderNodeSparkConfirmationCard(card: Extract<ChatCard, { kind: "nodespark_confirmation" }>): string {
+  return `
+    <div class="hub-card confirmation guided">
+      <div class="hub-card-header">
+        <strong>Confirm workflow run</strong>
+        <span>${escapeHtml(card.hubLabel)}</span>
+      </div>
+      <div class="confirmation-workflow">
+        <span>Prepared workflow</span>
+        <strong>${escapeHtml(card.workflowName)}</strong>
+      </div>
+      <p class="hub-card-note">${escapeHtml(card.effect)}</p>
+      <div class="confirmation-safety">
+        <span>Nothing has started yet</span>
+        <em>Risk: ${escapeHtml(card.risk)}</em>
+      </div>
+      <div class="hub-card-actions">
+        <button type="button" data-nodespark-confirm="${escapeAttribute(card.workflowName)}">Run Workflow</button>
+        <button type="button" data-nodespark-cancel="1">Cancel</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderNodeSparkRunResultCard(card: Extract<ChatCard, { kind: "nodespark_run_result" }>): string {
+  const run = card.run;
+  const status = card.status === "started" ? (run?.status || "started") : "failed";
+  const detail = card.error || formatNodeSparkRun(run);
+  return `
+    <div class="hub-card run-result guided ${card.status}">
+      <div class="hub-card-header">
+        <strong>${card.status === "started" ? "Hub accepted run" : "Run did not start"}</strong>
+        <span>${escapeHtml(card.hubLabel)}</span>
+      </div>
+      <div class="run-result-grid">
+        <span>Workflow</span>
+        <strong>${escapeHtml(card.workflowName)}</strong>
+        <span>Status</span>
+        <strong>${escapeHtml(status)}</strong>
+        ${run?.id ? `<span>Run ID</span><strong>${escapeHtml(run.id)}</strong>` : ""}
+      </div>
+      <p class="hub-card-note">${escapeHtml(detail)}</p>
+      <div class="hub-card-actions">
+        <button type="button" data-nodespark-runs="1">Recent Runs</button>
+        <button type="button" data-nodespark-refresh="1">Workflows</button>
+      </div>
+    </div>
+  `;
+}
+
+function shortTime(isoDate: string): string {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function escapeAttribute(value: string): string {
+  return escapeHtml(value).replaceAll("`", "&#096;");
 }
 
 function createId(): string {
@@ -1301,6 +3542,283 @@ function refreshModelLabel(): void {
   modelNameEl.textContent = performanceProfile.name === "jetson" ? `${model} · ${providerLabel} · Jetson` : `${model} · ${providerLabel}`;
 }
 
+function refreshAiConnectionPanel(): void {
+  const provider = resolveModelProvider(state.settings.provider);
+  const model = state.settings.model.trim() || (provider === "server" ? "server fallback" : "not configured");
+  const providerLabel = provider === "openAICompatible" ? "Cloud" : provider === "localHTTP" ? "Local HTTP" : "Server";
+  aiConnectionStatusEl.textContent = model;
+  aiProviderStatusEl.textContent = providerLabel;
+  aiEndpointStatusEl.textContent = endpointDisplayLabel(state.settings.endpoint);
+  renderQualityStatusEl.textContent = renderQualityLabel(resolveRenderQuality(state.visual.renderQuality));
+  const configured = Boolean(model.trim()) && (provider === "server" || Boolean(state.settings.endpoint.trim()));
+  setConnectionTruth("ai", configured ? "configured" : "not-configured", configured ? `${model} via ${providerLabel}` : "Add model settings");
+}
+
+function refreshSkillPanel(): void {
+  const access = resolveNodeSparkAccess(state.productSettings.nodeSparkAccess);
+  const mode = resolveSynraSkillMode(state.productSettings.synraSkillMode);
+  const hasHubUrl = Boolean(state.productSettings.nodeSparkHubUrl.trim());
+  const hasHubToken = Boolean(state.productSettings.nodeSparkDeviceToken.trim());
+  const homeAssistantReady = homeAssistantSettingsReady(state.homeAssistantSettings);
+  const knownTargets = normalizeHomeAssistantEntities(state.homeAssistantSettings.knownEntities);
+  synraAccessStatusEl.textContent = mode === "nodeSparkHub" ? "Hub Controller" : mode === "homeAssistant" ? "Home Companion" : access === "subscriber" ? "Hybrid Subscriber" : "Free Companion";
+  homeAssistantSkillStatusEl.textContent = homeAssistantReady ? "Connected" : "Free";
+  homeAssistantTargetCountEl.textContent = knownTargets.length === 1 ? "1 discovered" : `${knownTargets.length} discovered`;
+  homeAssistantDefaultTargetEl.textContent = state.homeAssistantSettings.defaultLightEntity.trim() ? homeAssistantDefaultEntityLabel() : "Not set";
+  nodeSparkSkillStatusEl.textContent = access === "subscriber" ? (hasHubToken ? "Paired" : hasHubUrl ? "Needs PIN" : "Needs URL") : "Premium";
+  nodeSparkActionHintEl.textContent = hasHubToken ? "Hub paired. Check workflows or runs." : hasHubUrl ? "Enter Hub PIN to unlock actions." : "Pair Hub to enable workflow insight.";
+  nodeSparkWorkflowsButton.disabled = !hasHubToken || !nodeSparkModeAllowsHub();
+  nodeSparkRunsButton.disabled = !hasHubToken || !nodeSparkModeAllowsHub();
+  nodeSparkLatestRunButton.disabled = !hasHubToken || !nodeSparkModeAllowsHub();
+  setConnectionTruth("homeAssistant", homeAssistantReady ? "configured" : "not-configured", homeAssistantReady ? "Ready to test" : "Add Home Assistant URL and token");
+  setConnectionTruth(
+    "nodeSpark",
+    access === "subscriber" && hasHubToken ? "configured" : access === "subscriber" && hasHubUrl ? "configured" : "not-configured",
+    access === "subscriber" && hasHubToken ? nodeSparkPairingLabel() : access === "subscriber" && hasHubUrl ? "Pair with Hub PIN" : "Optional subscriber skill"
+  );
+  refreshNodeSparkPairingStatus();
+}
+
+function refreshSystemHealthPanel(): void {
+  renderConnectionTruth("ai", healthAiStatusEl);
+  renderConnectionTruth("nodeSpark", healthNodeSparkStatusEl);
+  renderConnectionTruth("homeAssistant", healthHomeAssistantStatusEl);
+  renderConnectionTruth("voice", healthVoiceStatusEl);
+  renderConnectionTruth("vision", healthVisionStatusEl);
+  const statuses = Object.values(state.connections).map((connection) => connection.status);
+  const reachableCount = statuses.filter((status) => status === "reachable" || status === "ready").length;
+  const blockingCount = statuses.filter((status) => status === "unreachable" || status === "permission-needed").length;
+  if (blockingCount > 0) healthSummaryStatusEl.textContent = `${blockingCount} needs attention`;
+  else if (reachableCount > 0) healthSummaryStatusEl.textContent = `${reachableCount} ready`;
+  else healthSummaryStatusEl.textContent = "Configured";
+}
+
+function setConnectionTruth(key: ConnectionTruthKey, status: ConnectionTruthStatus, detail: string): void {
+  state.connections[key] = { status, detail };
+  refreshSystemHealthPanel();
+}
+
+function renderConnectionTruth(key: ConnectionTruthKey, element: HTMLElement): void {
+  const connection = state.connections[key];
+  element.textContent = connectionTruthLabel(connection.status);
+  element.title = connection.detail;
+  element.dataset.state = connection.status;
+}
+
+function connectionTruthLabel(status: ConnectionTruthStatus): string {
+  if (status === "not-configured") return "Not configured";
+  if (status === "permission-needed") return "Permission needed";
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function refreshSettingsDisplayStatus(): void {
+  settingsAvatarStatusEl.textContent = getSynraAvatar(resolveInitialAvatarId()).label;
+  settingsBackgroundStatusEl.textContent = resolveBackground(state.visual.backgroundId).label;
+  settingsQualityStatusEl.textContent = renderQualityLabel(resolveRenderQuality(state.visual.renderQuality));
+  settingsModeStatusEl.textContent = resolveControlMode(state.visual.controlMode) === "live" ? "Live" : "Manual";
+}
+
+function skillAccessSnapshot(): Record<string, string> {
+  const access = resolveNodeSparkAccess(state.productSettings.nodeSparkAccess);
+  return {
+    mode: resolveSynraSkillMode(state.productSettings.synraSkillMode),
+    companion: "free",
+    homeAssistant: homeAssistantSettingsReady(state.homeAssistantSettings) ? "configured-free" : "free",
+    nodeSparkCommandCenter: access === "subscriber" ? (state.productSettings.nodeSparkDeviceToken ? "paired-subscriber" : "subscriber-needs-pairing") : "locked"
+  };
+}
+
+async function discoverHomeAssistantEntities(): Promise<void> {
+  const previousText = discoverHomeAssistantButton.textContent || "Discover Home";
+  discoverHomeAssistantButton.disabled = true;
+  discoverHomeAssistantButton.textContent = "Discovering";
+  state.homeAssistantSettings = readHomeAssistantSettingsFromInputs();
+  saveHomeAssistantSettings(state.homeAssistantSettings);
+  refreshSkillPanel();
+  setSynraState("thinking", "Discovering Home Assistant targets.");
+  try {
+    const response = await fetch("/api/tools/smart-home/discover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ homeAssistant: homeAssistantToolPayload() })
+    });
+    const result = (await response.json()) as { ok?: boolean; configured?: boolean; error?: string; entities?: HomeAssistantEntity[] };
+    if (!result.ok) {
+      setSynraState("offline", result.configured === false ? "Home Assistant is not configured yet." : `Discovery failed: ${result.error ?? "unknown error"}`);
+      void playMotionRoute("concerned", { restart: true, returnToIdle: true });
+      return;
+    }
+    const entities = normalizeHomeAssistantEntities(result.entities ?? []);
+    const defaultEntity = state.homeAssistantSettings.defaultLightEntity.trim() || entities[0]?.entityId || "";
+    state.homeAssistantSettings = {
+      ...state.homeAssistantSettings,
+      knownEntities: entities,
+      defaultLightEntity: defaultEntity
+    };
+    homeAssistantLightEntityInput.value = defaultEntity;
+    saveHomeAssistantSettings(state.homeAssistantSettings);
+    populateHomeAssistantEntitySelect();
+    refreshSkillPanel();
+    setSynraState("idle", entities.length === 1 ? "Found 1 Home Assistant target." : `Found ${entities.length} Home Assistant targets.`);
+    void playMotionRoute("confirm", { restart: true, returnToIdle: true });
+  } catch {
+    setSynraState("offline", "Home Assistant discovery could not reach the local bridge.");
+    void playMotionRoute("concerned", { restart: true, returnToIdle: true });
+  } finally {
+    discoverHomeAssistantButton.disabled = false;
+    discoverHomeAssistantButton.textContent = previousText;
+  }
+}
+
+async function testHomeAssistantConnection(): Promise<void> {
+  const previousText = testHomeAssistantButton.textContent || "Test Home";
+  testHomeAssistantButton.disabled = true;
+  testHomeAssistantButton.textContent = "Testing";
+  const previousSettings = state.homeAssistantSettings;
+  state.homeAssistantSettings = readHomeAssistantSettingsFromInputs();
+  saveHomeAssistantSettings(state.homeAssistantSettings);
+  refreshSkillPanel();
+  setConnectionTruth("homeAssistant", homeAssistantSettingsReady(state.homeAssistantSettings) ? "checking" : "not-configured", homeAssistantSettingsReady(state.homeAssistantSettings) ? endpointDisplayLabel(state.homeAssistantSettings.url) : "Add Home Assistant URL and token");
+  setSynraState("thinking", "Testing Home Assistant.");
+  try {
+    const response = await fetch("/api/tools/smart-home/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ homeAssistant: homeAssistantToolPayload() })
+    });
+    const result = (await response.json()) as { ok?: boolean; configured?: boolean; error?: string; version?: string };
+    if (result.ok) {
+      setConnectionTruth("homeAssistant", "reachable", result.version ? `Home Assistant ${result.version}` : "Home Assistant status reachable");
+      setSynraState("idle", `Home Assistant is connected${result.version ? ` (${result.version})` : ""}.`);
+      void playMotionRoute("confirm", { restart: true, returnToIdle: true });
+      return;
+    }
+    setConnectionTruth("homeAssistant", result.configured === false ? "not-configured" : "unreachable", result.error ?? "Home Assistant did not respond");
+    setSynraState("offline", result.configured === false ? "Home Assistant is not configured yet." : `Home Assistant test failed: ${result.error ?? "unknown error"}`);
+    void playMotionRoute("concerned", { restart: true, returnToIdle: true });
+  } catch {
+    setConnectionTruth("homeAssistant", "unreachable", "Local bridge could not reach Home Assistant");
+    setSynraState("offline", "Home Assistant test could not reach the local bridge.");
+    void playMotionRoute("concerned", { restart: true, returnToIdle: true });
+  } finally {
+    testHomeAssistantButton.disabled = false;
+    testHomeAssistantButton.textContent = previousText;
+    if (previousSettings.enabled !== state.homeAssistantSettings.enabled) refreshSkillPanel();
+  }
+}
+
+async function checkAllConnections(): Promise<void> {
+  const previousText = checkAllConnectionsButton.textContent || "Check All";
+  checkAllConnectionsButton.disabled = true;
+  checkAllConnectionsButton.textContent = "Checking";
+  setSynraState("thinking", "Checking Synra connections.");
+  try {
+    await checkAiHealthOnly();
+    await checkNodeSparkStatusCommand();
+    await checkHomeAssistantHealthOnly();
+    refreshVoiceStatus();
+    await refreshVisionStatus();
+    setSynraState("idle", "Connection check complete.");
+  } finally {
+    checkAllConnectionsButton.disabled = false;
+    checkAllConnectionsButton.textContent = previousText;
+  }
+}
+
+async function checkAiHealthOnly(): Promise<void> {
+  setConnectionTruth("ai", "checking", `${state.settings.model || "server"} via ${endpointDisplayLabel(state.settings.endpoint)}`);
+  try {
+    const reply = await askModel(
+      state.settings,
+      state.memory,
+      [{ id: createId(), role: "user", text: "Reply with exactly: Synra AI reachable.", createdAt: new Date().toISOString() }],
+      "conversation"
+    );
+    setConnectionTruth("ai", "reachable", reply.trim().replace(/\s+/g, " ").slice(0, 120) || "AI route responded");
+  } catch (error) {
+    setConnectionTruth("ai", "unreachable", error instanceof Error ? error.message.slice(0, 140) : "AI route failed");
+  }
+}
+
+async function checkHomeAssistantHealthOnly(): Promise<void> {
+  if (!homeAssistantSettingsReady(state.homeAssistantSettings)) {
+    setConnectionTruth("homeAssistant", "not-configured", "Add Home Assistant URL and token");
+    return;
+  }
+  setConnectionTruth("homeAssistant", "checking", endpointDisplayLabel(state.homeAssistantSettings.url));
+  try {
+    const response = await fetch("/api/tools/smart-home/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ homeAssistant: homeAssistantToolPayload() })
+    });
+    const result = (await response.json()) as { ok?: boolean; configured?: boolean; error?: string; version?: string };
+    if (result.ok) {
+      setConnectionTruth("homeAssistant", "reachable", result.version ? `Home Assistant ${result.version}` : "Home Assistant status reachable");
+      return;
+    }
+    setConnectionTruth("homeAssistant", result.configured === false ? "not-configured" : "unreachable", result.error ?? "Home Assistant did not respond");
+  } catch {
+    setConnectionTruth("homeAssistant", "unreachable", "Local bridge could not reach Home Assistant");
+  }
+}
+
+async function testAiConnection(): Promise<void> {
+  testAiButton.disabled = true;
+  const previousText = testAiButton.textContent ?? "Test AI";
+  testAiButton.textContent = "Testing";
+  setConnectionTruth("ai", "checking", `${state.settings.model || "server"} via ${endpointDisplayLabel(state.settings.endpoint)}`);
+  setSynraState("thinking", "Testing AI connection.");
+  try {
+    const reply = await askModel(
+      state.settings,
+      state.memory,
+      [{ id: createId(), role: "user", text: "Reply with a short Synra connection check.", createdAt: new Date().toISOString() }],
+      "conversation"
+    );
+    const summary = reply.trim().replace(/\s+/g, " ").slice(0, 120) || "Connection responded.";
+    setConnectionTruth("ai", "reachable", summary);
+    setSynraState("idle", `AI connection responded: ${summary}`);
+    void playMotionRoute("confirm", { restart: true, returnToIdle: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "connection failed";
+    setConnectionTruth("ai", "unreachable", message.slice(0, 140));
+    setSynraState("offline", `AI connection failed: ${message.slice(0, 110)}`);
+    void playMotionRoute("concerned", { restart: true, returnToIdle: true });
+  } finally {
+    testAiButton.disabled = false;
+    testAiButton.textContent = previousText;
+  }
+}
+
+async function testVoiceConnection(): Promise<void> {
+  const previousText = testVoiceButton.textContent || "Test Voice";
+  testVoiceButton.disabled = true;
+  testVoiceButton.textContent = "Testing...";
+  const previousSettings = state.voiceSettings;
+  state.voiceSettings = readVoiceSettingsFromInputs();
+  saveVoiceSettings(state.voiceSettings);
+  const providerLabel = voiceProviderLabel(state.voiceSettings.provider);
+  setConnectionTruth("voice", "checking", `Testing ${providerLabel}`);
+  setSynraState("speaking", `Voice test started with ${providerLabel}.`);
+  try {
+    const elevenReady = state.voiceSettings.provider === "elevenLabs" && Boolean(state.voiceSettings.elevenLabsApiKey && state.voiceSettings.elevenLabsVoiceId);
+    speak(elevenReady ? "Synra voice test. ElevenLabs voice is connected." : "Synra voice test. Browser speech is ready.");
+    setConnectionTruth("voice", state.voiceSettings.provider === "elevenLabs" && !elevenReady ? "not-configured" : "ready", elevenReady ? "ElevenLabs test started" : state.voiceSettings.provider === "elevenLabs" ? "ElevenLabs fallback needs API key and voice ID" : "Browser speech test started");
+    pushMessage("synra", elevenReady ? "Voice test started with ElevenLabs." : state.voiceSettings.provider === "elevenLabs" ? "ElevenLabs needs an API key and voice ID. I started browser speech fallback instead." : "Voice test started with browser speech.");
+  } finally {
+    window.setTimeout(() => {
+      testVoiceButton.disabled = false;
+      testVoiceButton.textContent = previousText;
+    }, state.voiceSettings.provider === "elevenLabs" ? 1800 : 600);
+    if (previousSettings.provider !== state.voiceSettings.provider) refreshVoiceStatus();
+  }
+}
+
+function voiceProviderLabel(provider: VoiceProvider): string {
+  return provider === "elevenLabs" ? "ElevenLabs" : "browser speech";
+}
+
 async function refreshServerModelStatus(): Promise<void> {
   if (resolveModelProvider(state.settings.provider) !== "server" && state.settings.endpoint !== "/api/chat") return;
   const response = await fetch("/api/model/public", { cache: "no-store" });
@@ -1311,10 +3829,37 @@ async function refreshServerModelStatus(): Promise<void> {
     model: data.configured && data.model ? data.model : "server fallback"
   };
   refreshModelLabel();
+  refreshAiConnectionPanel();
 }
 
 function resolveModelProvider(provider: string | undefined): ModelSettings["provider"] {
   return provider === "openAICompatible" || provider === "localHTTP" || provider === "server" ? provider : "server";
+}
+
+function resolveRenderQuality(value: unknown): RenderQuality {
+  const quality = String(value ?? "").trim().toLowerCase();
+  if (quality === "sharp" || quality === "high") return "sharp";
+  if (quality === "performance" || quality === "low") return "performance";
+  return "balanced";
+}
+
+function renderQualityLabel(quality: RenderQuality): string {
+  if (quality === "sharp") return "Sharp";
+  if (quality === "performance") return "Performance";
+  return "Balanced";
+}
+
+function endpointDisplayLabel(endpoint: string): string {
+  const trimmed = endpoint.trim();
+  if (!trimmed) return "Not configured";
+  if (trimmed === "/api/chat") return "Synra server";
+  try {
+    const url = new URL(trimmed, window.location.origin);
+    if (url.origin === window.location.origin && trimmed.startsWith("/")) return trimmed;
+    return url.host || trimmed;
+  } catch {
+    return trimmed.length > 32 ? `${trimmed.slice(0, 29)}...` : trimmed;
+  }
 }
 
 function resize(): void {
@@ -1322,9 +3867,14 @@ function resize(): void {
   const height = Math.max(1, window.innerHeight);
   const portrait = width / height < 0.72;
   const wideStage = width / height > 1.35;
-  camera.fov = portrait ? 29 : wideStage ? 26.5 : 26;
-  camera.position.set(0, portrait ? 1.0 : wideStage ? 0.98 : 0.96, portrait ? 5.05 : wideStage ? 4.72 : 4.62);
-  camera.lookAt(0, portrait ? 0.92 : wideStage ? 0.9 : 0.92, 0);
+  const kiosk = runtimeMode === "kiosk";
+  camera.fov = portrait ? 27.5 : wideStage ? kiosk ? 24.8 : 25.5 : kiosk ? 25.2 : 25.8;
+  camera.position.set(
+    0,
+    portrait ? 0.96 : wideStage ? kiosk ? 0.88 : 0.9 : kiosk ? 0.9 : 0.92,
+    portrait ? 4.95 : wideStage ? kiosk ? 4.85 : 4.55 : kiosk ? 4.95 : 4.75
+  );
+  camera.lookAt(0, portrait ? 0.88 : wideStage ? kiosk ? 0.82 : 0.86 : kiosk ? 0.84 : 0.88, 0);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
   if (!renderer) return;
@@ -1333,16 +3883,37 @@ function resize(): void {
 }
 
 function resolvePixelRatio(): number {
-  return Math.min(window.devicePixelRatio || 1, performanceProfile.maxPixelRatio);
+  const deviceRatio = window.devicePixelRatio || 1;
+  const cap = resolvePixelRatioCap();
+  const quality = resolveRenderQuality(state.visual.renderQuality);
+  if (quality === "sharp") return cap;
+  if (quality === "balanced") return Math.min(Math.max(deviceRatio, performanceProfile.name === "jetson" ? 1.2 : 1.35), cap);
+  return Math.min(deviceRatio, cap);
 }
 
 function resolveEffectivePixelRatio(): number {
   const base = resolvePixelRatio();
   const renderScale = resolveRenderScaleOverride();
-  if (renderScale !== null) return renderScale;
-  if (state.performanceTier === "forced-low") return Math.min(base, performanceProfile.name === "jetson" ? 1.0 : 0.72);
-  if (state.performanceTier === "low") return Math.min(base, performanceProfile.name === "jetson" ? 1.0 : 0.82);
-  return base;
+  const uncapped = renderScale ?? (
+    state.performanceTier === "forced-low"
+      ? Math.min(base, performanceProfile.name === "jetson" ? 1.0 : 0.72)
+      : state.performanceTier === "low"
+        ? Math.min(base, performanceProfile.name === "jetson" ? 1.08 : 0.9)
+        : base
+  );
+  return resolveRenderSizeCappedPixelRatio(uncapped);
+}
+
+function resolvePixelRatioCap(): number {
+  const quality = resolveRenderQuality(state.visual.renderQuality);
+  if (performanceProfile.name === "jetson") {
+    if (quality === "sharp") return 1.65;
+    if (quality === "balanced") return 1.35;
+    return 1.0;
+  }
+  if (quality === "sharp") return 2.0;
+  if (quality === "balanced") return 1.5;
+  return 1.0;
 }
 
 function resolveRenderScaleOverride(): number | null {
@@ -1351,15 +3922,38 @@ function resolveRenderScaleOverride(): number | null {
   return Math.min(Math.max(requestedScale, 0.5), 2);
 }
 
+function resolveRenderSizeCappedPixelRatio(pixelRatio: number): number {
+  const params = new URLSearchParams(window.location.search);
+  const requestedMaxWidth = Number(params.get("maxw") || params.get("maxRenderWidth") || "");
+  const requestedMaxHeight = Number(params.get("maxh") || params.get("maxRenderHeight") || "");
+  const widthCap = Number.isFinite(requestedMaxWidth) && requestedMaxWidth > 0 ? requestedMaxWidth / Math.max(1, window.innerWidth) : Infinity;
+  const heightCap = Number.isFinite(requestedMaxHeight) && requestedMaxHeight > 0 ? requestedMaxHeight / Math.max(1, window.innerHeight) : Infinity;
+  const capped = Math.min(pixelRatio, widthCap, heightCap);
+  return Math.min(Math.max(capped, 0.42), 2);
+}
+
 function resolveInitialPerformanceTier(): "normal" | "low" | "forced-low" {
-  const quality = new URLSearchParams(window.location.search).get("quality");
-  return quality === "low" ? "forced-low" : "normal";
+  const quality = resolveRenderQuality(new URLSearchParams(window.location.search).get("quality"));
+  return quality === "performance" ? "forced-low" : "normal";
 }
 
 function resolveInitialVisualSettings() {
   const visual = loadVisualSettings();
-  const requestedAvatar = new URLSearchParams(window.location.search).get("avatar");
-  return isSynraAvatarId(requestedAvatar) ? { ...visual, avatarId: requestedAvatar } : visual;
+  const params = new URLSearchParams(window.location.search);
+  const requestedAvatar = params.get("avatar");
+  const requestedQuality = params.get("quality");
+  const hostedJetsonDefault = shouldPreferSharpHostedDefault() && resolveRenderQuality(visual.renderQuality) !== "performance" ? "sharp" : visual.renderQuality;
+  const next = {
+    ...visual,
+    renderQuality: requestedQuality ? resolveRenderQuality(requestedQuality) : resolveRenderQuality(hostedJetsonDefault)
+  };
+  return isSynraAvatarId(requestedAvatar) ? { ...next, avatarId: requestedAvatar } : next;
+}
+
+function shouldPreferSharpHostedDefault(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has("quality")) return false;
+  return params.get("profile") === "jetson" || isPrivateNetworkHost(window.location.hostname);
 }
 
 function applyPerformanceTier(tier: "normal" | "low" | "forced-low"): void {
@@ -1379,16 +3973,27 @@ function resolveRuntimeMode(): "kiosk" | "interactive" {
 function resolvePerformanceProfile(): { name: "desktop" | "jetson"; targetFps: number; frameIntervalMs: number; maxPixelRatio: number } {
   const params = new URLSearchParams(window.location.search);
   const requestedProfile = params.get("profile");
-  const looksLikeJetson = requestedProfile === "jetson" || /aarch64|jetson|linux arm/i.test(navigator.userAgent);
+  const looksLikeJetson = requestedProfile === "jetson" || isPrivateNetworkHost(window.location.hostname) || /aarch64|jetson|linux arm/i.test(navigator.userAgent);
   const requestedFps = Number(params.get("fps") || "");
-  const minimumFps = runtimeMode === "kiosk" || looksLikeJetson ? 5 : 15;
-  const targetFps = Number.isFinite(requestedFps) && requestedFps >= minimumFps && requestedFps <= 60 ? requestedFps : runtimeMode === "kiosk" ? 15 : looksLikeJetson ? 24 : 60;
+  const liveAvatar = params.get("live") === "1";
+  const performanceLimited = runtimeMode === "kiosk" || looksLikeJetson;
+  const minimumFps = performanceLimited ? 12 : 15;
+  const quality = resolveRenderQuality(state.visual.renderQuality);
+  const defaultFps = performanceLimited ? 24 : 60;
+  const requestedTargetFps = Number.isFinite(requestedFps) && requestedFps >= minimumFps && requestedFps <= 60 ? requestedFps : null;
+  const targetFps = requestedTargetFps ?? (liveAvatar && !performanceLimited ? 60 : defaultFps);
   return {
     name: looksLikeJetson ? "jetson" : "desktop",
     targetFps,
     frameIntervalMs: 1000 / targetFps,
-    maxPixelRatio: looksLikeJetson ? 1.0 : 1.25
+    maxPixelRatio: looksLikeJetson
+      ? quality === "sharp" ? 1.65 : quality === "balanced" ? 1.35 : 1.0
+      : quality === "sharp" ? 2.0 : quality === "balanced" ? 1.5 : 1.0
   };
+}
+
+function isPrivateNetworkHost(host: string): boolean {
+  return /^192\.168\./.test(host) || /^10\./.test(host) || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host);
 }
 
 function must<Root extends HTMLElement, T extends HTMLElement>(id: string): T {
@@ -1408,6 +4013,8 @@ interface SpeechRecognition extends EventTarget {
   onerror: (() => void) | null;
   onresult: ((event: SpeechRecognitionEvent) => void) | null;
   start(): void;
+  stop?(): void;
+  abort?(): void;
 }
 
 interface SpeechRecognitionEvent {

@@ -13,6 +13,7 @@
   --teal: #18d6b5;
   --red: #ff405d;
   --amber: #ffc85a;
+  --left-panel-width: min(340px, calc(100vw - 40px));
 }
 
 * {
@@ -95,7 +96,7 @@ button:disabled {
   z-index: 1;
   width: 100%;
   height: 100%;
-  filter: drop-shadow(0 28px 34px rgb(0 0 0 / 54%));
+  image-rendering: auto;
 }
 
 .hud {
@@ -115,6 +116,11 @@ button:disabled {
 .metrics,
 .presence,
 .performance-panel,
+.connection-panel,
+.health-panel,
+.skill-panel,
+.about-panel,
+.chat-panel,
 .caption,
 .composer,
 dialog {
@@ -136,9 +142,10 @@ dialog {
 }
 
 .brand {
-  gap: 12px;
-  min-width: 248px;
-  padding: 8px 12px 8px 9px;
+  width: var(--left-panel-width);
+  min-height: 74px;
+  justify-content: center;
+  padding: 8px 14px;
 }
 
 .brand-logo {
@@ -147,6 +154,24 @@ dialog {
   object-fit: contain;
   border-radius: 7px;
   filter: drop-shadow(0 0 15px rgb(255 64 93 / 42%));
+}
+
+.brand-logo-only {
+  width: 250px;
+  max-width: calc(100% - 8px);
+  height: 64px;
+  filter:
+    drop-shadow(0 0 18px rgb(255 64 93 / 56%))
+    drop-shadow(0 0 32px rgb(255 16 39 / 18%));
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .brand div {
@@ -222,11 +247,399 @@ dialog {
   background: rgb(37 221 255 / 42%);
 }
 
+.left-chat-panel {
+  position: absolute;
+  z-index: 3;
+  top: 100px;
+  left: 20px;
+  width: var(--left-panel-width);
+  max-height: calc(100vh - 124px);
+  pointer-events: auto;
+}
+
+.chat-panel {
+  display: grid;
+  grid-template-rows: auto minmax(180px, 1fr) auto;
+  gap: 10px;
+  min-height: min(620px, calc(100vh - 124px));
+  max-height: calc(100vh - 124px);
+  padding: 12px;
+  background:
+    linear-gradient(150deg, rgb(37 221 255 / 10%), rgb(255 64 93 / 8%) 52%, rgb(255 200 90 / 6%)),
+    rgb(5 9 14 / 72%);
+}
+
+.chat-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 2px 0;
+}
+
+.chat-panel-header span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.chat-panel-header strong {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.chat-log {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 4px 3px 4px 0;
+  scrollbar-color: rgb(37 221 255 / 46%) transparent;
+  scrollbar-width: thin;
+}
+
+.chat-log::-webkit-scrollbar {
+  width: 7px;
+}
+
+.chat-log::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgb(37 221 255 / 42%);
+}
+
+.chat-empty {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  border: 1px dashed rgb(255 255 255 / 14%);
+  border-radius: 8px;
+  color: rgb(223 230 238 / 58%);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.chat-bubble {
+  width: fit-content;
+  max-width: 92%;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 10%), rgb(255 255 255 / 3%)),
+    rgb(8 12 18 / 80%);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 10%),
+    0 14px 34px rgb(0 0 0 / 28%);
+}
+
+.chat-bubble.user {
+  align-self: flex-end;
+  border-color: rgb(37 221 255 / 28%);
+  background:
+    linear-gradient(135deg, rgb(37 221 255 / 26%), rgb(24 214 181 / 13%)),
+    rgb(6 15 20 / 82%);
+}
+
+.chat-bubble.synra {
+  align-self: flex-start;
+  border-color: rgb(255 64 93 / 26%);
+  background:
+    linear-gradient(135deg, rgb(255 64 93 / 18%), rgb(255 200 90 / 10%)),
+    rgb(14 8 13 / 82%);
+}
+
+.chat-bubble.system {
+  align-self: center;
+  max-width: 100%;
+  border-color: rgb(255 200 90 / 24%);
+}
+
+.chat-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 5px;
+  color: rgb(223 230 238 / 62%);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.chat-meta time {
+  color: rgb(223 230 238 / 42%);
+  font-size: 10px;
+  text-transform: none;
+}
+
+.chat-bubble p {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.hub-card {
+  display: grid;
+  gap: 9px;
+  margin-top: 9px;
+  padding: 9px;
+  border: 1px solid rgb(37 221 255 / 18%);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgb(37 221 255 / 10%), rgb(255 64 93 / 9%)),
+    rgb(0 0 0 / 18%);
+}
+
+.hub-card.guided {
+  gap: 10px;
+  border-color: rgb(37 221 255 / 24%);
+  background:
+    radial-gradient(circle at 18% 0%, rgb(37 221 255 / 16%), transparent 42%),
+    linear-gradient(135deg, rgb(10 22 30 / 88%), rgb(29 10 18 / 82%));
+}
+
+.hub-card.confirmation {
+  border-color: rgb(255 200 90 / 28%);
+}
+
+.hub-card.run-result.started {
+  border-color: rgb(24 214 181 / 28%);
+}
+
+.hub-card.run-result.failed {
+  border-color: rgb(255 64 93 / 34%);
+}
+
+.hub-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.hub-card-header strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-card-header span {
+  min-width: 0;
+  overflow: hidden;
+  color: rgb(235 242 250 / 58%);
+  font-size: 10px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.hub-card-note {
+  margin: 0;
+  color: rgb(235 242 250 / 70%);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.workflow-chip-list,
+.hub-card-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.workflow-card-list {
+  display: grid;
+  gap: 7px;
+}
+
+.workflow-card-button {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 13%);
+  border-radius: 8px;
+  padding: 9px;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 11%), rgb(255 255 255 / 4%)),
+    rgb(0 0 0 / 18%);
+  color: #fff;
+  text-align: left;
+  box-shadow: inset 0 1px rgb(255 255 255 / 10%);
+}
+
+.workflow-card-button:hover,
+.workflow-card-button:focus-visible {
+  border-color: rgb(37 221 255 / 38%);
+  outline: none;
+  background:
+    linear-gradient(135deg, rgb(37 221 255 / 18%), rgb(255 64 93 / 8%)),
+    rgb(0 0 0 / 22%);
+}
+
+.workflow-card-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.workflow-card-title strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-card-title em {
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 999px;
+  padding: 3px 6px;
+  color: #fff;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.workflow-card-title em.ready,
+.workflow-card-title em.available {
+  border-color: rgb(24 214 181 / 30%);
+  background: rgb(24 214 181 / 13%);
+}
+
+.workflow-card-title em.muted {
+  border-color: rgb(255 200 90 / 26%);
+  background: rgb(255 200 90 / 10%);
+  color: rgb(255 235 190 / 92%);
+}
+
+.workflow-card-subtitle {
+  display: block;
+  color: rgb(235 242 250 / 62%);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.workflow-card-action {
+  justify-self: start;
+  color: rgb(37 221 255 / 82%);
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.workflow-chip-list button,
+.hub-card-actions button {
+  min-width: 0;
+  min-height: 32px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 7px;
+  padding: 0 8px;
+  background: rgb(255 255 255 / 9%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-card-actions button:first-child {
+  background:
+    linear-gradient(135deg, rgb(37 221 255 / 22%), rgb(24 214 181 / 12%)),
+    rgb(255 255 255 / 8%);
+}
+
+.hub-card-actions button:last-child {
+  background:
+    linear-gradient(135deg, rgb(255 64 93 / 22%), rgb(255 200 90 / 8%)),
+    rgb(255 255 255 / 8%);
+}
+
+.workflow-guide .hub-card-actions button:last-child,
+.run-result .hub-card-actions button:last-child {
+  background: rgb(255 255 255 / 9%);
+}
+
+.confirmation-workflow,
+.confirmation-safety,
+.run-result-grid {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 8px;
+  padding: 9px;
+  background: rgb(0 0 0 / 18%);
+}
+
+.confirmation-workflow span,
+.confirmation-safety span,
+.run-result-grid span {
+  color: rgb(235 242 250 / 58%);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.confirmation-workflow strong,
+.run-result-grid strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.confirmation-safety {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-color: rgb(255 200 90 / 24%);
+}
+
+.confirmation-safety em {
+  border: 1px solid rgb(255 200 90 / 28%);
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: rgb(255 235 190 / 94%);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.run-result-grid {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
 .presence {
   display: grid;
   gap: 4px;
   padding: 12px 13px;
   pointer-events: none;
+}
+
+.system-health {
+  pointer-events: auto;
 }
 
 .presence strong {
@@ -237,6 +650,24 @@ dialog {
 
 .system-health strong {
   font-size: 15px;
+}
+
+.inline-action {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 6px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+  background: rgb(255 255 255 / 10%);
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.inline-action[data-active="true"] {
+  border-color: rgb(24 214 181 / 48%);
+  background: rgb(24 214 181 / 18%);
+  color: #dffdf8;
 }
 
 .performance-panel {
@@ -307,6 +738,309 @@ dialog {
   font-weight: 850;
 }
 
+.connection-panel,
+.health-panel {
+  display: grid;
+  gap: 9px;
+  padding: 11px;
+  background:
+    linear-gradient(135deg, rgb(37 221 255 / 9%), rgb(255 200 90 / 6%)),
+    var(--panel);
+  pointer-events: auto;
+}
+
+.health-panel {
+  background:
+    linear-gradient(135deg, rgb(24 214 181 / 10%), rgb(37 221 255 / 7%) 48%, rgb(255 200 90 / 6%)),
+    var(--panel);
+}
+
+.about-panel {
+  display: grid;
+  gap: 10px;
+  padding: 11px;
+  background:
+    linear-gradient(145deg, rgb(255 64 93 / 12%), rgb(255 200 90 / 7%) 46%, rgb(37 221 255 / 8%)),
+    var(--panel);
+  pointer-events: auto;
+}
+
+.skill-panel {
+  display: grid;
+  gap: 10px;
+  padding: 11px;
+  background:
+    linear-gradient(135deg, rgb(255 64 160 / 10%), rgb(37 221 255 / 7%)),
+    var(--panel);
+  pointer-events: auto;
+}
+
+.connection-panel header,
+.health-panel header,
+.skill-panel header,
+.about-panel header {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.connection-panel header span,
+.connection-grid span,
+.health-panel header span,
+.health-row span,
+.skill-panel header span,
+.skill-detail-grid span,
+.skill-row span,
+.about-panel header span,
+.about-product-mini span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.connection-panel header strong,
+.connection-grid strong,
+.health-panel header strong,
+.health-row strong,
+.skill-panel header strong,
+.skill-detail-grid strong,
+.skill-row strong,
+.about-panel header strong,
+.about-product-mini strong {
+  overflow: hidden;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.health-list {
+  display: grid;
+  gap: 7px;
+}
+
+.health-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 7px 8px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 7px;
+  background: rgb(0 0 0 / 14%);
+}
+
+.health-row strong {
+  max-width: 126px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 8%);
+  text-align: right;
+}
+
+.health-row strong[data-state="reachable"],
+.health-row strong[data-state="ready"] {
+  background: rgb(24 214 181 / 18%);
+  color: #cffff6;
+}
+
+.health-row strong[data-state="checking"],
+.health-row strong[data-state="configured"] {
+  background: rgb(255 200 90 / 16%);
+  color: #ffe9ad;
+}
+
+.health-row strong[data-state="unreachable"],
+.health-row strong[data-state="permission-needed"] {
+  background: rgb(255 64 93 / 18%);
+  color: #ffd4dd;
+}
+
+.health-row strong[data-state="not-configured"],
+.health-row strong[data-state="off"] {
+  background: rgb(255 255 255 / 7%);
+  color: rgb(235 242 250 / 70%);
+}
+
+.health-panel button {
+  min-height: 34px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgb(24 214 181 / 14%), rgb(37 221 255 / 10%)),
+    rgb(255 255 255 / 8%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.about-product-mini {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgb(255 64 93 / 13%), rgb(37 221 255 / 8%)),
+    rgb(0 0 0 / 16%);
+}
+
+.about-product-mini img {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 0 22px rgb(255 64 93 / 24%);
+}
+
+.about-product-mini div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.about-panel p {
+  margin: 0;
+  color: rgb(235 242 250 / 78%);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.38;
+}
+
+.about-panel button {
+  min-height: 34px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgb(255 64 93 / 18%), rgb(37 221 255 / 14%)),
+    rgb(255 255 255 / 9%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.about-panel button:active {
+  transform: scale(0.97);
+}
+
+.skill-list {
+  display: grid;
+  gap: 7px;
+}
+
+.skill-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 7px 8px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+  background: rgb(37 221 255 / 8%);
+}
+
+.skill-row.premium {
+  background: rgb(255 64 160 / 9%);
+}
+
+.skill-detail-grid {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 6px 9px;
+  align-items: center;
+  padding: 7px 8px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 7px;
+  background: rgb(0 0 0 / 14%);
+}
+
+.quick-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.hub-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.quick-tool-grid button,
+.hub-action-grid button {
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgb(37 221 255 / 13%), rgb(255 64 93 / 8%)),
+    rgb(255 255 255 / 8%);
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.hub-action-grid button {
+  background:
+    linear-gradient(135deg, rgb(255 64 160 / 15%), rgb(37 221 255 / 10%)),
+    rgb(255 255 255 / 7%);
+}
+
+.skill-hint {
+  margin: -1px 0 0;
+  color: rgb(235 242 250 / 62%);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.skill-panel button {
+  min-height: 34px;
+}
+
+.connection-grid {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 7px 9px;
+  align-items: center;
+}
+
+.connection-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.connection-actions button {
+  height: 34px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 7px;
+  background: rgb(255 255 255 / 10%);
+  color: #fff;
+  font-weight: 850;
+}
+
+.connection-actions button:active {
+  transform: scale(0.97);
+}
+
+.settings-button-row {
+  margin-top: -2px;
+}
+
+.settings-button-row.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 body[data-control-mode="live"] .performance-panel {
   gap: 9px;
 }
@@ -325,13 +1059,12 @@ body[data-runtime-mode="kiosk"] .right-rail {
 }
 
 body[data-runtime-mode="kiosk"] .composer {
-  left: auto;
-  right: 20px;
-  bottom: 20px;
-  width: min(292px, calc(100vw - 40px));
-  min-height: 54px;
-  grid-template-columns: 42px minmax(0, 1fr) 42px 42px;
-  transform: none;
+  min-height: 100px;
+  grid-template-columns: repeat(4, 38px) minmax(0, 1fr);
+}
+
+body[data-runtime-mode="kiosk"] .left-chat-panel {
+  width: var(--left-panel-width);
 }
 
 body[data-runtime-mode="kiosk"] .composer input {
@@ -339,10 +1072,20 @@ body[data-runtime-mode="kiosk"] .composer input {
   padding: 0 10px;
 }
 
+body[data-runtime-mode="kiosk"] .icon-button {
+  min-width: 38px;
+  height: 38px;
+}
+
 body[data-runtime-mode="kiosk"] .brand,
 body[data-runtime-mode="kiosk"] .metrics,
 body[data-runtime-mode="kiosk"] .presence,
 body[data-runtime-mode="kiosk"] .performance-panel,
+body[data-runtime-mode="kiosk"] .connection-panel,
+body[data-runtime-mode="kiosk"] .health-panel,
+body[data-runtime-mode="kiosk"] .skill-panel,
+body[data-runtime-mode="kiosk"] .about-panel,
+body[data-runtime-mode="kiosk"] .chat-panel,
 body[data-runtime-mode="kiosk"] .caption,
 body[data-runtime-mode="kiosk"] .composer {
   backdrop-filter: blur(14px) saturate(1.08);
@@ -373,6 +1116,11 @@ body[data-performance-tier="low"] .brand,
 body[data-performance-tier="low"] .metrics,
 body[data-performance-tier="low"] .presence,
 body[data-performance-tier="low"] .performance-panel,
+body[data-performance-tier="low"] .connection-panel,
+body[data-performance-tier="low"] .health-panel,
+body[data-performance-tier="low"] .skill-panel,
+body[data-performance-tier="low"] .about-panel,
+body[data-performance-tier="low"] .chat-panel,
 body[data-performance-tier="low"] .caption,
 body[data-performance-tier="low"] .composer {
   box-shadow:
@@ -415,15 +1163,15 @@ body[data-performance-tier="low"] .composer {
 }
 
 .composer {
-  position: absolute;
-  z-index: 4;
-  left: 50%;
-  bottom: 24px;
-  width: min(760px, calc(100vw - 40px));
-  min-height: 62px;
-  transform: translateX(-50%);
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: 112px;
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 48px 48px;
+  grid-template-columns: repeat(4, 48px) minmax(0, 1fr);
+  grid-template-areas:
+    "prompt prompt prompt prompt prompt"
+    "listen stop send settings spacer";
   gap: 8px;
   padding: 8px;
   background:
@@ -432,6 +1180,7 @@ body[data-performance-tier="low"] .composer {
 }
 
 .composer input {
+  grid-area: prompt;
   min-width: 0;
   height: 46px;
   border: 1px solid rgb(255 255 255 / 8%);
@@ -449,6 +1198,22 @@ body[data-performance-tier="low"] .composer {
 .composer input:focus {
   border-color: rgb(37 221 255 / 48%);
   box-shadow: 0 0 0 3px rgb(37 221 255 / 11%);
+}
+
+.composer .icon-button.listen {
+  grid-area: listen;
+}
+
+.composer .icon-button.stop {
+  grid-area: stop;
+}
+
+.composer .icon-button.send {
+  grid-area: send;
+}
+
+.composer .icon-button.settings-toggle {
+  grid-area: settings;
 }
 
 .icon-button,
@@ -477,6 +1242,16 @@ body[data-performance-tier="low"] .composer {
 .icon-button.listen {
   display: grid;
   place-items: center;
+}
+
+.icon-button.stop {
+  background: rgb(255 64 93 / 18%);
+  color: #ffdbe1;
+}
+
+.icon-button.stop:hover {
+  border-color: rgb(255 64 93 / 52%);
+  background: rgb(255 64 93 / 28%);
 }
 
 .icon-button.listen span {
@@ -522,11 +1297,15 @@ body[data-synra-state="offline"] .signal-dot {
 }
 
 dialog {
-  width: min(520px, calc(100vw - 32px));
+  width: min(640px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
   overflow: auto;
   background: #101820;
   color: var(--text);
+}
+
+#aboutDialog {
+  width: min(720px, calc(100vw - 32px));
 }
 
 dialog::backdrop {
@@ -541,6 +1320,209 @@ dialog::backdrop {
 .settings h2 {
   margin: 0;
   font-size: 20px;
+}
+
+.settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 5px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 8px;
+  background: rgb(0 0 0 / 18%);
+}
+
+.settings-tab {
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 0 11px;
+  background: transparent;
+  color: rgb(235 242 250 / 72%);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.settings-tab.active {
+  border-color: rgb(37 221 255 / 32%);
+  background:
+    linear-gradient(135deg, rgb(37 221 255 / 18%), rgb(255 64 93 / 10%)),
+    rgb(255 255 255 / 9%);
+  color: #fff;
+}
+
+.settings-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.settings-panel[hidden] {
+  display: none;
+}
+
+.settings-panel h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 16px;
+}
+
+.settings-note {
+  margin: 0;
+  color: rgb(235 242 250 / 72%);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.settings-status-grid {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 9px 12px;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 5%);
+}
+
+.settings-status-grid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.settings-status-grid strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-status-grid.compact {
+  grid-template-columns: 82px minmax(0, 1fr);
+  padding: 10px;
+}
+
+.about-dialog {
+  display: grid;
+  gap: 14px;
+}
+
+.about-hero {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgb(255 255 255 / 10%);
+}
+
+.about-hero-icon {
+  width: 86px;
+  height: 86px;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 12%),
+    0 0 34px rgb(255 64 93 / 24%);
+}
+
+.about-hero span,
+.about-fact-grid span,
+.about-section h3 {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.about-hero h2 {
+  margin: 4px 0 6px;
+  color: #fff;
+  font-size: 28px;
+  line-height: 1.05;
+}
+
+.about-hero p,
+.about-section p {
+  margin: 0;
+  color: rgb(235 242 250 / 78%);
+  font-size: 14px;
+  line-height: 1.48;
+}
+
+.about-fact-grid {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 9px 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 5%);
+}
+
+.about-fact-grid strong,
+.about-fact-grid a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.about-section {
+  display: grid;
+  gap: 8px;
+  padding: 13px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgb(37 221 255 / 8%), rgb(255 64 93 / 7%)),
+    rgb(0 0 0 / 12%);
+}
+
+.about-section.trust {
+  background:
+    linear-gradient(135deg, rgb(255 200 90 / 8%), rgb(37 221 255 / 7%)),
+    rgb(0 0 0 / 12%);
+}
+
+.about-store-link,
+.about-actions a,
+.about-actions button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgb(37 221 255 / 16%), rgb(255 64 93 / 12%)),
+    rgb(255 255 255 / 8%);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+  text-align: center;
+  text-decoration: none;
+}
+
+.about-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+.about-actions button {
+  font: inherit;
 }
 
 .settings label {
@@ -574,6 +1556,7 @@ dialog::backdrop {
 
 .settings menu {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   margin: 0;
@@ -602,6 +1585,20 @@ dialog::backdrop {
 }
 
 @media (max-width: 860px) {
+  :root {
+    --left-panel-width: min(340px, calc(100vw - 24px));
+  }
+
+  .left-chat-panel {
+    top: 90px;
+    max-height: min(62vh, 560px);
+  }
+
+  .chat-panel {
+    min-height: min(460px, calc(100vh - 112px));
+    max-height: min(62vh, 560px);
+  }
+
   .right-rail {
     top: auto;
     left: 50%;
@@ -626,10 +1623,14 @@ dialog::backdrop {
 }
 
 @media (max-width: 700px) {
+  .right-rail {
+    display: none;
+  }
+
   .hud {
     top: 12px;
-    left: 12px;
-    right: 12px;
+    left: 20px;
+    right: 20px;
   }
 
   .metrics {
@@ -637,12 +1638,20 @@ dialog::backdrop {
   }
 
   .brand {
+    width: var(--left-panel-width);
     min-width: 0;
+    min-height: 68px;
   }
 
   .brand-logo {
-    width: 82px;
-    height: 38px;
+    width: 140px;
+    height: 48px;
+  }
+
+  .brand-logo-only {
+    width: 224px;
+    max-width: calc(100% - 8px);
+    height: 56px;
   }
 
   .caption-shell {
@@ -655,9 +1664,7 @@ dialog::backdrop {
   }
 
   .composer {
-    bottom: 14px;
-    width: calc(100vw - 24px);
-    grid-template-columns: 44px minmax(0, 1fr) 44px 44px;
+    grid-template-columns: repeat(4, 44px) minmax(0, 1fr);
   }
 
   .icon-button,

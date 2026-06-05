@@ -19,8 +19,8 @@ export function classifySynraRequest(text: string): SynraRequestRoute {
   if (/\b(remember|memory|forget|preference|prefer)\b/.test(normalized)) {
     return { intent: "memory", path: "direct", label: "memory" };
   }
-  if (/\b(nodespark|hub|workflow|automation)\b/.test(normalized)) {
-    return { intent: "nodespark", path: "model", label: "NodeSpark skill" };
+  if (/\b(nodespark|node spark|nodesparkhub|node spark hub|workflow|automation)\b/.test(normalized)) {
+    return { intent: "nodespark", path: "direct", label: "NodeSpark Command Center" };
   }
   return { intent: "conversation", path: "model", label: "conversation" };
 }
@@ -80,9 +80,10 @@ function resolveProvider(settings: ModelSettings): ModelSettings["provider"] {
 export function localSynraReply(text: string): string {
   const normalized = text.toLowerCase();
   if (normalized.includes("hello") || normalized.includes("hi ")) return "I am here. Tell me what you want to build, check, or control.";
-  if (normalized.includes("light")) return "I can become your smart-home companion. First we need to connect a Home Assistant, Hue, Matter, MQTT, or webhook tool.";
+  if (normalized.includes("light")) return "Home Assistant control is included in free Synra. Connect the Home Assistant URL, token, and default entity when you are ready.";
   if (normalized.includes("camera") || normalized.includes("vision") || normalized.includes("see")) return "I can report camera permission and Jetson device status now. Real visual understanding will turn on only after a vision model and camera stream are configured.";
-  if (normalized.includes("nodespark")) return "NodeSpark will be an optional skill. I can stay useful by myself, then connect to NodeSpark when you want workflow awareness.";
+  if (normalized.includes("nodespark") || normalized.includes("node spark")) return "NodeSpark Command Center is an optional subscriber skill. Pair Synra with a NodeSparkHub PIN, then I can check status, list workflows and runs, and ask for confirmation before running anything.";
   if (normalized.includes("remember")) return "I can remember preferences once you approve them. I will keep secrets, tokens, raw audio, and camera frames out of memory.";
+  if (normalized.includes("status") || normalized.includes("network") || normalized.includes("time")) return "I can check local system, network, and time status directly without waiting on a model.";
   return "I can help with that. My direct controls stay instant, and deeper reasoning goes through the configured local or cloud model.";
 }

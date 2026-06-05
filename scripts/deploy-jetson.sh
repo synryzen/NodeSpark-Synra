@@ -18,7 +18,7 @@ mkdir -p "$APP_DIR"
 tar -xzf "$HOME/synra-standalone-dist.tgz" -C "$APP_DIR"
 find "$APP_DIR" -name "._*" -delete
 find "$APP_DIR" -name ".DS_Store" -delete
-chmod +x "$APP_DIR/scripts/start-jetson-kiosk.sh"
+chmod +x "$APP_DIR/scripts/"*.sh
 cat > "$HOME/.config/systemd/user/synra-standalone.service" <<SERVICE
 [Unit]
 Description=Synra Standalone Jetson Companion

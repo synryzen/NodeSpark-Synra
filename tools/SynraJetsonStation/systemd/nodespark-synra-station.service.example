@@ -1,0 +1,20 @@
+[Unit]
+Description=NodeSpark Synra Jetson Station
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/nodespark/SynraJetsonStation
+Environment=NODE_ENV=production
+Environment=STATION_HOST=127.0.0.1
+Environment=STATION_PORT=4788
+Environment=HUB_BASE_URL=http://127.0.0.1:8787
+EnvironmentFile=-/etc/nodespark-synra-station.env
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

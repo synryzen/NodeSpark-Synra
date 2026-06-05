@@ -20,6 +20,27 @@ Network URL:
 http://192.168.1.165:5191/
 ```
 
+## Quick Install
+
+Fresh Jetson install or update:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/synryzen/NodeSpark-Synra/main/scripts/install-jetson.sh | bash
+```
+
+The installer keeps an existing:
+
+```text
+~/.config/synra-standalone.env
+```
+
+It installs:
+
+```text
+~/synra-standalone
+~/synra-jetson-station
+```
+
 ## Service Commands
 
 ```bash
@@ -64,7 +85,7 @@ Synra's direct commands bypass the model for speed. General conversation, future
 
 ## Smart Home Configuration
 
-Synra has a safe smart-home bridge for Home Assistant lights. It only runs when explicitly configured in:
+Synra has a safe smart-home bridge for Home Assistant lights. It can be configured in the app under Settings > Home Assistant, or configured on the Jetson with environment variables:
 
 ```text
 ~/.config/synra-standalone.env
@@ -107,9 +128,11 @@ low performance mode
 normal performance mode
 show controls
 hide controls
+list smart home devices
+set office light as default target
 ```
 
-If smart home is configured, light commands ask for confirmation before sending the Home Assistant request. Say `confirm` to proceed or `cancel` to stop. If smart home is not configured, Synra will say that clearly instead of pretending the action succeeded.
+If smart home is configured, light commands ask for confirmation before sending the Home Assistant request. Say `confirm` to proceed or `cancel` to stop. If smart home is not configured, Synra will say that clearly instead of pretending the action succeeded. The in-app Test Home button checks Home Assistant `/api/config`, and Discover Home reads `/api/states` for lights, switches, scenes, scripts, and input booleans. After discovery, Synra shows the target count and default target in the right rail, can list targets, set a default target, and match friendly names in commands such as `turn on office light`. Neither route returns the token in status output.
 
 Camera commands are permission/status only in this build. Synra can check whether camera access is available and request permission, but she does not store frames or claim vision analysis until a configured vision skill is added.
 
@@ -161,6 +184,7 @@ Kiosk performance report:
 
 ```bash
 ~/synra-standalone/scripts/kiosk-performance-check.sh
+~/synra-jetson-station/scripts/electron-gpu-check.sh
 ```
 
 ## Deploy From Mac
@@ -190,7 +214,25 @@ rm -f "$HOME/synra-standalone-dist.tgz"
 
 ## Kiosk Command
 
-If Chromium is installed:
+The recommended production kiosk is the dedicated Electron shell:
+
+```bash
+~/synra-jetson-station/scripts/start-electron-kiosk.sh
+```
+
+It launches the Synra runtime outside snap Chromium confinement:
+
+```text
+http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=30&live=1&quality=sharp&scale=1&maxw=2560&maxh=1600&avatar=code1&telemetry=1
+```
+
+The Electron autostart file is:
+
+```text
+~/.config/autostart/synra-electron-kiosk.desktop
+```
+
+The older snap Chromium launcher is still available as a fallback:
 
 ```bash
 ~/synra-standalone/scripts/start-jetson-kiosk.sh
@@ -202,37 +244,33 @@ If the Jetson uses a different Chromium binary, try:
 command -v chromium chromium-browser google-chrome
 ```
 
-The deployed autostart file is:
-
-```text
-~/.config/autostart/synra-standalone-kiosk.desktop
-```
-
-It launches:
-
-```text
-http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=15&live=1&quality=low
-```
-
-Kiosk mode intentionally targets 15 FPS by default on Jetson and starts in low-cost visual quality. The earlier 24/30 FPS targets could sit below target on the Jetson, which made motion uneven and wasted render budget. Override the target only when the device is clearly stable:
+Electron kiosk mode now uses sharp, native-pixel rendering with a 30 FPS target by default on the tested `2560x1600` Jetson display. The frame scheduler was fixed so 30 FPS does not accidentally collapse into uneven 20-ish FPS pacing. These knobs remain available for other displays and thermal testing:
 
 ```bash
-SYNRA_KIOSK_FPS=24 ~/synra-standalone/scripts/start-jetson-kiosk.sh
-SYNRA_KIOSK_FPS=30 ~/synra-standalone/scripts/start-jetson-kiosk.sh
+SYNRA_KIOSK_FPS=30 SYNRA_KIOSK_QUALITY=sharp SYNRA_KIOSK_RENDER_SCALE=1 ~/synra-jetson-station/scripts/start-electron-kiosk.sh
+SYNRA_KIOSK_FPS=24 SYNRA_KIOSK_QUALITY=sharp SYNRA_KIOSK_RENDER_SCALE=1 ~/synra-jetson-station/scripts/start-electron-kiosk.sh
+SYNRA_KIOSK_FPS=15 SYNRA_KIOSK_QUALITY=performance SYNRA_KIOSK_RENDER_SCALE=0.75 ~/synra-jetson-station/scripts/start-electron-kiosk.sh
 ```
 
-The kiosk render scale defaults to `1.0` because lower scales made Synra visibly blurred/pixelated and did not meaningfully improve FPS on the tested snap Chromium path:
+The kiosk render scale defaults to `1` with a `2560x1600` buffer cap so the WebGL canvas matches the visible kiosk pixels on the current display. Use these knobs when tuning a specific Jetson monitor:
 
 ```bash
-SYNRA_KIOSK_RENDER_SCALE=0.28 ~/synra-standalone/scripts/start-jetson-kiosk.sh
-SYNRA_KIOSK_RENDER_SCALE=0.75 ~/synra-standalone/scripts/start-jetson-kiosk.sh
-SYNRA_KIOSK_RENDER_SCALE=1.0 ~/synra-standalone/scripts/start-jetson-kiosk.sh
+SYNRA_KIOSK_RENDER_SCALE=1.0 ~/synra-jetson-station/scripts/start-electron-kiosk.sh
+SYNRA_KIOSK_RENDER_SCALE=0.85 SYNRA_KIOSK_QUALITY=balanced ~/synra-jetson-station/scripts/start-electron-kiosk.sh
+SYNRA_KIOSK_RENDER_SCALE=0.75 SYNRA_KIOSK_QUALITY=performance ~/synra-jetson-station/scripts/start-electron-kiosk.sh
+```
+
+The kiosk caps the internal WebGL render buffer to `2560x1600` by default. Lower these only when trading sharpness for a specific display or browser backend:
+
+```bash
+SYNRA_KIOSK_MAX_RENDER_WIDTH=1600 SYNRA_KIOSK_MAX_RENDER_HEIGHT=1000 ~/synra-jetson-station/scripts/start-electron-kiosk.sh
+SYNRA_KIOSK_MAX_RENDER_WIDTH=1920 SYNRA_KIOSK_MAX_RENDER_HEIGHT=1200 ~/synra-jetson-station/scripts/start-electron-kiosk.sh
 ```
 
 If Synra is running as an unattended kiosk and you want Chromium to automatically accept camera/mic prompts, opt in explicitly:
 
 ```bash
-SYNRA_KIOSK_AUTO_GRANT_MEDIA=true ~/synra-standalone/scripts/start-jetson-kiosk.sh
+SYNRA_KIOSK_AUTO_GRANT_MEDIA=true ~/synra-jetson-station/scripts/start-electron-kiosk.sh
 ```
 
 Leave this off for normal use so browser media permissions remain visible to the user.
@@ -240,20 +278,19 @@ Leave this off for normal use so browser media permissions remain visible to the
 For local Chrome inspection and performance probes:
 
 ```bash
-SYNRA_KIOSK_REMOTE_DEBUG=true ~/synra-standalone/scripts/start-jetson-kiosk.sh
+SYNRA_KIOSK_REMOTE_DEBUG=true ~/synra-jetson-station/scripts/start-electron-kiosk.sh
 ```
 
-If Chromium logs EGL or GPU initialization failures, test explicit GL modes:
+If Electron logs GPU initialization failures, test explicit ANGLE modes:
 
 ```bash
-SYNRA_KIOSK_GL_MODE=desktop ~/synra-standalone/scripts/start-jetson-kiosk.sh
-SYNRA_KIOSK_GL_MODE=egl ~/synra-standalone/scripts/start-jetson-kiosk.sh
-SYNRA_KIOSK_GL_MODE=swiftshader ~/synra-standalone/scripts/start-jetson-kiosk.sh
-SYNRA_KIOSK_ANGLE_BACKEND=vulkan ~/synra-standalone/scripts/start-jetson-kiosk.sh
-SYNRA_KIOSK_ANGLE_BACKEND=none ~/synra-standalone/scripts/start-jetson-kiosk.sh
+SYNRA_KIOSK_ANGLE_BACKEND=vulkan ~/synra-jetson-station/scripts/start-electron-kiosk.sh
+SYNRA_KIOSK_ANGLE_BACKEND=gl ~/synra-jetson-station/scripts/start-electron-kiosk.sh
+SYNRA_KIOSK_ANGLE_BACKEND=egl ~/synra-jetson-station/scripts/start-electron-kiosk.sh
+SYNRA_KIOSK_ANGLE_BACKEND=none ~/synra-jetson-station/scripts/start-electron-kiosk.sh
 ```
 
-`SYNRA_KIOSK_ANGLE_BACKEND` defaults to `vulkan` because the default snap Chromium path did not expose WebGL for Synra. The Vulkan setting also enables Chromium's Vulkan-from-ANGLE WebGL path. On the current Jetson, this made WebGL available in snap Chromium, but performance remained low. Use `SYNRA_KIOSK_ANGLE_BACKEND=none` only to compare against Chromium's default path. `swiftshader` is CPU-rendered and should only be a diagnostic fallback. A good Jetson kiosk path should show WebGL available and some GPU activity while Synra is visible.
+`SYNRA_KIOSK_ANGLE_BACKEND` defaults to `vulkan`. On the current Jetson, the `gl` backend advertised WebGL/WebGL2 but dropped the GPU command buffer during full Synra startup, causing Synra telemetry to report WebGL unavailable. Use `gl` only as a diagnostic comparison. A good Jetson kiosk path should show Synra telemetry with WebGL available, FPS near target, and `GR3D_FREQ` activity while Synra is visible.
 
 The app still supports manual testing at:
 
@@ -264,19 +301,20 @@ http://192.168.1.165:5191/?profile=jetson
 If the Jetson display still feels slow, force the lowest-cost visual tier:
 
 ```text
-http://192.168.1.165:5191/?profile=jetson&mode=kiosk&fps=15&live=1&quality=low
+http://192.168.1.165:5191/?profile=jetson&mode=kiosk&fps=15&live=1&quality=performance&scale=0.75
 ```
 
 ## Kiosk Performance Notes
 
 - `mode=kiosk` forces Live Mode controls on startup.
-- `fps=15` lowers render pressure and improves frame pacing on Jetson.
+- `fps=30` is the verified Electron target on the current Jetson.
+- `fps=15` lowers render pressure for thermal or remote-display testing.
 - `live=1` keeps the tuning controls collapsed unless the user opens them.
 - `quality=low` forces simpler effects and a lower render pixel ratio for weaker displays or thermal-heavy sessions.
 - `scale=1.0` preserves Synra avatar clarity; lower values are diagnostic only because they make her look blurry.
-- Chromium is launched with GPU rasterization, scale factor 1, no extensions, no first-run UI, no scrollbars, and background throttling disabled.
+- Electron is launched with WebGL/WebGL2 flags, no snap confinement, no renderer background throttling, and a fixed kiosk URL.
 - The page reports voice capability in the right panel: `Speak + listen`, `Speak ready`, `Listen ready`, or `Text ready`.
-- Without `quality=low`, kiosk mode can automatically drop into the lower-cost tier if frame pacing remains below target for several seconds.
+- Without `quality=performance`, kiosk mode can automatically drop into the lower-cost tier if frame pacing remains below target for several seconds.
 
 ## Performance Targets
 
