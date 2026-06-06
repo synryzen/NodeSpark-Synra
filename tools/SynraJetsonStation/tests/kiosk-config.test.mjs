@@ -17,6 +17,7 @@ test("builds the default Jetson kiosk URL for the existing Synra app", () => {
   assert.equal(config.url.searchParams.get("quality"), "sharp");
   assert.equal(config.url.searchParams.get("fps"), "30");
   assert.equal(config.angleBackend, "vulkan");
+  assert.equal(config.autoGrantMedia, true);
   assert.equal(config.window.width, 1920);
   assert.equal(config.window.height, 1080);
 });
@@ -66,5 +67,6 @@ test("builds GPU-focused Electron command line switches", () => {
   assert.equal(switches.get("remote-debugging-address"), "127.0.0.1");
   assert.equal(switches.get("remote-debugging-port"), "9333");
   assert.equal(switches.get("ozone-platform"), "x11");
+  assert.equal(switches.get("use-fake-ui-for-media-stream"), "");
   assert.match(switches.get("enable-features") || "", /VulkanFromANGLE/);
 });

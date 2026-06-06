@@ -65,7 +65,7 @@ export function buildKioskLaunchConfig(env: KioskEnv = process.env): KioskLaunch
     url,
     remoteDebug: boolEnv(env, "SYNRA_KIOSK_REMOTE_DEBUG", false),
     remoteDebugPort: numberEnv(env, "SYNRA_KIOSK_DEBUG_PORT", 9222, 1),
-    autoGrantMedia: boolEnv(env, "SYNRA_KIOSK_AUTO_GRANT_MEDIA", false),
+    autoGrantMedia: boolEnv(env, "SYNRA_KIOSK_AUTO_GRANT_MEDIA", true),
     angleBackend: stringEnv(env, "SYNRA_KIOSK_ANGLE_BACKEND", "vulkan"),
     glMode: stringEnv(env, "SYNRA_KIOSK_GL_MODE", "none"),
     ozonePlatform: nullableStringEnv(env, "SYNRA_KIOSK_OZONE_PLATFORM"),

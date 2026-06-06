@@ -28,6 +28,7 @@ export function loadVoiceSettings(): VoiceSettings {
     provider: "browser",
     elevenLabsApiKey: "",
     elevenLabsVoiceId: "",
+    elevenLabsVoiceName: "",
     elevenLabsModelId: "eleven_multilingual_v2",
     elevenLabsOutputFormat: "mp3_44100_128",
     elevenLabsStability: 0.48,

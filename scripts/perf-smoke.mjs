@@ -365,6 +365,27 @@ const voicePolishIsAvailable =
   mainScript.includes("Voice test started") &&
   mainScript.includes("ElevenLabs fallback") &&
   mainScript.includes("stopVoiceActivity");
+const elevenLabsVoicePickerIsAvailable =
+  mainScript.includes('id="loadElevenLabsVoicesButton"') &&
+  mainScript.includes('id="elevenLabsVoiceSelect"') &&
+  mainScript.includes("loadElevenLabsVoices") &&
+  mainScript.includes("/api/tts/elevenlabs/voices") &&
+  serverScript.includes("/api/tts/elevenlabs/voices") &&
+  serverScript.includes("handle_elevenlabs_voices") &&
+  serverScript.includes("elevenlabs_list_voices");
+const voiceDiagnosticsAreAvailable =
+  mainScript.includes("runVoiceDiagnostics") &&
+  mainScript.includes("unlockAudioPlayback") &&
+  mainScript.includes("Playback blocked") &&
+  mainScript.includes("Voice diagnostics");
+const electronKioskMediaCanBeEnabled =
+  electronKioskScript.includes('SYNRA_KIOSK_AUTO_GRANT_MEDIA="${SYNRA_KIOSK_AUTO_GRANT_MEDIA:-true}"') &&
+  electronKioskConfig.includes('autoGrantMedia: boolEnv(env, "SYNRA_KIOSK_AUTO_GRANT_MEDIA", true)') &&
+  electronKioskConfig.includes("use-fake-ui-for-media-stream");
+const synraPersonalityIsUpgraded =
+  serverScript.includes("calm, cinematic, emotionally intelligent companion") &&
+  serverScript.includes("speak with grounded confidence") &&
+  serverScript.includes("Before claiming a device, camera, microphone, NodeSparkHub, or Home Assistant connection works");
 const repeatedStateChangesDoNotRestartAvatar =
   mainScript.includes("lastRenderedSynraState") &&
   mainScript.includes("shouldRestartStateMotion") &&
@@ -451,6 +472,10 @@ const result = {
     elevenLabsVoiceSettingsAreAvailable &&
     productAccessSplitIsExplicit &&
     voicePolishIsAvailable &&
+    elevenLabsVoicePickerIsAvailable &&
+    voiceDiagnosticsAreAvailable &&
+    electronKioskMediaCanBeEnabled &&
+    synraPersonalityIsUpgraded &&
     repeatedStateChangesDoNotRestartAvatar &&
     startupIdleMotionIsArmed &&
     kioskHealthRouteIsAvailable &&
@@ -524,6 +549,10 @@ const result = {
     "Jetson operations include health, log export, and Mac dev launch helpers",
     "voice controls include immediate stop and audio diagnostics",
     "ElevenLabs voice settings and server-side TTS proxy are wired with browser fallback",
+    "ElevenLabs voices can be loaded and selected by name",
+    "voice diagnostics include audio unlock and playback-blocked feedback",
+    "Electron kiosk can auto-grant local mic/camera permissions for the dedicated station",
+    "Synra personality prompt is upgraded for reliable companion behavior",
     "Synra free companion and premium NodeSpark Command Center access are explicit",
     "voice testing has clear provider feedback and stop reliability",
     "avatar state changes avoid restarting the same motion every frame",

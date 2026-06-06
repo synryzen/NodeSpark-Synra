@@ -61,6 +61,13 @@ type CameraDeviceStatus = {
   kind?: "video" | "media";
 };
 
+type ElevenLabsVoice = {
+  voiceId: string;
+  name: string;
+  category?: string;
+  previewUrl?: string;
+};
+
 type VisionPublicStatus = {
   ok?: boolean;
   configuredDevice?: string;
@@ -185,6 +192,8 @@ const state = {
   lastRouteLabel: "startup",
   lastRenderedSynraState: null as SynraState | null,
   lastAutoMotionByState: {} as Partial<Record<SynraState, string>>,
+  elevenLabsVoices: [] as ElevenLabsVoice[],
+  audioUnlocked: false,
   connections: {
     ai: { status: "configured", detail: "Server route" },
     nodeSpark: { status: "not-configured", detail: "Premium skill" },
@@ -471,12 +480,23 @@ app.innerHTML = `
         </label>
         <label>
           ElevenLabs API key
-          <input id="elevenLabsApiKeyInput" type="password" autocomplete="off" />
+          <input id="elevenLabsApiKeyInput" type="password" autocomplete="off" placeholder="Paste ElevenLabs API key" />
+        </label>
+        <div class="voice-actions">
+          <button type="button" id="loadElevenLabsVoicesButton">Load ElevenLabs Voices</button>
+          <button type="button" id="voiceDiagnosticsButton">Voice Diagnostics</button>
+        </div>
+        <label>
+          ElevenLabs voice
+          <select id="elevenLabsVoiceSelect">
+            <option value="">Load voices or paste a voice ID below</option>
+          </select>
         </label>
         <label>
           ElevenLabs voice ID
           <input id="elevenLabsVoiceIdInput" placeholder="Voice ID from ElevenLabs" />
         </label>
+        <p id="elevenLabsVoiceStatus" class="settings-note">Paste an API key, load voices, choose one, then test voice.</p>
         <label>
           ElevenLabs model
           <input id="elevenLabsModelIdInput" placeholder="eleven_multilingual_v2" />
@@ -747,7 +767,11 @@ const memoryRoutinesInput = must<HTMLElement, HTMLTextAreaElement>("memoryRoutin
 const memoryDevicesInput = must<HTMLElement, HTMLTextAreaElement>("memoryDevicesInput");
 const voiceProviderInput = must<HTMLElement, HTMLSelectElement>("voiceProviderInput");
 const elevenLabsApiKeyInput = must<HTMLElement, HTMLInputElement>("elevenLabsApiKeyInput");
+const loadElevenLabsVoicesButton = must<HTMLElement, HTMLButtonElement>("loadElevenLabsVoicesButton");
+const voiceDiagnosticsButton = must<HTMLElement, HTMLButtonElement>("voiceDiagnosticsButton");
+const elevenLabsVoiceSelect = must<HTMLElement, HTMLSelectElement>("elevenLabsVoiceSelect");
 const elevenLabsVoiceIdInput = must<HTMLElement, HTMLInputElement>("elevenLabsVoiceIdInput");
+const elevenLabsVoiceStatusEl = must<HTMLElement, HTMLElement>("elevenLabsVoiceStatus");
 const elevenLabsModelIdInput = must<HTMLElement, HTMLInputElement>("elevenLabsModelIdInput");
 const elevenLabsOutputFormatInput = must<HTMLElement, HTMLInputElement>("elevenLabsOutputFormatInput");
 const elevenLabsStabilityInput = must<HTMLElement, HTMLInputElement>("elevenLabsStabilityInput");
@@ -770,6 +794,14 @@ if (!renderer && !USE_HUB_AVATAR_RUNTIME) {
   document.body.dataset.webgl = "unavailable";
   fpsEl.textContent = "3D unavailable";
 }
+
+window.addEventListener("pointerdown", () => {
+  void unlockAudioPlayback();
+}, { once: true });
+
+window.addEventListener("keydown", () => {
+  void unlockAudioPlayback();
+}, { once: true });
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 50);
@@ -1104,6 +1136,24 @@ testVoiceButton.addEventListener("click", () => {
   void testVoiceConnection();
 });
 
+loadElevenLabsVoicesButton.addEventListener("click", () => {
+  void loadElevenLabsVoices();
+});
+
+voiceDiagnosticsButton.addEventListener("click", () => {
+  void runVoiceDiagnostics();
+});
+
+elevenLabsVoiceSelect.addEventListener("change", () => {
+  const selected = state.elevenLabsVoices.find((voice) => voice.voiceId === elevenLabsVoiceSelect.value);
+  if (!selected) return;
+  elevenLabsVoiceIdInput.value = selected.voiceId;
+  state.voiceSettings = { ...readVoiceSettingsFromInputs(), elevenLabsVoiceName: selected.name };
+  saveVoiceSettings(state.voiceSettings);
+  updateElevenLabsVoiceStatus(`Selected ${selected.name}.`);
+  refreshVoiceStatus();
+});
+
 forgetMemoriesButton.addEventListener("click", () => {
   forgetAllMemoryFromSettings();
 });
@@ -1123,6 +1173,24 @@ homeAssistantEntitySelect.addEventListener("change", () => {
 
 providerInput.addEventListener("change", () => {
   applyProviderPreset(providerInput.value);
+});
+
+voiceProviderInput.addEventListener("change", () => {
+  state.voiceSettings = readVoiceSettingsFromInputs();
+  saveVoiceSettings(state.voiceSettings);
+  refreshVoiceStatus();
+});
+
+elevenLabsApiKeyInput.addEventListener("input", () => {
+  updateElevenLabsVoiceStatus(elevenLabsVoiceStatusText());
+});
+
+elevenLabsVoiceIdInput.addEventListener("change", () => {
+  const selected = state.elevenLabsVoices.find((voice) => voice.voiceId === elevenLabsVoiceIdInput.value.trim());
+  state.voiceSettings = { ...readVoiceSettingsFromInputs(), elevenLabsVoiceName: selected?.name ?? "" };
+  saveVoiceSettings(state.voiceSettings);
+  populateElevenLabsVoiceSelect();
+  refreshVoiceStatus();
 });
 
 saveSettingsButton.addEventListener("click", () => {
@@ -1205,22 +1273,50 @@ function populateVoiceSettingsInputs(): void {
   voiceProviderInput.value = resolveVoiceProvider(state.voiceSettings.provider);
   elevenLabsApiKeyInput.value = state.voiceSettings.elevenLabsApiKey;
   elevenLabsVoiceIdInput.value = state.voiceSettings.elevenLabsVoiceId;
+  populateElevenLabsVoiceSelect();
   elevenLabsModelIdInput.value = state.voiceSettings.elevenLabsModelId || "eleven_multilingual_v2";
   elevenLabsOutputFormatInput.value = state.voiceSettings.elevenLabsOutputFormat || "mp3_44100_128";
   elevenLabsStabilityInput.value = String(state.voiceSettings.elevenLabsStability ?? 0.48);
   elevenLabsSimilarityInput.value = String(state.voiceSettings.elevenLabsSimilarityBoost ?? 0.78);
+  updateElevenLabsVoiceStatus(elevenLabsVoiceStatusText());
 }
 
 function readVoiceSettingsFromInputs(): VoiceSettings {
+  const selected = state.elevenLabsVoices.find((voice) => voice.voiceId === elevenLabsVoiceIdInput.value.trim());
   return {
     provider: resolveVoiceProvider(voiceProviderInput.value),
     elevenLabsApiKey: elevenLabsApiKeyInput.value.trim(),
     elevenLabsVoiceId: elevenLabsVoiceIdInput.value.trim(),
+    elevenLabsVoiceName: selected?.name ?? state.voiceSettings.elevenLabsVoiceName ?? "",
     elevenLabsModelId: elevenLabsModelIdInput.value.trim() || "eleven_multilingual_v2",
     elevenLabsOutputFormat: elevenLabsOutputFormatInput.value.trim() || "mp3_44100_128",
     elevenLabsStability: clampUnit(Number(elevenLabsStabilityInput.value), 0.48),
     elevenLabsSimilarityBoost: clampUnit(Number(elevenLabsSimilarityInput.value), 0.78)
   };
+}
+
+function populateElevenLabsVoiceSelect(): void {
+  const currentVoiceId = state.voiceSettings.elevenLabsVoiceId || elevenLabsVoiceIdInput.value.trim();
+  const options = state.elevenLabsVoices.length > 0
+    ? state.elevenLabsVoices.map((voice) => {
+      const label = voice.category ? `${voice.name} (${voice.category})` : voice.name;
+      return `<option value="${escapeHtml(voice.voiceId)}">${escapeHtml(label)}</option>`;
+    })
+    : [`<option value="">Load voices or paste a voice ID below</option>`];
+  elevenLabsVoiceSelect.innerHTML = options.join("");
+  elevenLabsVoiceSelect.value = state.elevenLabsVoices.some((voice) => voice.voiceId === currentVoiceId) ? currentVoiceId : "";
+}
+
+function elevenLabsVoiceStatusText(): string {
+  if (resolveVoiceProvider(voiceProviderInput.value) !== "elevenLabs") return "Browser speech is selected.";
+  if (!elevenLabsApiKeyInput.value.trim()) return "Paste an ElevenLabs API key, then load voices.";
+  if (!elevenLabsVoiceIdInput.value.trim()) return "Load voices and choose one, or paste a voice ID.";
+  const voice = state.elevenLabsVoices.find((item) => item.voiceId === elevenLabsVoiceIdInput.value.trim());
+  return voice ? `Selected ${voice.name}.` : "Voice ID saved. Load voices to show its name.";
+}
+
+function updateElevenLabsVoiceStatus(message: string): void {
+  elevenLabsVoiceStatusEl.textContent = message;
 }
 
 function populateProductSettingsInputs(): void {
@@ -2756,11 +2852,33 @@ function speak(text: string): void {
   const serial = ++speechSerial;
   stopElevenLabsAudio();
   clearSpeechFallback();
+  void unlockAudioPlayback();
   if (state.voiceSettings.provider === "elevenLabs" && state.voiceSettings.elevenLabsApiKey && state.voiceSettings.elevenLabsVoiceId) {
     void playElevenLabsSpeech(text, serial);
     return;
   }
   fallbackToBrowserSpeech(text, serial);
+}
+
+async function unlockAudioPlayback(): Promise<boolean> {
+  if (state.audioUnlocked) return true;
+  try {
+    const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) {
+      state.audioUnlocked = true;
+      return true;
+    }
+    const context = new AudioContextCtor();
+    if (context.state === "suspended") await context.resume();
+    await context.close();
+    state.audioUnlocked = true;
+    if (state.voiceStatus === "Playback blocked") refreshVoiceStatus();
+    return true;
+  } catch {
+    updateVoiceStatus("Playback blocked");
+    setConnectionTruth("voice", "permission-needed", "Playback blocked until the kiosk, browser, or output device allows audio");
+    return false;
+  }
 }
 
 async function playElevenLabsSpeech(text: string, serial: number): Promise<void> {
@@ -2804,10 +2922,14 @@ async function playElevenLabsSpeech(text: string, serial: number): Promise<void>
       URL.revokeObjectURL(audioUrl);
       if (serial === speechSerial) fallbackToBrowserSpeech(text, serial);
     };
-    await audio.play();
+    await audio.play().catch((error) => {
+      updateVoiceStatus("Playback blocked");
+      setConnectionTruth("voice", "permission-needed", "Playback blocked by the browser or output device");
+      throw error;
+    });
   } catch (error) {
     if (abort.signal.aborted || serial !== speechSerial) return;
-    updateVoiceStatus("ElevenLabs fallback");
+    updateVoiceStatus(state.voiceStatus === "Playback blocked" ? "Playback blocked" : "ElevenLabs fallback");
     fallbackToBrowserSpeech(text, serial);
   } finally {
     if (activeSpeechAbort === abort) activeSpeechAbort = null;
@@ -2837,6 +2959,7 @@ function fallbackToBrowserSpeech(text: string, serial = speechSerial): void {
   utterance.onerror = () => {
     if (serial !== speechSerial) return;
     updateVoiceStatus("Speech blocked");
+    setConnectionTruth("voice", "permission-needed", "Browser speech was blocked or no output device is available");
     finishSpeech(text);
   };
   armSpeechFallback(text);
@@ -2960,8 +3083,10 @@ async function ensureMicrophoneReady(): Promise<boolean> {
 function refreshVoiceStatus(): void {
   if (state.voiceSettings.provider === "elevenLabs") {
     const configured = Boolean(state.voiceSettings.elevenLabsApiKey && state.voiceSettings.elevenLabsVoiceId);
+    const voiceName = state.voiceSettings.elevenLabsVoiceName || state.elevenLabsVoices.find((voice) => voice.voiceId === state.voiceSettings.elevenLabsVoiceId)?.name || "";
     updateVoiceStatus(configured ? "ElevenLabs ready" : "ElevenLabs needs setup");
-    setConnectionTruth("voice", configured ? "ready" : "not-configured", configured ? "ElevenLabs configured" : "Add ElevenLabs API key and voice ID");
+    updateElevenLabsVoiceStatus(elevenLabsVoiceStatusText());
+    setConnectionTruth("voice", configured ? "ready" : "not-configured", configured ? `ElevenLabs configured${voiceName ? `: ${voiceName}` : ""}` : "Add ElevenLabs API key and choose a voice");
     return;
   }
   const canSpeak = "speechSynthesis" in window;
@@ -2973,6 +3098,7 @@ function refreshVoiceStatus(): void {
   else if (canSpeak) updateVoiceStatus("Speak ready");
   else if (canListen) updateVoiceStatus("Listen ready");
   else updateVoiceStatus("Text ready");
+  updateElevenLabsVoiceStatus(elevenLabsVoiceStatusText());
   setConnectionTruth("voice", canSpeak || canListen ? "ready" : "configured", canSpeak || canListen ? "Browser voice path available" : "Text input is available");
 }
 
@@ -3803,6 +3929,64 @@ async function testAiConnection(): Promise<void> {
   }
 }
 
+async function loadElevenLabsVoices(): Promise<void> {
+  const apiKey = elevenLabsApiKeyInput.value.trim();
+  if (!apiKey) {
+    updateElevenLabsVoiceStatus("Paste an ElevenLabs API key first.");
+    setConnectionTruth("voice", "not-configured", "ElevenLabs API key missing");
+    return;
+  }
+  const previousText = loadElevenLabsVoicesButton.textContent || "Load ElevenLabs Voices";
+  loadElevenLabsVoicesButton.disabled = true;
+  loadElevenLabsVoicesButton.textContent = "Loading...";
+  updateElevenLabsVoiceStatus("Loading ElevenLabs voices...");
+  try {
+    const response = await fetch("/api/tts/elevenlabs/voices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey })
+    });
+    const result = (await response.json()) as { ok?: boolean; voices?: ElevenLabsVoice[]; error?: string };
+    if (!result.ok || !Array.isArray(result.voices)) throw new Error(result.error || "ElevenLabs voices could not be loaded.");
+    state.elevenLabsVoices = result.voices;
+    const currentVoice = elevenLabsVoiceIdInput.value.trim();
+    const selected = state.elevenLabsVoices.find((voice) => voice.voiceId === currentVoice) ?? state.elevenLabsVoices[0];
+    if (selected) {
+      elevenLabsVoiceIdInput.value = selected.voiceId;
+      state.voiceSettings = { ...readVoiceSettingsFromInputs(), provider: "elevenLabs", elevenLabsVoiceName: selected.name };
+      saveVoiceSettings(state.voiceSettings);
+    }
+    populateElevenLabsVoiceSelect();
+    refreshVoiceStatus();
+    updateElevenLabsVoiceStatus(selected ? `Loaded ${result.voices.length} voices. Selected ${selected.name}.` : "No ElevenLabs voices were returned for this key.");
+    setConnectionTruth("voice", selected ? "ready" : "not-configured", selected ? `ElevenLabs voice selected: ${selected.name}` : "No ElevenLabs voices found");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "ElevenLabs voices could not be loaded.";
+    updateElevenLabsVoiceStatus(message);
+    setConnectionTruth("voice", "unreachable", message.slice(0, 140));
+  } finally {
+    loadElevenLabsVoicesButton.disabled = false;
+    loadElevenLabsVoicesButton.textContent = previousText;
+  }
+}
+
+async function runVoiceDiagnostics(): Promise<void> {
+  state.voiceSettings = readVoiceSettingsFromInputs();
+  saveVoiceSettings(state.voiceSettings);
+  const audioReady = await unlockAudioPlayback();
+  const devices = await audioDeviceDiagnostics();
+  const provider = voiceProviderLabel(state.voiceSettings.provider);
+  const elevenLabsState = state.voiceSettings.provider === "elevenLabs"
+    ? state.voiceSettings.elevenLabsApiKey && state.voiceSettings.elevenLabsVoiceId
+      ? `ElevenLabs configured${state.voiceSettings.elevenLabsVoiceName ? ` with ${state.voiceSettings.elevenLabsVoiceName}` : ""}.`
+      : "ElevenLabs needs an API key and selected voice."
+    : "Browser speech is selected.";
+  const message = `Voice diagnostics: ${provider}. Audio unlock ${audioReady ? "ready" : "blocked"}. ${devices} ${elevenLabsState}`;
+  updateVoiceStatus(audioReady ? "Voice diagnostics" : "Playback blocked");
+  setConnectionTruth("voice", audioReady ? "ready" : "permission-needed", message);
+  pushMessage("synra", message);
+}
+
 async function testVoiceConnection(): Promise<void> {
   const previousText = testVoiceButton.textContent || "Test Voice";
   testVoiceButton.disabled = true;
@@ -3814,6 +3998,7 @@ async function testVoiceConnection(): Promise<void> {
   setConnectionTruth("voice", "checking", `Testing ${providerLabel}`);
   setSynraState("speaking", `Voice test started with ${providerLabel}.`);
   try {
+    await unlockAudioPlayback();
     const elevenReady = state.voiceSettings.provider === "elevenLabs" && Boolean(state.voiceSettings.elevenLabsApiKey && state.voiceSettings.elevenLabsVoiceId);
     speak(elevenReady ? "Synra voice test. ElevenLabs voice is connected." : "Synra voice test. Browser speech is ready.");
     setConnectionTruth("voice", state.voiceSettings.provider === "elevenLabs" && !elevenReady ? "not-configured" : "ready", elevenReady ? "ElevenLabs test started" : state.voiceSettings.provider === "elevenLabs" ? "ElevenLabs fallback needs API key and voice ID" : "Browser speech test started");

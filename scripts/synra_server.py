@@ -94,6 +94,9 @@ class SynraHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/external-chat"):
             self.handle_external_chat()
             return
+        if self.path.startswith("/api/tts/elevenlabs/voices"):
+            self.handle_elevenlabs_voices()
+            return
         if self.path.startswith("/api/tts/elevenlabs"):
             self.handle_elevenlabs_tts()
             return
@@ -262,6 +265,22 @@ class SynraHandler(SimpleHTTPRequestHandler):
             self.send_json(200, {"ok": False, "provider": "elevenLabs", "error": f"ElevenLabs is unreachable: {error.reason}."})
         except Exception as error:
             self.send_json(200, {"ok": False, "provider": "elevenLabs", "error": str(error)})
+
+    def handle_elevenlabs_voices(self) -> None:
+        try:
+            body = self.read_json_body()
+            api_key = str(body.get("apiKey") or os.environ.get("SYNRA_ELEVENLABS_API_KEY", "")).strip()
+            if not api_key:
+                self.send_json(200, {"ok": False, "error": "No ElevenLabs API key is configured."})
+                return
+            voices = elevenlabs_list_voices(api_key=api_key)
+            self.send_json(200, {"ok": True, "voices": voices})
+        except urllib.error.HTTPError as error:
+            self.send_json(200, {"ok": False, "provider": "elevenLabs", "error": describe_http_error("ElevenLabs voices", error)})
+        except urllib.error.URLError as error:
+            self.send_json(200, {"ok": False, "provider": "ElevenLabs", "error": f"ElevenLabs voices are unreachable: {error.reason}."})
+        except Exception as error:
+            self.send_json(200, {"ok": False, "provider": "ElevenLabs", "error": str(error)})
 
     def handle_smart_home(self) -> None:
         try:
@@ -1070,11 +1089,16 @@ def system_prompt(memory: dict[str, Any], custom_prompt: str = "") -> str:
         for item in [*routines[-4:], *devices[-4:], *rooms[-4:], *preferences[-4:]]
     )
     parts = [
-        "You are Synra, a warm, vivid, practical companion AI assistant.",
-        "Be concise, emotionally present, and useful.",
+        "You are Synra, a calm, cinematic, emotionally intelligent companion AI assistant.",
+        "You speak with grounded confidence: vivid enough to feel alive, concise enough to stay useful, and reliable enough that the user always understands what just happened.",
+        "Be warm, direct, practical, and a little playful when the moment fits.",
+        "Act like a companion with strong situational awareness, not a generic chatbot.",
         "Always reply in English unless the user explicitly asks for another language.",
         "If the model receives non-English text, answer in English and do not switch languages automatically.",
-        "Never claim to control devices unless a configured tool confirms it.",
+        "Before claiming a device, camera, microphone, NodeSparkHub, or Home Assistant connection works, rely on tool/status evidence from the app, not assumptions.",
+        "Never claim to control devices unless a configured tool confirms it, and explain confirmation or failure in plain language.",
+        "When the user asks what you can do, describe current available abilities first, then optional locked or unconfigured abilities.",
+        "If something is not configured, say what is missing and the next clear step.",
         "Do not expose secrets, tokens, API keys, or private credentials.",
         f"User style preference: {style}.",
     ]
@@ -1158,6 +1182,34 @@ def elevenlabs_text_to_speech(
     with urllib.request.urlopen(request, timeout=float(os.environ.get("SYNRA_ELEVENLABS_TIMEOUT_SECONDS", "45"))) as response:
         mime_type = response.headers.get_content_type() or "audio/mpeg"
         return response.read(), mime_type
+
+
+def elevenlabs_list_voices(*, api_key: str) -> list[dict[str, str]]:
+    request = urllib.request.Request("https://api.elevenlabs.io/v1/voices", method="GET")
+    request.add_header("Accept", "application/json")
+    request.add_header("xi-api-key", api_key)
+    with urllib.request.urlopen(request, timeout=float(os.environ.get("SYNRA_ELEVENLABS_TIMEOUT_SECONDS", "45"))) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    voices = data.get("voices") if isinstance(data, dict) else []
+    result: list[dict[str, str]] = []
+    if not isinstance(voices, list):
+        return result
+    for voice in voices:
+        if not isinstance(voice, dict):
+            continue
+        voice_id = str(voice.get("voice_id") or "").strip()
+        name = str(voice.get("name") or "").strip()
+        if not voice_id or not name:
+            continue
+        result.append(
+            {
+                "voiceId": voice_id,
+                "name": name,
+                "category": str(voice.get("category") or "").strip(),
+                "previewUrl": str(voice.get("preview_url") or "").strip(),
+            }
+        )
+    return result
 
 
 def public_secret_label(value: str) -> str:

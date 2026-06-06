@@ -36,6 +36,7 @@ export interface VoiceSettings {
   provider: VoiceProvider;
   elevenLabsApiKey: string;
   elevenLabsVoiceId: string;
+  elevenLabsVoiceName: string;
   elevenLabsModelId: string;
   elevenLabsOutputFormat: string;
   elevenLabsStability: number;
