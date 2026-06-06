@@ -16,7 +16,7 @@ Synra is designed to:
 - Vite + TypeScript frontend.
 - Three.js / VRM avatar renderer.
 - Three Synra avatars.
-- 57 VRMA motion clips.
+- 97 VRMA motion clips.
 - Six Synra stage backgrounds.
 - Python same-origin API server for Jetson deployment.
 - Local model bridge, smart-home bridge, and privacy-safe camera diagnostics.

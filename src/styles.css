@@ -39,6 +39,18 @@ select {
   font: inherit;
 }
 
+select {
+  color: #f8fafc;
+  background-color: #20242b;
+  text-shadow: none;
+}
+
+select option,
+select optgroup {
+  color: #f8fafc;
+  background-color: #20242b;
+}
+
 button {
   cursor: pointer;
 }
@@ -724,9 +736,16 @@ dialog {
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 7px;
   padding: 0 9px;
-  background: rgb(255 255 255 / 10%);
+  background:
+    linear-gradient(135deg, rgb(37 221 255 / 10%), rgb(255 64 93 / 7%)),
+    #252930;
   color: #fff;
   outline: none;
+}
+
+.performance-panel select:focus {
+  border-color: rgb(37 221 255 / 62%);
+  box-shadow: 0 0 0 2px rgb(37 221 255 / 16%);
 }
 
 .performance-panel button {

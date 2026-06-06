@@ -392,7 +392,7 @@ const result = {
     avatarMb < 40 &&
     avatarCount === 3 &&
     backgroundCount >= 6 &&
-    motionCount >= 57 &&
+    motionCount >= 97 &&
     kioskIsLean &&
     code1IsDefaultAvatar &&
     kioskRequestsCode1Avatar &&

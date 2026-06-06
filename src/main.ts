@@ -966,8 +966,20 @@ qualitySelect.addEventListener("change", () => {
 
 motionCategorySelect.addEventListener("change", () => {
   state.visual = { ...state.visual, motionCategoryId: resolveMotionCategory(motionCategorySelect.value).id };
-  saveVisualSettings(state.visual);
   populateMotionSelect();
+  if (motionSelect.value) {
+    state.visual = { ...state.visual, motionId: motionSelect.value };
+  }
+  saveVisualSettings(state.visual);
+  setSynraState("idle", `${resolveMotionCategory(state.visual.motionCategoryId).label} motions are selected.`);
+});
+
+motionSelect.addEventListener("change", () => {
+  if (!motionSelect.value) return;
+  state.visual = { ...state.visual, motionId: motionSelect.value };
+  saveVisualSettings(state.visual);
+  const label = motionSelect.selectedOptions[0]?.textContent?.trim() || motionSelect.value;
+  activeMotionEl.textContent = `Selected ${label}`;
 });
 
 playMotionButton.addEventListener("click", () => {
@@ -1481,7 +1493,7 @@ function populateMotionSelect(): void {
     return;
   }
   motionSelect.innerHTML = clips
-    .map((clip) => `<option value="${clip.id}">${clip.id}</option>`)
+    .map((clip) => `<option value="${clip.id}" title="${escapeHtml(clip.id)}">${escapeHtml(clip.label || clip.id)}</option>`)
     .join("");
   const fallback = category.id === "all" ? resolveMotionClipId("wave") : clips[0]?.id;
   const preferred = clips.some((clip) => clip.id === state.visual.motionId) ? state.visual.motionId : fallback ?? "";

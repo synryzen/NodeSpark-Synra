@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "description": "Synra local installed VRMA manifest. Matthew-supplied local motions from /Users/matthew/Documents/VRMA replace the old generated Emotion-and-below motion set for this workspace. Do not redistribute raw local-vendor VRMA files without license review.",
+  "description": "Synra local installed VRMA manifest. Matthew-supplied local motions from /Users/matthew/Documents/VRMA plus restored NodeSparkHub 4.1 reference clips are available for the standalone Jetson build. Do not redistribute raw local-vendor VRMA files without license review.",
   "routes": {
     "agree_present": "Response_Confirm",
     "alert": "Local_Fumi_Startle",
@@ -170,9 +170,182 @@
     "local_arm_guard": "Local_Ten_ArmGuard",
     "local_roll_up_sleeves": "Local_Ten_RollUpSleeves",
     "local_dash_run": "Local_Ten_DashRun",
-    "local_running_loop": "Local_RunLoop"
+    "local_running_loop": "Local_RunLoop",
+    "body_balance_shift": "Body_BalanceShift",
+    "body_hand_fidget": "Body_HandFidget",
+    "body_lean_back": "Body_LeanBack",
+    "body_lean_in": "Body_LeanIn",
+    "body_stretch": "Body_Stretch",
+    "emotion_blush_smile": "Emotion_BlushSmile",
+    "emotion_celebrate": "Emotion_Celebrate",
+    "emotion_focused_ready": "Emotion_FocusedReady",
+    "surprised": "Emotion_SurprisedPop",
+    "emotion_surprised_pop": "Emotion_SurprisedPop",
+    "greet_polite_wave": "Greet_PoliteWave",
+    "quick_hi": "Greet_QuickHi",
+    "hello": "Greet_QuickHi",
+    "greet_quick_hi": "Greet_QuickHi",
+    "greet_wake_ready": "Greet_WakeReady",
+    "greet_wave": "Greet_Wave",
+    "greet_wave_big": "Greet_WaveBig",
+    "look_around": "Look_Around",
+    "scan_left": "Look_ScanLeft",
+    "scan_right": "Look_ScanRight",
+    "move_jump": "Move_Jump",
+    "move_return_center": "Move_ReturnCenter",
+    "move_step_left": "Move_StepLeft",
+    "move_turn_left": "Move_TurnLeft",
+    "move_turn_right": "Move_TurnRight",
+    "move_walk_forward": "Move_WalkForward",
+    "play_ta_da": "Play_TaDa",
+    "play_victory_big": "Play_VictoryBig",
+    "alert_no": "Response_AlertNo",
+    "response_alert_no": "Response_AlertNo",
+    "response_deep_bow": "Response_DeepBow",
+    "fast_yes": "Response_FastYes",
+    "response_fast_yes": "Response_FastYes",
+    "soft_no": "Response_SoftNo",
+    "response_soft_no": "Response_SoftNo",
+    "soft_nod": "Response_SoftNod",
+    "response_soft_nod": "Response_SoftNod",
+    "yes": "Response_Yes",
+    "response_yes": "Response_Yes",
+    "talk_answer": "Talk_Answer",
+    "talk_ask_question": "Talk_AskQuestion",
+    "big_explain": "Talk_BigExplain",
+    "talk_big_explain": "Talk_BigExplain",
+    "talk_compare": "Talk_Compare",
+    "talk_show_screen": "Talk_ShowScreen",
+    "think_loop": "Think_Loop"
   },
   "clips": [
+    {
+      "id": "Body_BalanceShift",
+      "label": "Balanced weight shift",
+      "status": "ready",
+      "priority": 58,
+      "loop": false,
+      "url": "./motions/clips/Body_BalanceShift.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "balance_shift",
+        "body_balance_shift"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Body_HandFidget",
+      "label": "Small hand fidget",
+      "status": "ready",
+      "priority": 58,
+      "loop": false,
+      "url": "./motions/clips/Body_HandFidget.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "hand_fidget"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Body_LeanBack",
+      "label": "Lean back reaction",
+      "status": "ready",
+      "priority": 58,
+      "loop": false,
+      "url": "./motions/clips/Body_LeanBack.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "lean_back"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Body_LeanIn",
+      "label": "Lean in attention",
+      "status": "ready",
+      "priority": 58,
+      "loop": false,
+      "url": "./motions/clips/Body_LeanIn.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "lean_in"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Body_Stretch",
+      "label": "Stretch / reset posture",
+      "status": "ready",
+      "priority": 58,
+      "loop": false,
+      "url": "./motions/clips/Body_Stretch.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "stretch"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Emotion_BlushSmile",
+      "label": "Blush smile reaction",
+      "status": "ready",
+      "priority": 64,
+      "loop": false,
+      "url": "./motions/clips/Emotion_BlushSmile.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "blush_smile"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Emotion_Celebrate",
+      "label": "Celebrate reaction",
+      "status": "ready",
+      "priority": 64,
+      "loop": false,
+      "url": "./motions/clips/Emotion_Celebrate.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "celebrate"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
     {
       "id": "Emotion_Concerned",
       "label": "Concerned careful reaction with visible hand cue",
@@ -216,152 +389,132 @@
       "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
     },
     {
-      "id": "Look_Camera",
-      "label": "Direct camera/user eye-line with stable body",
+      "id": "Emotion_FocusedReady",
+      "label": "Focused ready pose",
+      "status": "ready",
+      "priority": 64,
       "loop": false,
-      "status": "approved",
-      "priority": 50,
-      "url": "./motions/clips/Look_Camera.vrma",
-      "notes": "Owner-approved motion: camera/user eye-line gaze.",
-      "quality": "approved",
-      "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
-      "channel": "gaze",
-      "mask": "headOnly",
-      "fadeIn": 0.1,
-      "fadeOut": 0.18,
+      "url": "./motions/clips/Emotion_FocusedReady.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
       "actionIds": [
-        "look_camera"
+        "focused_ready"
       ],
-      "visualQaApprovedBy": "Matthew",
-      "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
-    },
-    {
-      "id": "Look_Screen",
-      "label": "Read app screen/content gaze with stable torso",
-      "loop": false,
-      "status": "approved",
-      "priority": 50,
-      "url": "./motions/clips/Look_Screen.vrma",
-      "notes": "Owner-approved motion: app/screen content gaze.",
-      "quality": "approved",
-      "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
-      "channel": "gaze",
-      "mask": "headOnly",
-      "fadeIn": 0.1,
-      "fadeOut": 0.18,
-      "actionIds": [
-        "look_screen"
-      ],
-      "visualQaApprovedBy": "Matthew",
-      "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
-    },
-    {
-      "id": "Response_Confirm",
-      "label": "Readable assistant-like confirmation nod without body bounce",
-      "loop": false,
-      "status": "approved",
-      "priority": 50,
-      "url": "./motions/clips/Response_Confirm.vrma",
-      "notes": "Owner-approved motion: readable confirmation nod.",
-      "actionIds": [
-        "agree_present",
-        "confirm",
-        "nod_confirm"
-      ],
-      "channel": "gesture",
-      "mask": "upperBody",
+      "channel": "base",
+      "mask": "fullBody",
       "fadeIn": 0.12,
       "fadeOut": 0.22,
-      "quality": "approved",
-      "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
-      "visualQaApprovedBy": "Matthew",
-      "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
+      "quality": "ready",
+      "restoredFromBackup": true
     },
     {
-      "id": "Talk_Explain",
-      "label": "Polished explanation gesture with controlled chest-height hand shapes",
-      "status": "approved",
-      "priority": 60,
+      "id": "Emotion_SurprisedPop",
+      "label": "Surprised pop reaction",
+      "status": "ready",
+      "priority": 64,
       "loop": false,
-      "url": "./motions/clips/Talk_Explain.vrma",
-      "notes": "Owner-approved motion: chest-height two-hand explanation gesture.",
+      "url": "./motions/clips/Emotion_SurprisedPop.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
       "actionIds": [
-        "explain",
-        "explain_step",
-        "teach"
+        "surprised",
+        "alert"
       ],
-      "channel": "gesture",
-      "mask": "upperBody",
+      "channel": "base",
+      "mask": "fullBody",
       "fadeIn": 0.12,
       "fadeOut": 0.22,
-      "quality": "approved",
-      "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
-      "visualQaApprovedBy": "Matthew",
-      "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
+      "quality": "ready",
+      "restoredFromBackup": true
     },
     {
-      "id": "Talk_PointLeft",
-      "label": "Straight index-finger point to the left side of the app",
+      "id": "Greet_PoliteWave",
+      "label": "Polite greeting wave",
+      "status": "ready",
+      "priority": 74,
       "loop": false,
-      "status": "approved",
-      "priority": 70,
-      "url": "./motions/clips/Talk_PointLeft.vrma",
-      "notes": "Owner-approved motion: directional left point with index-finger pose.",
+      "url": "./motions/clips/Greet_PoliteWave.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
       "actionIds": [
-        "point_left"
+        "wave_polite"
       ],
-      "channel": "gesture",
-      "mask": "upperBody",
+      "channel": "base",
+      "mask": "fullBody",
       "fadeIn": 0.12,
       "fadeOut": 0.22,
-      "quality": "approved",
-      "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
-      "visualQaApprovedBy": "Matthew",
-      "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
+      "quality": "ready",
+      "restoredFromBackup": true
     },
     {
-      "id": "Talk_PointRight",
-      "label": "Straight index-finger point to the right control panel",
+      "id": "Greet_QuickHi",
+      "label": "Quick hello wave",
+      "status": "ready",
+      "priority": 74,
       "loop": false,
-      "status": "approved",
-      "priority": 70,
-      "url": "./motions/clips/Talk_PointRight.vrma",
-      "notes": "Owner-approved motion: directional right point with index-finger pose.",
+      "url": "./motions/clips/Greet_QuickHi.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
       "actionIds": [
-        "point",
-        "point_right",
-        "settings_open",
-        "show_panel"
+        "quick_hi",
+        "hello"
       ],
-      "channel": "gesture",
-      "mask": "upperBody",
+      "channel": "base",
+      "mask": "fullBody",
       "fadeIn": 0.12,
       "fadeOut": 0.22,
-      "quality": "approved",
-      "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
-      "visualQaApprovedBy": "Matthew",
-      "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
+      "quality": "ready",
+      "restoredFromBackup": true
     },
     {
-      "id": "Talk_Present",
-      "label": "Present / point to app surface",
-      "status": "approved",
-      "priority": 55,
-      "url": "./motions/clips/Talk_Present.vrma",
-      "notes": "Owner-approved motion: open, inviting chest-height presentation gesture.",
+      "id": "Greet_WakeReady",
+      "label": "Wake ready greeting",
+      "status": "ready",
+      "priority": 74,
       "loop": false,
+      "url": "./motions/clips/Greet_WakeReady.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
       "actionIds": [
-        "attentive_present",
-        "present"
+        "wake_ready"
       ],
-      "channel": "gesture",
-      "mask": "upperBody",
+      "channel": "base",
+      "mask": "fullBody",
       "fadeIn": 0.12,
       "fadeOut": 0.22,
-      "quality": "approved",
-      "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
-      "visualQaApprovedBy": "Matthew",
-      "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Greet_Wave",
+      "label": "Friendly wave",
+      "status": "ready",
+      "priority": 74,
+      "loop": false,
+      "url": "./motions/clips/Greet_Wave.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "wave"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Greet_WaveBig",
+      "label": "Big friendly wave",
+      "status": "ready",
+      "priority": 74,
+      "loop": false,
+      "url": "./motions/clips/Greet_WaveBig.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "wave_big"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
     },
     {
       "id": "Local_ArmSwing",
@@ -1564,13 +1717,631 @@
       "englishLabel": "Squat / lower-body test",
       "visualQaApprovedBy": "Matthew",
       "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
+    },
+    {
+      "id": "Look_Around",
+      "label": "Look around scan",
+      "status": "ready",
+      "priority": 66,
+      "loop": false,
+      "url": "./motions/clips/Look_Around.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "look_around"
+      ],
+      "channel": "gaze",
+      "mask": "headOnly",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Look_Camera",
+      "label": "Direct camera/user eye-line with stable body",
+      "loop": false,
+      "status": "approved",
+      "priority": 50,
+      "url": "./motions/clips/Look_Camera.vrma",
+      "notes": "Owner-approved motion: camera/user eye-line gaze.",
+      "quality": "approved",
+      "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
+      "channel": "gaze",
+      "mask": "headOnly",
+      "fadeIn": 0.1,
+      "fadeOut": 0.18,
+      "actionIds": [
+        "look_camera"
+      ],
+      "visualQaApprovedBy": "Matthew",
+      "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
+    },
+    {
+      "id": "Look_Center",
+      "label": "Look center",
+      "status": "ready",
+      "priority": 66,
+      "loop": false,
+      "url": "./motions/clips/Look_Center.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "look_center"
+      ],
+      "channel": "gaze",
+      "mask": "headOnly",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Look_Left",
+      "label": "Look left",
+      "status": "ready",
+      "priority": 66,
+      "loop": false,
+      "url": "./motions/clips/Look_Left.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "look_left"
+      ],
+      "channel": "gaze",
+      "mask": "headOnly",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Look_ScanLeft",
+      "label": "Scan left",
+      "status": "ready",
+      "priority": 66,
+      "loop": false,
+      "url": "./motions/clips/Look_ScanLeft.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "scan_left"
+      ],
+      "channel": "gaze",
+      "mask": "headOnly",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Look_ScanRight",
+      "label": "Scan right",
+      "status": "ready",
+      "priority": 66,
+      "loop": false,
+      "url": "./motions/clips/Look_ScanRight.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "scan_right"
+      ],
+      "channel": "gaze",
+      "mask": "headOnly",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Look_Screen",
+      "label": "Read app screen/content gaze with stable torso",
+      "loop": false,
+      "status": "approved",
+      "priority": 50,
+      "url": "./motions/clips/Look_Screen.vrma",
+      "notes": "Owner-approved motion: app/screen content gaze.",
+      "quality": "approved",
+      "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
+      "channel": "gaze",
+      "mask": "headOnly",
+      "fadeIn": 0.1,
+      "fadeOut": 0.18,
+      "actionIds": [
+        "look_screen"
+      ],
+      "visualQaApprovedBy": "Matthew",
+      "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
+    },
+    {
+      "id": "Look_Up",
+      "label": "Look up",
+      "status": "ready",
+      "priority": 66,
+      "loop": false,
+      "url": "./motions/clips/Look_Up.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "look_up"
+      ],
+      "channel": "gaze",
+      "mask": "headOnly",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Move_Jump",
+      "label": "Small jump",
+      "status": "ready",
+      "priority": 58,
+      "loop": false,
+      "url": "./motions/clips/Move_Jump.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "jump"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Move_ReturnCenter",
+      "label": "Return to center",
+      "status": "ready",
+      "priority": 58,
+      "loop": false,
+      "url": "./motions/clips/Move_ReturnCenter.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "home_return"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Move_StepLeft",
+      "label": "Step left",
+      "status": "ready",
+      "priority": 58,
+      "loop": false,
+      "url": "./motions/clips/Move_StepLeft.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "step_left"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Move_TurnLeft",
+      "label": "Turn left",
+      "status": "ready",
+      "priority": 58,
+      "loop": false,
+      "url": "./motions/clips/Move_TurnLeft.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "turn_left"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Move_TurnRight",
+      "label": "Turn right",
+      "status": "ready",
+      "priority": 58,
+      "loop": false,
+      "url": "./motions/clips/Move_TurnRight.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "turn_right"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Move_WalkForward",
+      "label": "Walk forward",
+      "status": "ready",
+      "priority": 58,
+      "loop": false,
+      "url": "./motions/clips/Move_WalkForward.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "walk",
+        "walk_forward"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Play_TaDa",
+      "label": "Ta-da flourish",
+      "status": "ready",
+      "priority": 58,
+      "loop": false,
+      "url": "./motions/clips/Play_TaDa.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "ta_da"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Play_VictoryBig",
+      "label": "Big victory pose",
+      "status": "ready",
+      "priority": 58,
+      "loop": false,
+      "url": "./motions/clips/Play_VictoryBig.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "victory_big"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Response_AlertNo",
+      "label": "Alert no response",
+      "status": "ready",
+      "priority": 68,
+      "loop": false,
+      "url": "./motions/clips/Response_AlertNo.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "alert_no"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Response_Confirm",
+      "label": "Readable assistant-like confirmation nod without body bounce",
+      "loop": false,
+      "status": "approved",
+      "priority": 50,
+      "url": "./motions/clips/Response_Confirm.vrma",
+      "notes": "Owner-approved motion: readable confirmation nod.",
+      "actionIds": [
+        "agree_present",
+        "confirm",
+        "nod_confirm"
+      ],
+      "channel": "gesture",
+      "mask": "upperBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "approved",
+      "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
+      "visualQaApprovedBy": "Matthew",
+      "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
+    },
+    {
+      "id": "Response_DeepBow",
+      "label": "Deep bow response",
+      "status": "ready",
+      "priority": 68,
+      "loop": false,
+      "url": "./motions/clips/Response_DeepBow.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "bow_deep"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Response_FastYes",
+      "label": "Fast yes response",
+      "status": "ready",
+      "priority": 68,
+      "loop": false,
+      "url": "./motions/clips/Response_FastYes.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "fast_yes"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Response_SoftNo",
+      "label": "Soft no response",
+      "status": "ready",
+      "priority": 68,
+      "loop": false,
+      "url": "./motions/clips/Response_SoftNo.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "soft_no"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Response_SoftNod",
+      "label": "Soft nod response",
+      "status": "ready",
+      "priority": 68,
+      "loop": false,
+      "url": "./motions/clips/Response_SoftNod.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "soft_nod"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Response_Yes",
+      "label": "Yes response",
+      "status": "ready",
+      "priority": 68,
+      "loop": false,
+      "url": "./motions/clips/Response_Yes.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "yes"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Talk_Answer",
+      "label": "Answer gesture",
+      "status": "ready",
+      "priority": 70,
+      "loop": false,
+      "url": "./motions/clips/Talk_Answer.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "answer"
+      ],
+      "channel": "gesture",
+      "mask": "upperBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Talk_AskQuestion",
+      "label": "Ask question gesture",
+      "status": "ready",
+      "priority": 70,
+      "loop": false,
+      "url": "./motions/clips/Talk_AskQuestion.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "ask_question"
+      ],
+      "channel": "gesture",
+      "mask": "upperBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Talk_BigExplain",
+      "label": "Big explanation gesture",
+      "status": "ready",
+      "priority": 70,
+      "loop": false,
+      "url": "./motions/clips/Talk_BigExplain.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "big_explain",
+        "teach"
+      ],
+      "channel": "gesture",
+      "mask": "upperBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Talk_Compare",
+      "label": "Compare gesture",
+      "status": "ready",
+      "priority": 70,
+      "loop": false,
+      "url": "./motions/clips/Talk_Compare.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "compare"
+      ],
+      "channel": "gesture",
+      "mask": "upperBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Talk_Explain",
+      "label": "Polished explanation gesture with controlled chest-height hand shapes",
+      "status": "approved",
+      "priority": 60,
+      "loop": false,
+      "url": "./motions/clips/Talk_Explain.vrma",
+      "notes": "Owner-approved motion: chest-height two-hand explanation gesture.",
+      "actionIds": [
+        "explain",
+        "explain_step",
+        "teach"
+      ],
+      "channel": "gesture",
+      "mask": "upperBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "approved",
+      "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
+      "visualQaApprovedBy": "Matthew",
+      "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
+    },
+    {
+      "id": "Talk_PointLeft",
+      "label": "Straight index-finger point to the left side of the app",
+      "loop": false,
+      "status": "approved",
+      "priority": 70,
+      "url": "./motions/clips/Talk_PointLeft.vrma",
+      "notes": "Owner-approved motion: directional left point with index-finger pose.",
+      "actionIds": [
+        "point_left"
+      ],
+      "channel": "gesture",
+      "mask": "upperBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "approved",
+      "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
+      "visualQaApprovedBy": "Matthew",
+      "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
+    },
+    {
+      "id": "Talk_PointRight",
+      "label": "Straight index-finger point to the right control panel",
+      "loop": false,
+      "status": "approved",
+      "priority": 70,
+      "url": "./motions/clips/Talk_PointRight.vrma",
+      "notes": "Owner-approved motion: directional right point with index-finger pose.",
+      "actionIds": [
+        "point",
+        "point_right",
+        "settings_open",
+        "show_panel"
+      ],
+      "channel": "gesture",
+      "mask": "upperBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "approved",
+      "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
+      "visualQaApprovedBy": "Matthew",
+      "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
+    },
+    {
+      "id": "Talk_Present",
+      "label": "Present / point to app surface",
+      "status": "approved",
+      "priority": 55,
+      "url": "./motions/clips/Talk_Present.vrma",
+      "notes": "Owner-approved motion: open, inviting chest-height presentation gesture.",
+      "loop": false,
+      "actionIds": [
+        "attentive_present",
+        "present"
+      ],
+      "channel": "gesture",
+      "mask": "upperBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "approved",
+      "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
+      "visualQaApprovedBy": "Matthew",
+      "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
+    },
+    {
+      "id": "Talk_ShowScreen",
+      "label": "Show screen gesture",
+      "status": "ready",
+      "priority": 70,
+      "loop": false,
+      "url": "./motions/clips/Talk_ShowScreen.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "show_screen"
+      ],
+      "channel": "gesture",
+      "mask": "upperBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
+    },
+    {
+      "id": "Think_Loop",
+      "label": "Thinking loop",
+      "status": "ready",
+      "priority": 58,
+      "loop": true,
+      "url": "./motions/clips/Think_Loop.vrma",
+      "notes": "Restored reference VRMA from the NodeSparkHub 4.1 backup so the standalone Jetson build exposes the full motion library for manual playback and visual QA.",
+      "actionIds": [
+        "thinking"
+      ],
+      "channel": "base",
+      "mask": "fullBody",
+      "fadeIn": 0.12,
+      "fadeOut": 0.22,
+      "quality": "ready",
+      "restoredFromBackup": true
     }
   ],
   "localMotionDisplay": {
     "naming": "English labels describe what each Matthew-supplied local VRMA does in the Synra control panel. Original filenames are retained only for local traceability.",
     "updatedAt": "2026-05-29T21:04:39.731Z"
   },
-  "updatedAt": "2026-06-02T14:27:50.448Z",
+  "updatedAt": "2026-06-06T00:57:10.166Z",
   "visualQaApprovedAt": "2026-06-02T14:27:50.448Z",
   "visualQaApprovedBy": "Matthew",
   "visualQaApprovalNotes": "Owner-approved for NodeSpark 4.1 App Store release via Codex request on 2026-06-02T14:27:50.448Z."
