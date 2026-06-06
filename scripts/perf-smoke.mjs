@@ -376,6 +376,15 @@ const elevenLabsVoiceSettingsAreAvailable =
   serverScript.includes("handle_elevenlabs_tts") &&
   serverScript.includes("xi-api-key") &&
   serverScript.includes("audioBase64");
+const standaloneSpeechLipSyncIsDriven =
+  mainScript.includes("visemesForSpeechPosition") &&
+  mainScript.includes("startSpeechLipSync") &&
+  mainScript.includes("stopSpeechLipSync") &&
+  mainScript.includes("hubAvatarRuntime?.setVisemes") &&
+  mainScript.includes("audio.duration") &&
+  mainScript.includes("audio.currentTime") &&
+  mainScript.includes("startSpeechLipSync(text, serial") &&
+  mainScript.includes("stopSpeechLipSync();");
 const browserFallbackVoiceIsDeliberate =
   mainScript.includes('id="browserVoiceSelect"') &&
   mainScript.includes("PREFERRED_BROWSER_VOICE_HINTS") &&
@@ -511,6 +520,7 @@ const result = {
     jetsonOpsHelpersAreAvailable &&
     voiceReliabilityControlsAreAvailable &&
     elevenLabsVoiceSettingsAreAvailable &&
+    standaloneSpeechLipSyncIsDriven &&
     browserFallbackVoiceIsDeliberate &&
     productAccessSplitIsExplicit &&
     voicePolishIsAvailable &&
@@ -593,6 +603,7 @@ const result = {
     "Jetson operations include health, log export, and Mac dev launch helpers",
     "voice controls include immediate stop and audio diagnostics",
     "ElevenLabs voice settings and server-side TTS proxy are wired with browser fallback",
+    "Standalone drives Hub-style phoneme lip sync while ElevenLabs or browser voice is talking",
     "browser speech fallback deliberately chooses and exposes a system voice",
     "ElevenLabs voices can be loaded and selected by name",
     "voice diagnostics include audio unlock and playback-blocked feedback",

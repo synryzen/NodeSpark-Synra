@@ -9,6 +9,7 @@ import { askModel, classifySynraRequest, localSynraReply } from "./model-client"
 import { SynraMotionPlayer, type SynraMotionClipSpec } from "./motion-player";
 import { SERVER_SECRET_SENTINEL, loadCompanionSettings, loadHomeAssistantSettings, loadMemory, loadModelSettings, loadProductSettings, loadVisualSettings, loadVoiceSettings, saveCompanionSettings, saveHomeAssistantSettings, saveMemory, saveModelSettings, saveProductSettings, saveVisualSettings, saveVoiceSettings } from "./storage";
 import type { CompanionSettings, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraMessage, SynraSkillMode, SynraState, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
+import { estimateSpeechDurationMs, visemesForSpeechPosition } from "./hub-runtime/services/speech-output";
 import packageInfo from "../package.json";
 
 const app = document.querySelector<HTMLElement>("#app");
@@ -250,6 +251,7 @@ let hubMotionManifestReady = false;
 let activeVisionStream: MediaStream | null = null;
 let activeSpeechAudio: HTMLAudioElement | null = null;
 let activeSpeechAbort: AbortController | null = null;
+let activeLipSyncTimer = 0;
 let speechSerial = 0;
 let performanceProfile = resolvePerformanceProfile();
 const chatCardRegistry = new Map<string, ChatCard>();
@@ -3775,7 +3777,9 @@ async function playElevenLabsSpeech(text: string, serial: number): Promise<void>
     const audio = new Audio(audioUrl);
     activeSpeechAudio = audio;
     audio.onplay = () => {
-      if (serial === speechSerial) updateVoiceStatus("ElevenLabs speaking");
+      if (serial !== speechSerial) return;
+      updateVoiceStatus("ElevenLabs speaking");
+      startSpeechLipSync(text, serial, audio);
     };
     audio.onended = () => {
       if (activeSpeechAudio === audio) activeSpeechAudio = null;
@@ -3806,6 +3810,7 @@ function fallbackToBrowserSpeech(text: string, serial = speechSerial): void {
   if (!("speechSynthesis" in window)) {
     updateVoiceStatus("Text only");
     setSynraState("speaking", text);
+    startSpeechLipSync(text, serial);
     armSpeechFallback(text);
     return;
   }
@@ -3818,7 +3823,9 @@ function fallbackToBrowserSpeech(text: string, serial = speechSerial): void {
   utterance.rate = 0.96;
   utterance.pitch = 1.04;
   utterance.onstart = () => {
-    if (serial === speechSerial) setSynraState("speaking", text);
+    if (serial !== speechSerial) return;
+    setSynraState("speaking", text);
+    startSpeechLipSync(text, serial);
   };
   utterance.onend = () => {
     if (serial === speechSerial) finishSpeech(text);
@@ -3836,6 +3843,7 @@ function fallbackToBrowserSpeech(text: string, serial = speechSerial): void {
 function stopVoiceActivity(caption = "Voice stopped."): void {
   speechSerial += 1;
   clearSpeechFallback();
+  stopSpeechLipSync();
   stopElevenLabsAudio();
   activeSpeechAbort?.abort();
   activeSpeechAbort = null;
@@ -3858,6 +3866,7 @@ function stopVoiceActivity(caption = "Voice stopped."): void {
 }
 
 function stopElevenLabsAudio(): void {
+  stopSpeechLipSync();
   if (!activeSpeechAudio) return;
   activeSpeechAudio.pause();
   URL.revokeObjectURL(activeSpeechAudio.src);
@@ -3878,6 +3887,7 @@ function armSpeechFallback(text: string): void {
 
 function finishSpeech(text: string): void {
   clearSpeechFallback();
+  stopSpeechLipSync();
   refreshVoiceStatus();
   if (state.synra === "speaking") setSynraState("idle", text);
 }
@@ -3886,6 +3896,38 @@ function clearSpeechFallback(): void {
   if (!state.speechFallbackTimer) return;
   window.clearTimeout(state.speechFallbackTimer);
   state.speechFallbackTimer = 0;
+}
+
+function startSpeechLipSync(text: string, serial: number, audio?: HTMLAudioElement): void {
+  stopSpeechLipSync();
+  hubAvatarRuntime?.setSpeaking(true);
+  const durationMs = estimateSpeechDurationMs(text);
+  const startedAt = performance.now();
+  const tick = () => {
+    if (serial !== speechSerial || state.synra !== "speaking") {
+      stopSpeechLipSync();
+      return;
+    }
+    const audioDurationMs = audio && Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration * 1000 : durationMs;
+    const elapsedMs = audio ? audio.currentTime * 1000 : performance.now() - startedAt;
+    const ratio = Math.max(0, Math.min(1, elapsedMs / Math.max(700, audioDurationMs)));
+    const charIndex = ratio * Math.max(0, text.length - 1);
+    hubAvatarRuntime?.setVisemes(visemesForSpeechPosition(text, charIndex, 0.18, {
+      ratio,
+      durationMs: audioDurationMs,
+      source: "timer"
+    }));
+  };
+  tick();
+  activeLipSyncTimer = window.setInterval(tick, 32);
+}
+
+function stopSpeechLipSync(): void {
+  if (activeLipSyncTimer) {
+    window.clearInterval(activeLipSyncTimer);
+    activeLipSyncTimer = 0;
+  }
+  hubAvatarRuntime?.setVisemes({ aa: 0, ih: 0, ou: 0, ee: 0, oh: 0, open: 0 });
 }
 
 async function startListening(): Promise<void> {
