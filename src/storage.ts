@@ -1,4 +1,4 @@
-import type { HomeAssistantSettings, ModelSettings, ProductSettings, SynraMemory, VisualSettings, VoiceSettings } from "./types";
+import type { CompanionSettings, HomeAssistantSettings, ModelSettings, ProductSettings, SynraMemory, VisualSettings, VoiceSettings } from "./types";
 import { DEFAULT_SYNRA_AVATAR_ID } from "./avatar-catalog";
 
 const modelKey = "synraStandalone.modelSettings.v1";
@@ -7,6 +7,7 @@ const visualKey = "synraStandalone.visualSettings.v2";
 const voiceKey = "synraStandalone.voiceSettings.v1";
 const productKey = "synraStandalone.productSettings.v1";
 const homeAssistantKey = "synraStandalone.homeAssistantSettings.v1";
+const companionKey = "synraStandalone.companionSettings.v1";
 
 export function loadModelSettings(): ModelSettings {
   return readJson<ModelSettings>(modelKey, {
@@ -71,6 +72,25 @@ export function loadHomeAssistantSettings(): HomeAssistantSettings {
 
 export function saveHomeAssistantSettings(settings: HomeAssistantSettings): void {
   localStorage.setItem(homeAssistantKey, JSON.stringify(settings));
+}
+
+export function loadCompanionSettings(): CompanionSettings {
+  return readJson<CompanionSettings>(companionKey, {
+    setupComplete: false,
+    ownerName: "",
+    wakeWordMode: "off",
+    wakePhrase: "Hey Synra",
+    screenTimeoutMinutes: 30,
+    allowAlwaysListening: false,
+    allowCameraRecognition: false,
+    allowFaceSampleStorage: false,
+    allowMemorySuggestions: true,
+    knownUsers: []
+  });
+}
+
+export function saveCompanionSettings(settings: CompanionSettings): void {
+  localStorage.setItem(companionKey, JSON.stringify(settings));
 }
 
 export function loadMemory(): SynraMemory {

@@ -1426,6 +1426,112 @@ dialog::backdrop {
   padding: 10px;
 }
 
+.wizard-panel {
+  width: min(720px, calc(100vw - 32px));
+  padding: 18px;
+  border: 1px solid rgb(34 211 238 / 32%);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgb(22 39 48 / 96%), rgb(34 10 22 / 94%)),
+    #081018;
+  color: #fff;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 52%);
+}
+
+.wizard-hero {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.wizard-hero h2 {
+  margin: 2px 0 6px;
+  font-size: 28px;
+  letter-spacing: 0;
+}
+
+.wizard-hero p,
+.wizard-trust p {
+  margin: 0;
+  color: rgb(235 242 250 / 72%);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.wizard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.wizard-trust {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid rgb(45 212 191 / 24%);
+  border-radius: 8px;
+  background: rgb(12 40 42 / 40%);
+}
+
+.known-users-list {
+  display: grid;
+  gap: 9px;
+}
+
+.known-user-empty {
+  padding: 12px;
+  border: 1px dashed rgb(255 255 255 / 16%);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.known-user-card {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 6%);
+}
+
+.known-user-card img,
+.known-user-avatar {
+  width: 54px;
+  height: 54px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.known-user-avatar {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, rgb(34 211 238 / 34%), rgb(255 64 129 / 28%));
+  color: #fff;
+  font-size: 22px;
+  font-weight: 950;
+}
+
+.known-user-card strong,
+.known-user-card span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.known-user-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
 .about-dialog {
   display: grid;
   gap: 14px;

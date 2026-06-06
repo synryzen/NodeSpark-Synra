@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, session } from "electron";
@@ -26,6 +27,8 @@ if (process.env.SYNRA_KIOSK_ENABLE_LOGGING === "true") {
 let blockerId: number | null = null;
 let mainWindow: BrowserWindow | null = null;
 let currentWindowMode: KioskWindowMode = launchConfig.window.windowMode;
+let screenTimeout: 15 | 30 | 60 | 0 = 0;
+let screenSleepTimer: NodeJS.Timeout | null = null;
 
 function installPermissionPolicy(): void {
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
@@ -84,6 +87,51 @@ function applyWindowMode(window: BrowserWindow, windowMode: KioskWindowMode, per
   return currentWindowMode;
 }
 
+function setScreenTimeout(minutes: unknown): 15 | 30 | 60 | 0 {
+  screenTimeout = minutes === 15 || minutes === 30 || minutes === 60 ? minutes : 0;
+  resetScreenSleepTimer();
+  return screenTimeout;
+}
+
+function resetScreenSleepTimer(): void {
+  if (screenSleepTimer) {
+    clearTimeout(screenSleepTimer);
+    screenSleepTimer = null;
+  }
+  if (screenTimeout === 0) return;
+  screenSleepTimer = setTimeout(() => {
+    putDisplayToSleep();
+  }, screenTimeout * 60 * 1000);
+}
+
+function runDisplayCommand(args: string[]): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile("xset", args, { timeout: 4000 }, (error) => {
+      resolve(!error);
+    });
+  });
+}
+
+function putDisplayToSleep(): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("synra-kiosk:screen-timeout");
+  }
+  void runDisplayCommand(["dpms", "force", "off"]).then((ok) => {
+    if (!ok && mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize();
+  });
+}
+
+async function wakeDisplay(): Promise<boolean> {
+  resetScreenSleepTimer();
+  const commandWorked = await runDisplayCommand(["dpms", "force", "on"]);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  return commandWorked;
+}
+
 function installKioskWindowIpc(): void {
   ipcMain.handle("synra-kiosk:get-window-mode", () => currentWindowMode);
   ipcMain.handle("synra-kiosk:set-window-mode", (_event, requestedMode: unknown) => {
@@ -94,6 +142,8 @@ function installKioskWindowIpc(): void {
     if (!mainWindow || mainWindow.isDestroyed()) return currentWindowMode;
     return applyWindowMode(mainWindow, currentWindowMode === "fullscreen" ? "windowed" : "fullscreen");
   });
+  ipcMain.handle("synra-kiosk:set-screen-timeout", (_event, minutes: unknown) => setScreenTimeout(minutes));
+  ipcMain.handle("synra-kiosk:wake-display", () => wakeDisplay());
 }
 
 async function waitForSynraServer(): Promise<void> {
@@ -161,11 +211,19 @@ function createWindow(): BrowserWindow {
     logger.error("Synra failed to load", { errorCode, errorDescription, validatedURL });
   });
 
+  window.webContents.on("before-input-event", () => {
+    resetScreenSleepTimer();
+  });
+
   void window.loadURL(launchConfig.url.toString());
   return window;
 }
 
 app.on("window-all-closed", () => {
+  if (screenSleepTimer) {
+    clearTimeout(screenSleepTimer);
+    screenSleepTimer = null;
+  }
   if (blockerId !== null) {
     powerSaveBlocker.stop(blockerId);
     blockerId = null;

@@ -130,13 +130,17 @@ http://JETSON_IP:5191/
 Then use the app UI:
 
 1. Open Settings.
-2. Select `Voice`.
-3. Choose `ElevenLabs`.
-4. Paste your ElevenLabs API key.
-5. Click `Load ElevenLabs Voices`.
-6. Choose a voice by name.
-7. Click `Test Voice`.
-8. Click `Voice Diagnostics` if sound does not play.
+2. Select `Companion`.
+3. Enter the owner name.
+4. Choose whether local wake word listening should be on.
+5. Pick the screen timeout: `15 minutes`, `30 minutes`, `1 hour`, or `Never`.
+6. Select `Voice`.
+7. Choose `ElevenLabs`.
+8. Paste your ElevenLabs API key.
+9. Click `Load ElevenLabs Voices`.
+10. Choose a voice by name.
+11. Click `Test Voice`.
+12. Click `Voice Diagnostics` if sound does not play.
 
 If the Jetson is running fullscreen kiosk mode and you need normal copy/paste, switch to `Settings` > `Display` and click `Switch to Windowed Setup`. You can also launch directly into a setup window:
 
@@ -147,6 +151,12 @@ SYNRA_KIOSK_WINDOW_MODE=windowed ~/synra-jetson-station/scripts/start-electron-k
 After the API key and voice are saved, click `Return to Full Screen` in `Settings` > `Display`.
 
 Synra stores voice settings in the browser's local storage. The local Python server only receives the ElevenLabs API key when listing voices or generating speech.
+
+## Known Users and Wake Word
+
+Known users are configured in `Settings` > `Users`. Enter a name, optionally enable local recognition, turn on approved local sample storage, and capture a face sample from the webcam. Samples stay on the device and can be deleted from the same panel.
+
+Wake word is configured in `Settings` > `Companion`. When enabled, Synra listens locally for `Hey Synra`, wakes the Electron display if available, and then starts normal listening. No raw audio or camera frames are saved to memory.
 
 Optional server-side voice defaults can also be placed in `~/.config/synra-standalone.env`:
 

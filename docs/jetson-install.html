@@ -286,6 +286,7 @@ curl http://127.0.0.1:5191/api/health</code></pre>
         <p>If fullscreen kiosk mode makes copy/paste awkward, open Settings &gt; Display and click <code>Switch to Windowed Setup</code>, or launch directly into a setup window:</p>
         <pre><code>SYNRA_KIOSK_WINDOW_MODE=windowed ~/synra-jetson-station/scripts/start-electron-kiosk.sh</code></pre>
         <p>After the voice is saved, use Settings &gt; Display &gt; <code>Return to Full Screen</code>.</p>
+        <p>Use Settings &gt; Companion for owner name, local wake word, memory suggestions, and the screen timeout. Use Settings &gt; Users to enroll known users with opt-in local face samples.</p>
         <p>Optional server-side defaults can be placed in <code>~/.config/synra-standalone.env</code>:</p>
         <pre><code>SYNRA_ELEVENLABS_API_KEY=
 SYNRA_ELEVENLABS_VOICE_ID=

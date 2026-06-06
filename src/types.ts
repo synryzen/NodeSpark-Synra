@@ -12,6 +12,8 @@ export type RenderQuality = "performance" | "balanced" | "sharp";
 export type VoiceProvider = "browser" | "elevenLabs";
 export type NodeSparkAccess = "locked" | "subscriber";
 export type SynraSkillMode = "hybrid" | "homeAssistant" | "nodeSparkHub";
+export type WakeWordMode = "off" | "local";
+export type ScreenTimeoutMinutes = 15 | 30 | 60 | 0;
 
 export interface ModelSettings {
   provider: ModelProvider;
@@ -30,6 +32,29 @@ export interface SynraMemory {
   devices: string[];
   rooms: string[];
   preferences: string[];
+}
+
+export interface KnownUserProfile {
+  id: string;
+  name: string;
+  relationship: string;
+  faceSamples: string[];
+  recognitionEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CompanionSettings {
+  setupComplete: boolean;
+  ownerName: string;
+  wakeWordMode: WakeWordMode;
+  wakePhrase: string;
+  screenTimeoutMinutes: ScreenTimeoutMinutes;
+  allowAlwaysListening: boolean;
+  allowCameraRecognition: boolean;
+  allowFaceSampleStorage: boolean;
+  allowMemorySuggestions: boolean;
+  knownUsers: KnownUserProfile[];
 }
 
 export interface VoiceSettings {

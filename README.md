@@ -56,7 +56,9 @@ The recommended production kiosk is the Electron shell at `~/synra-jetson-statio
 After install, open `http://JETSON_IP:5191/`, go to Settings, and configure:
 
 - `AI`: local or remote OpenAI-compatible model endpoint.
+- `Companion`: owner name, local wake word, memory suggestions, and screen timeout.
 - `Voice`: paste ElevenLabs API key, load voices, choose a voice, then test voice.
+- `Users`: enroll known users with opt-in local face samples.
 - `Home`: optional Home Assistant URL/token and default target.
 - `NodeSparkHub`: optional subscriber pairing.
 
@@ -69,6 +71,8 @@ SYNRA_KIOSK_WINDOW_MODE=windowed ~/synra-jetson-station/scripts/start-electron-k
 You can also switch anytime inside Synra from `Settings` > `Display` with the window/fullscreen button. The Electron shell remembers the last selected mode.
 
 The Electron kiosk defaults to local mic/camera permission auto-grant for the dedicated Jetson station shell. Browser and mobile users still control permissions through their browser.
+
+Wake word and user-recognition setup are opt-in. Synra does not save raw audio or camera frames to memory, and face samples stay local to the device profile where they are created.
 
 ## GitHub Page
 

@@ -76,6 +76,22 @@ const electronKioskWindowModeIsAvailable =
   mainScript.includes("kioskWindowToggleButton") &&
   mainScript.includes("Switch to Windowed Setup") &&
   mainScript.includes("Return to Full Screen");
+const companionPresenceSetupIsAvailable =
+  mainScript.includes("firstRunWizard") &&
+  mainScript.includes("wakeWordModeInput") &&
+  mainScript.includes("screenTimeoutInput") &&
+  mainScript.includes("knownUserNameInput") &&
+  mainScript.includes("captureUserFaceButton") &&
+  mainScript.includes("startWakeWordListening") &&
+  mainScript.includes("Listening for Hey Synra") &&
+  mainScript.includes("No raw audio or camera frames are saved to memory") &&
+  mainScript.includes("companionSettings") &&
+  mainScript.includes("loadCompanionSettings") &&
+  mainScript.includes("saveCompanionSettings") &&
+  styles.includes(".wizard-panel") &&
+  styles.includes(".known-user-card") &&
+  readFileSync(join(root, "tools/SynraJetsonStation/src/kiosk-preload.ts"), "utf8").includes("setScreenTimeout") &&
+  readFileSync(join(root, "tools/SynraJetsonStation/src/kiosk-shell.ts"), "utf8").includes("synra-kiosk:set-screen-timeout");
 const electronKioskRemoteDebugIsOptIn =
   electronKioskScript.includes('SYNRA_KIOSK_REMOTE_DEBUG="${SYNRA_KIOSK_REMOTE_DEBUG:-false}"') &&
   electronKioskConfig.includes("remote-debugging-port");
@@ -439,6 +455,7 @@ const result = {
     jetsonInstallerCanBootstrap &&
     electronKioskIsPackaged &&
     electronKioskWindowModeIsAvailable &&
+    companionPresenceSetupIsAvailable &&
     electronKioskRemoteDebugIsOptIn &&
     electronKioskUsesStableJetsonBackend &&
     electronKioskTestsArePackaged &&
@@ -515,6 +532,7 @@ const result = {
     "Jetson installer can bootstrap app service and Electron kiosk",
     "Electron kiosk package is included in the Synra repo",
     "Electron kiosk can switch between windowed setup and fullscreen kiosk modes",
+    "Synra companion setup includes wake word, screen timeout, known users, and privacy controls",
     "Electron kiosk remote debugging is opt-in",
     "Electron kiosk defaults to the stable Jetson Vulkan backend",
     "Electron kiosk tests are packaged with the repo",

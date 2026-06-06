@@ -7,8 +7,8 @@ import { SynraAvatarRuntime } from "./hub-runtime/drivers/avatar3d";
 import type { SynraActionName, SynraMode } from "./hub-runtime/types/avatar";
 import { askModel, classifySynraRequest, localSynraReply } from "./model-client";
 import { SynraMotionPlayer, type SynraMotionClipSpec } from "./motion-player";
-import { loadHomeAssistantSettings, loadMemory, loadModelSettings, loadProductSettings, loadVisualSettings, loadVoiceSettings, saveHomeAssistantSettings, saveMemory, saveModelSettings, saveProductSettings, saveVisualSettings, saveVoiceSettings } from "./storage";
-import type { HomeAssistantEntity, HomeAssistantSettings, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, SynraMessage, SynraSkillMode, SynraState, VoiceProvider, VoiceSettings } from "./types";
+import { loadCompanionSettings, loadHomeAssistantSettings, loadMemory, loadModelSettings, loadProductSettings, loadVisualSettings, loadVoiceSettings, saveCompanionSettings, saveHomeAssistantSettings, saveMemory, saveModelSettings, saveProductSettings, saveVisualSettings, saveVoiceSettings } from "./storage";
+import type { CompanionSettings, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraMessage, SynraSkillMode, SynraState, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
 
 const app = document.querySelector<HTMLElement>("#app");
 if (!app) throw new Error("Missing app root.");
@@ -72,6 +72,8 @@ type SynraKioskBridge = {
   getWindowMode: () => Promise<SynraKioskWindowMode>;
   setWindowMode: (mode: SynraKioskWindowMode) => Promise<SynraKioskWindowMode>;
   toggleWindowMode: () => Promise<SynraKioskWindowMode>;
+  setScreenTimeout?: (minutes: ScreenTimeoutMinutes) => Promise<ScreenTimeoutMinutes>;
+  wakeDisplay?: () => Promise<boolean>;
 };
 
 declare global {
@@ -161,6 +163,8 @@ const PRESENCE_NUDGES = [
   "Systems are calm.",
   "I am standing by."
 ];
+const DEFAULT_WAKE_PHRASE = "Hey Synra";
+const DEFAULT_WAKE_LISTENING_LABEL = "Listening for Hey Synra";
 const PREFERRED_BROWSER_VOICE_HINTS = [
   "samantha",
   "victoria",
@@ -193,6 +197,7 @@ const state = {
   voiceSettings: loadVoiceSettings(),
   productSettings: loadProductSettings(),
   homeAssistantSettings: loadHomeAssistantSettings(),
+  companionSettings: loadCompanionSettings(),
   visual: initialVisualSettings,
   memory: loadMemory(),
   vrm: null as VRM | null,
@@ -206,6 +211,7 @@ const state = {
   lastRenderAt: 0,
   fps: 0,
   lastDisplayedMotionId: "",
+  wakeWordStatus: "Wake word off",
   voiceStatus: "Voice checking",
   visionStatus: "Camera not checked",
   serverVisionStatus: "Jetson camera not checked",
@@ -462,8 +468,10 @@ app.innerHTML = `
       <h2>Synra Settings</h2>
       <div class="settings-tabs" role="tablist" aria-label="Synra settings sections">
         <button type="button" class="settings-tab active" data-settings-tab="ai" role="tab" aria-selected="true">AI</button>
+        <button type="button" class="settings-tab" data-settings-tab="companion" role="tab" aria-selected="false">Companion</button>
         <button type="button" class="settings-tab" data-settings-tab="voice" role="tab" aria-selected="false">Voice</button>
         <button type="button" class="settings-tab" data-settings-tab="memory" role="tab" aria-selected="false">Memory</button>
+        <button type="button" class="settings-tab" data-settings-tab="users" role="tab" aria-selected="false">Users</button>
         <button type="button" class="settings-tab" data-settings-tab="home" role="tab" aria-selected="false">Home</button>
         <button type="button" class="settings-tab" data-settings-tab="nodespark" role="tab" aria-selected="false">NodeSparkHub</button>
         <button type="button" class="settings-tab" data-settings-tab="display" role="tab" aria-selected="false">Display</button>
@@ -499,6 +507,48 @@ app.innerHTML = `
           System prompt
           <textarea id="systemPromptInput" rows="4" placeholder="Optional Synra personality or routing instructions"></textarea>
         </label>
+      </section>
+      <section class="settings-panel" data-settings-panel="companion" role="tabpanel" hidden>
+        <h3>Companion Presence</h3>
+        <label>
+          Owner name
+          <input id="companionOwnerNameInput" placeholder="Matthew" />
+        </label>
+        <label>
+          Wake word
+          <select id="wakeWordModeInput">
+            <option value="off">Off</option>
+            <option value="local">Local "Hey Synra"</option>
+          </select>
+        </label>
+        <label>
+          Wake phrase
+          <input id="wakePhraseInput" placeholder="Hey Synra" />
+        </label>
+        <label>
+          Screen timeout
+          <select id="screenTimeoutInput">
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+            <option value="60">1 hour</option>
+            <option value="0">Never</option>
+          </select>
+        </label>
+        <label>
+          Memory suggestions
+          <select id="memorySuggestionsInput">
+            <option value="on">Ask before saving helpful memories</option>
+            <option value="off">Never suggest memories</option>
+          </select>
+        </label>
+        <div class="settings-status-grid compact">
+          <span>Wake</span>
+          <strong id="wakeWordStatus">Wake word off</strong>
+          <span>Privacy</span>
+          <strong>No raw audio or camera frames are saved to memory</strong>
+        </div>
+        <button type="button" id="startWakeWordButton">Start Wake Word</button>
+        <p class="settings-note">Wake word listening is local-first and only listens for the configured phrase before sending a real request to Synra.</p>
       </section>
       <section class="settings-panel" data-settings-panel="voice" role="tabpanel" hidden>
         <h3>Voice Output</h3>
@@ -574,6 +624,38 @@ app.innerHTML = `
           Rooms and devices
           <textarea id="memoryDevicesInput" rows="3" placeholder="Office lamp, studio lights, living room"></textarea>
         </label>
+        <p class="settings-note">Synra memory is for approved preferences, routines, rooms, and devices. API keys, tokens, raw audio, and camera frames are never saved to memory.</p>
+      </section>
+      <section class="settings-panel" data-settings-panel="users" role="tabpanel" hidden>
+        <h3>Known Users</h3>
+        <label>
+          User name
+          <input id="knownUserNameInput" placeholder="Person name" />
+        </label>
+        <label>
+          Relationship
+          <input id="knownUserRelationshipInput" placeholder="Owner, family, teammate" />
+        </label>
+        <label>
+          Face recognition
+          <select id="faceRecognitionInput">
+            <option value="off">Off</option>
+            <option value="on">On for enrolled users</option>
+          </select>
+        </label>
+        <label>
+          Face sample storage
+          <select id="faceSampleStorageInput">
+            <option value="off">Do not store samples</option>
+            <option value="on">Store approved local samples</option>
+          </select>
+        </label>
+        <div class="settings-button-row">
+          <button type="button" id="captureUserFaceButton">Capture Face Sample</button>
+          <button type="button" id="saveKnownUserButton">Save User</button>
+        </div>
+        <div id="knownUsersList" class="known-users-list"></div>
+        <p class="settings-note">Face setup is opt-in and local to this device. Synra uses it as a future recognition profile, and you can delete users anytime.</p>
       </section>
       <section class="settings-panel" data-settings-panel="home" role="tabpanel" hidden>
         <h3>Home Assistant</h3>
@@ -658,6 +740,8 @@ app.innerHTML = `
           <strong id="settingsModeStatus">Manual</strong>
           <span>Window</span>
           <strong id="settingsKioskWindowStatus">Browser</strong>
+          <span>Screen</span>
+          <strong id="settingsScreenTimeoutStatus">30 minutes</strong>
         </div>
         <button type="button" id="kioskWindowToggleButton">Open Windowed Setup</button>
         <p class="settings-note">Display controls stay in the right rail for fast kiosk adjustments without reopening settings.</p>
@@ -683,6 +767,55 @@ app.innerHTML = `
         <button type="button" id="exportMemoryButton">Export Memory</button>
         <button type="button" id="importMemoryButton">Import Memory</button>
         <button id="saveSettingsButton" value="default">Save</button>
+      </menu>
+    </form>
+  </dialog>
+  <dialog id="firstRunWizard">
+    <form method="dialog" class="wizard-panel">
+      <div class="wizard-hero">
+        <img class="brand-logo-only" src="/synra-logo.png" alt="Synra" />
+        <div>
+          <span>First-run setup</span>
+          <h2>Make Synra yours</h2>
+          <p>Choose how Synra listens, remembers, sleeps, and recognizes approved users.</p>
+        </div>
+      </div>
+      <section class="wizard-grid">
+        <label>
+          Your name
+          <input id="wizardOwnerNameInput" placeholder="Matthew" />
+        </label>
+        <label>
+          Wake word
+          <select id="wizardWakeWordModeInput">
+            <option value="off">Off for now</option>
+            <option value="local">Listen locally for Hey Synra</option>
+          </select>
+        </label>
+        <label>
+          Screen stays on
+          <select id="wizardScreenTimeoutInput">
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+            <option value="60">1 hour</option>
+            <option value="0">Never</option>
+          </select>
+        </label>
+        <label>
+          Face recognition
+          <select id="wizardFaceRecognitionInput">
+            <option value="off">Off until I enroll users</option>
+            <option value="on">Allow local enrolled-user recognition</option>
+          </select>
+        </label>
+      </section>
+      <div class="wizard-trust">
+        <strong>Privacy defaults</strong>
+        <p>No raw audio or camera frames are saved to memory. Wake word processing starts local-first, face setup is opt-in, and Home Assistant actions still require confirmation.</p>
+      </div>
+      <menu>
+        <button type="button" id="wizardSkipButton">Later</button>
+        <button type="button" id="wizardSaveButton">Finish Setup</button>
       </menu>
     </form>
   </dialog>
@@ -777,6 +910,7 @@ const stopVoiceButton = must<HTMLElement, HTMLButtonElement>("stopVoiceButton");
 const sendButton = document.querySelector<HTMLButtonElement>('button[title="Send"]');
 const settingsButton = must<HTMLElement, HTMLButtonElement>("settingsButton");
 const settingsDialog = must<HTMLElement, HTMLDialogElement>("settingsDialog");
+const firstRunWizard = must<HTMLElement, HTMLDialogElement>("firstRunWizard");
 const aboutDialog = must<HTMLElement, HTMLDialogElement>("aboutDialog");
 const settingsTabButtons = [...document.querySelectorAll<HTMLButtonElement>(".settings-tab")];
 const settingsPanels = [...document.querySelectorAll<HTMLElement>(".settings-panel")];
@@ -786,6 +920,26 @@ const modelInput = must<HTMLElement, HTMLInputElement>("modelInput");
 const apiKeyInput = must<HTMLElement, HTMLInputElement>("apiKeyInput");
 const temperatureInput = must<HTMLElement, HTMLInputElement>("temperatureInput");
 const systemPromptInput = must<HTMLElement, HTMLTextAreaElement>("systemPromptInput");
+const companionOwnerNameInput = must<HTMLElement, HTMLInputElement>("companionOwnerNameInput");
+const wakeWordModeInput = must<HTMLElement, HTMLSelectElement>("wakeWordModeInput");
+const wakePhraseInput = must<HTMLElement, HTMLInputElement>("wakePhraseInput");
+const screenTimeoutInput = must<HTMLElement, HTMLSelectElement>("screenTimeoutInput");
+const memorySuggestionsInput = must<HTMLElement, HTMLSelectElement>("memorySuggestionsInput");
+const wakeWordStatusEl = must<HTMLElement, HTMLElement>("wakeWordStatus");
+const startWakeWordButton = must<HTMLElement, HTMLButtonElement>("startWakeWordButton");
+const knownUserNameInput = must<HTMLElement, HTMLInputElement>("knownUserNameInput");
+const knownUserRelationshipInput = must<HTMLElement, HTMLInputElement>("knownUserRelationshipInput");
+const faceRecognitionInput = must<HTMLElement, HTMLSelectElement>("faceRecognitionInput");
+const faceSampleStorageInput = must<HTMLElement, HTMLSelectElement>("faceSampleStorageInput");
+const captureUserFaceButton = must<HTMLElement, HTMLButtonElement>("captureUserFaceButton");
+const saveKnownUserButton = must<HTMLElement, HTMLButtonElement>("saveKnownUserButton");
+const knownUsersList = must<HTMLElement, HTMLElement>("knownUsersList");
+const wizardOwnerNameInput = must<HTMLElement, HTMLInputElement>("wizardOwnerNameInput");
+const wizardWakeWordModeInput = must<HTMLElement, HTMLSelectElement>("wizardWakeWordModeInput");
+const wizardScreenTimeoutInput = must<HTMLElement, HTMLSelectElement>("wizardScreenTimeoutInput");
+const wizardFaceRecognitionInput = must<HTMLElement, HTMLSelectElement>("wizardFaceRecognitionInput");
+const wizardSkipButton = must<HTMLElement, HTMLButtonElement>("wizardSkipButton");
+const wizardSaveButton = must<HTMLElement, HTMLButtonElement>("wizardSaveButton");
 const synraSkillModeInput = must<HTMLElement, HTMLSelectElement>("synraSkillModeInput");
 const nodeSparkAccessInput = must<HTMLElement, HTMLSelectElement>("nodeSparkAccessInput");
 const nodeSparkHubUrlInput = must<HTMLElement, HTMLInputElement>("nodeSparkHubUrlInput");
@@ -831,6 +985,7 @@ const settingsBackgroundStatusEl = must<HTMLElement, HTMLElement>("settingsBackg
 const settingsQualityStatusEl = must<HTMLElement, HTMLElement>("settingsQualityStatus");
 const settingsModeStatusEl = must<HTMLElement, HTMLElement>("settingsModeStatus");
 const settingsKioskWindowStatusEl = must<HTMLElement, HTMLElement>("settingsKioskWindowStatus");
+const settingsScreenTimeoutStatusEl = must<HTMLElement, HTMLElement>("settingsScreenTimeoutStatus");
 const kioskWindowToggleButton = must<HTMLElement, HTMLButtonElement>("kioskWindowToggleButton");
 
 const renderer = USE_HUB_AVATAR_RUNTIME ? null : createRenderer();
@@ -868,6 +1023,8 @@ installContactShadow();
 const loader = new GLTFLoader();
 loader.register((parser) => new VRMLoaderPlugin(parser));
 let activeRecognition: SpeechRecognition | null = null;
+let wakeWordRecognition: SpeechRecognition | null = null;
+let pendingFaceSample = "";
 
 if (USE_HUB_AVATAR_RUNTIME) {
   hubAvatarRuntime = new SynraAvatarRuntime({
@@ -908,6 +1065,7 @@ refreshAiConnectionPanel();
 refreshSkillPanel();
 refreshSystemHealthPanel();
 installQaHarness();
+initializeCompanionPresence();
 
 async function bootAvatarRuntime(): Promise<void> {
   try {
@@ -1267,21 +1425,66 @@ saveSettingsButton.addEventListener("click", () => {
   state.productSettings = readProductSettingsFromInputs();
   state.homeAssistantSettings = readHomeAssistantSettingsFromInputs();
   state.memory = readMemorySettingsFromInputs();
+  state.companionSettings = readCompanionSettingsFromInputs();
   saveModelSettings(next);
   saveVoiceSettings(state.voiceSettings);
   saveProductSettings(state.productSettings);
   saveHomeAssistantSettings(state.homeAssistantSettings);
   saveMemory(state.memory);
+  saveCompanionSettings(state.companionSettings);
   refreshModelLabel();
   refreshAiConnectionPanel();
   refreshSkillPanel();
   refreshNodeSparkPairingStatus();
   refreshVoiceStatus();
   refreshSystemHealthPanel();
+  refreshCompanionPresence();
 });
 
 kioskWindowToggleButton.addEventListener("click", () => {
   void toggleKioskWindowMode();
+});
+
+startWakeWordButton.addEventListener("click", () => {
+  state.companionSettings = readCompanionSettingsFromInputs();
+  saveCompanionSettings(state.companionSettings);
+  refreshCompanionPresence();
+});
+
+captureUserFaceButton.addEventListener("click", () => {
+  void captureKnownUserFaceSample();
+});
+
+saveKnownUserButton.addEventListener("click", () => {
+  saveKnownUserFromInputs();
+});
+
+wizardSkipButton.addEventListener("click", () => {
+  state.companionSettings = { ...state.companionSettings, setupComplete: true };
+  saveCompanionSettings(state.companionSettings);
+  firstRunWizard.close();
+});
+
+wizardSaveButton.addEventListener("click", () => {
+  state.companionSettings = {
+    ...state.companionSettings,
+    setupComplete: true,
+    ownerName: wizardOwnerNameInput.value.trim(),
+    wakeWordMode: normalizeWakeWordMode(wizardWakeWordModeInput.value),
+    wakePhrase: DEFAULT_WAKE_PHRASE,
+    screenTimeoutMinutes: normalizeScreenTimeout(wizardScreenTimeoutInput.value),
+    allowAlwaysListening: wizardWakeWordModeInput.value === "local",
+    allowCameraRecognition: wizardFaceRecognitionInput.value === "on",
+    allowFaceSampleStorage: wizardFaceRecognitionInput.value === "on"
+  };
+  if (state.companionSettings.ownerName) {
+    state.memory = { ...state.memory, preferredName: state.companionSettings.ownerName };
+    saveMemory(state.memory);
+  }
+  saveCompanionSettings(state.companionSettings);
+  firstRunWizard.close();
+  populateCompanionSettingsInputs();
+  refreshCompanionPresence();
 });
 
 function openSettingsDialog(initialTab = "ai"): void {
@@ -1295,6 +1498,7 @@ function openSettingsDialog(initialTab = "ai"): void {
   populateHomeAssistantSettingsInputs();
   populateMemorySettingsInputs();
   populateVoiceSettingsInputs();
+  populateCompanionSettingsInputs();
   refreshSettingsDisplayStatus();
   refreshKioskWindowControls().catch(() => {});
   setSettingsTab(initialTab);
@@ -1312,6 +1516,241 @@ function setSettingsTab(tabId: string): void {
     const active = panel.dataset.settingsPanel === selectedTab;
     panel.classList.toggle("active", active);
     panel.hidden = !active;
+  });
+}
+
+function initializeCompanionPresence(): void {
+  populateCompanionSettingsInputs();
+  refreshCompanionPresence();
+  if (!state.companionSettings.setupComplete) {
+    wizardOwnerNameInput.value = state.companionSettings.ownerName || state.memory.preferredName || "";
+    wizardWakeWordModeInput.value = state.companionSettings.wakeWordMode;
+    wizardScreenTimeoutInput.value = String(state.companionSettings.screenTimeoutMinutes);
+    wizardFaceRecognitionInput.value = state.companionSettings.allowCameraRecognition ? "on" : "off";
+    window.setTimeout(() => {
+      if (!firstRunWizard.open) firstRunWizard.showModal();
+    }, 700);
+  }
+}
+
+function populateCompanionSettingsInputs(): void {
+  companionOwnerNameInput.value = state.companionSettings.ownerName || state.memory.preferredName || "";
+  wakeWordModeInput.value = state.companionSettings.wakeWordMode;
+  wakePhraseInput.value = state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE;
+  screenTimeoutInput.value = String(state.companionSettings.screenTimeoutMinutes);
+  memorySuggestionsInput.value = state.companionSettings.allowMemorySuggestions ? "on" : "off";
+  faceRecognitionInput.value = state.companionSettings.allowCameraRecognition ? "on" : "off";
+  faceSampleStorageInput.value = state.companionSettings.allowFaceSampleStorage ? "on" : "off";
+  renderKnownUsers();
+}
+
+function readCompanionSettingsFromInputs(): CompanionSettings {
+  const wakeWordMode = normalizeWakeWordMode(wakeWordModeInput.value);
+  return {
+    ...state.companionSettings,
+    ownerName: companionOwnerNameInput.value.trim(),
+    wakeWordMode,
+    wakePhrase: wakePhraseInput.value.trim() || DEFAULT_WAKE_PHRASE,
+    screenTimeoutMinutes: normalizeScreenTimeout(screenTimeoutInput.value),
+    allowAlwaysListening: wakeWordMode === "local",
+    allowCameraRecognition: faceRecognitionInput.value === "on",
+    allowFaceSampleStorage: faceSampleStorageInput.value === "on",
+    allowMemorySuggestions: memorySuggestionsInput.value === "on"
+  };
+}
+
+function normalizeWakeWordMode(value: string): WakeWordMode {
+  return value === "local" ? "local" : "off";
+}
+
+function normalizeScreenTimeout(value: string | number): ScreenTimeoutMinutes {
+  const numeric = Number(value);
+  return numeric === 15 || numeric === 30 || numeric === 60 ? numeric : 0;
+}
+
+function screenTimeoutLabel(minutes: ScreenTimeoutMinutes): string {
+  if (minutes === 0) return "Never";
+  if (minutes === 60) return "1 hour";
+  return `${minutes} minutes`;
+}
+
+function refreshCompanionPresence(): void {
+  settingsScreenTimeoutStatusEl.textContent = screenTimeoutLabel(state.companionSettings.screenTimeoutMinutes);
+  if (state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening) {
+    void startWakeWordListening();
+  } else {
+    stopWakeWordListening("Wake word off");
+  }
+  void syncKioskScreenTimeout();
+  renderKnownUsers();
+}
+
+async function syncKioskScreenTimeout(): Promise<void> {
+  try {
+    await window.synraKiosk?.setScreenTimeout?.(state.companionSettings.screenTimeoutMinutes);
+  } catch {
+    // Browser mode cannot manage the display; the setting is still saved for Electron.
+  }
+}
+
+async function startWakeWordListening(): Promise<void> {
+  const phrase = (state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE).toLowerCase();
+  if (activeRecognition) {
+    updateWakeWordStatus("Wake word paused");
+    return;
+  }
+  if (wakeWordRecognition) {
+    updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
+    return;
+  }
+  const SpeechRecognitionCtor =
+    (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }).SpeechRecognition ||
+    (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }).webkitSpeechRecognition;
+  if (!SpeechRecognitionCtor) {
+    updateWakeWordStatus("Wake word unavailable");
+    return;
+  }
+  const micReady = await ensureMicrophoneReady();
+  if (!micReady) {
+    updateWakeWordStatus("Wake word needs mic permission");
+    return;
+  }
+  const recognition = new SpeechRecognitionCtor();
+  wakeWordRecognition = recognition;
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = "en-US";
+  recognition.onstart = () => updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
+  recognition.onerror = () => {
+    wakeWordRecognition = null;
+    updateWakeWordStatus("Wake word paused");
+  };
+  recognition.onend = () => {
+    if (wakeWordRecognition === recognition) {
+      wakeWordRecognition = null;
+      if (state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening) {
+        window.setTimeout(() => void startWakeWordListening(), 650);
+      }
+    }
+  };
+  recognition.onresult = (event: SpeechRecognitionEvent) => {
+    const latest = event.results[event.results.length - 1]?.[0]?.transcript?.trim().toLowerCase() ?? "";
+    if (!latest.includes(phrase)) return;
+    void window.synraKiosk?.wakeDisplay?.();
+    updateWakeWordStatus("Awake");
+    setSynraState("listening", "I heard Hey Synra.");
+    stopWakeWordListening("Awake");
+    void startListening();
+  };
+  recognition.start();
+}
+
+function stopWakeWordListening(status = "Wake word off"): void {
+  if (wakeWordRecognition) {
+    try {
+      wakeWordRecognition.abort?.();
+      wakeWordRecognition.stop?.();
+    } catch {
+      // Chromium can throw if recognition is already stopped.
+    }
+    wakeWordRecognition = null;
+  }
+  updateWakeWordStatus(status);
+}
+
+function updateWakeWordStatus(status: string): void {
+  state.wakeWordStatus = status;
+  wakeWordStatusEl.textContent = status;
+  startWakeWordButton.textContent = state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening ? "Restart Wake Word" : "Start Wake Word";
+}
+
+async function captureKnownUserFaceSample(): Promise<void> {
+  if (!state.companionSettings.allowFaceSampleStorage && faceSampleStorageInput.value !== "on") {
+    setSynraState("idle", "Turn on local face sample storage before capturing a user profile.");
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setSynraState("idle", "Camera capture is not available in this browser.");
+    return;
+  }
+  captureUserFaceButton.disabled = true;
+  captureUserFaceButton.textContent = "Capturing";
+  let stream: MediaStream | null = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.srcObject = stream;
+    await video.play();
+    await new Promise((resolve) => window.setTimeout(resolve, 350));
+    const canvasElement = document.createElement("canvas");
+    canvasElement.width = 320;
+    canvasElement.height = 240;
+    canvasElement.getContext("2d")?.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+    pendingFaceSample = canvasElement.toDataURL("image/jpeg", 0.72);
+    setSynraState("idle", "Face sample captured locally. Save the user when ready.");
+  } catch {
+    setSynraState("idle", "Face sample capture needs camera permission.");
+  } finally {
+    if (stream) for (const track of stream.getTracks()) track.stop();
+    captureUserFaceButton.disabled = false;
+    captureUserFaceButton.textContent = pendingFaceSample ? "Capture Another Sample" : "Capture Face Sample";
+  }
+}
+
+function saveKnownUserFromInputs(): void {
+  const name = knownUserNameInput.value.trim();
+  if (!name) {
+    setSynraState("idle", "Enter a user name before saving.");
+    return;
+  }
+  const now = new Date().toISOString();
+  const existing = state.companionSettings.knownUsers.find((user) => user.name.toLowerCase() === name.toLowerCase());
+  const nextUser: KnownUserProfile = {
+    id: existing?.id ?? `user-${Date.now().toString(36)}`,
+    name,
+    relationship: knownUserRelationshipInput.value.trim(),
+    faceSamples: [...(existing?.faceSamples ?? []), ...(pendingFaceSample ? [pendingFaceSample] : [])].slice(-5),
+    recognitionEnabled: faceRecognitionInput.value === "on",
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now
+  };
+  state.companionSettings = {
+    ...readCompanionSettingsFromInputs(),
+    knownUsers: [nextUser, ...state.companionSettings.knownUsers.filter((user) => user.id !== nextUser.id)].slice(0, 12)
+  };
+  saveCompanionSettings(state.companionSettings);
+  pendingFaceSample = "";
+  knownUserNameInput.value = "";
+  knownUserRelationshipInput.value = "";
+  captureUserFaceButton.textContent = "Capture Face Sample";
+  renderKnownUsers();
+  setSynraState("idle", `${name} is saved as a known user.`);
+}
+
+function renderKnownUsers(): void {
+  if (state.companionSettings.knownUsers.length === 0) {
+    knownUsersList.innerHTML = `<div class="known-user-empty">No known users saved yet.</div>`;
+    return;
+  }
+  knownUsersList.innerHTML = state.companionSettings.knownUsers.map((user) => `
+    <article class="known-user-card">
+      ${user.faceSamples[0] ? `<img src="${user.faceSamples[0]}" alt="${escapeHtml(user.name)} face sample" />` : `<div class="known-user-avatar">${escapeHtml(user.name.slice(0, 1).toUpperCase())}</div>`}
+      <div>
+        <strong>${escapeHtml(user.name)}</strong>
+        <span>${escapeHtml(user.relationship || "Known user")} · ${user.recognitionEnabled ? "Recognition on" : "Recognition off"} · ${user.faceSamples.length} local sample${user.faceSamples.length === 1 ? "" : "s"}</span>
+      </div>
+      <button type="button" data-delete-user="${escapeHtml(user.id)}">Delete</button>
+    </article>
+  `).join("");
+  knownUsersList.querySelectorAll<HTMLButtonElement>("[data-delete-user]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.deleteUser;
+      state.companionSettings = { ...state.companionSettings, knownUsers: state.companionSettings.knownUsers.filter((user) => user.id !== id) };
+      saveCompanionSettings(state.companionSettings);
+      renderKnownUsers();
+    });
   });
 }
 
@@ -3131,6 +3570,9 @@ function stopVoiceActivity(caption = "Voice stopped."): void {
   listenButton.disabled = false;
   updateVoiceStatus("Stopped");
   setSynraState("idle", caption);
+  if (state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening) {
+    window.setTimeout(() => void startWakeWordListening(), 700);
+  }
 }
 
 function stopElevenLabsAudio(): void {
@@ -3165,6 +3607,7 @@ function clearSpeechFallback(): void {
 }
 
 async function startListening(): Promise<void> {
+  stopWakeWordListening("Awake");
   listenButton.disabled = true;
   updateVoiceStatus("Mic check");
   try {
@@ -3203,6 +3646,9 @@ async function startListening(): Promise<void> {
     if (activeRecognition === recognition) activeRecognition = null;
     refreshVoiceStatus();
     if (state.synra === "listening") setSynraState("idle", "Ready.");
+    if (state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening) {
+      window.setTimeout(() => void startWakeWordListening(), 700);
+    }
   };
   recognition.onresult = (event: SpeechRecognitionEvent) => {
     const text = event.results[0]?.[0]?.transcript?.trim();
@@ -3903,6 +4349,7 @@ function refreshSettingsDisplayStatus(): void {
   settingsBackgroundStatusEl.textContent = resolveBackground(state.visual.backgroundId).label;
   settingsQualityStatusEl.textContent = renderQualityLabel(resolveRenderQuality(state.visual.renderQuality));
   settingsModeStatusEl.textContent = resolveControlMode(state.visual.controlMode) === "live" ? "Live" : "Manual";
+  settingsScreenTimeoutStatusEl.textContent = screenTimeoutLabel(state.companionSettings.screenTimeoutMinutes);
 }
 
 async function refreshKioskWindowControls(): Promise<void> {

@@ -228,6 +228,16 @@ SYNRA_KIOSK_WINDOW_MODE=windowed ~/synra-jetson-station/scripts/start-electron-k
 
 Synra also has a `Settings` > `Display` button that switches between `Windowed setup` and `Fullscreen kiosk`. The selected mode is remembered for the next Electron launch.
 
+Synra companion presence is configured in `Settings` > `Companion`:
+
+- Wake word: off by default, or local `Hey Synra` listening.
+- Screen timeout: `15 minutes`, `30 minutes`, `1 hour`, or `Never`.
+- Memory suggestions: Synra can ask before saving useful preferences.
+
+The Electron shell receives the saved screen timeout and can turn the display off with `xset dpms force off` when available. Wake word activation calls the Electron wake hook and restores/focuses the Synra window.
+
+Known users are configured in `Settings` > `Users`. Face samples are explicit local captures, not automatic background storage. Delete users from the same panel if a profile should be removed.
+
 It launches the Synra runtime outside snap Chromium confinement:
 
 ```text
