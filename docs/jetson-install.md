@@ -45,6 +45,7 @@ Then it builds and installs the runtime to:
 ```bash
 systemctl --user status synra-standalone.service
 systemctl --user restart synra-standalone.service
+systemctl --user restart synra-electron-kiosk.service
 ```
 
 Open the app:
@@ -117,6 +118,54 @@ Check model status:
 ```bash
 curl http://127.0.0.1:5191/api/health
 ```
+
+## Configure Voice and ElevenLabs
+
+Open Synra from the Jetson or another device on the same network:
+
+```text
+http://JETSON_IP:5191/
+```
+
+Then use the app UI:
+
+1. Open Settings.
+2. Select `Voice`.
+3. Choose `ElevenLabs`.
+4. Paste your ElevenLabs API key.
+5. Click `Load ElevenLabs Voices`.
+6. Choose a voice by name.
+7. Click `Test Voice`.
+8. Click `Voice Diagnostics` if sound does not play.
+
+Synra stores voice settings in the browser's local storage. The local Python server only receives the ElevenLabs API key when listing voices or generating speech.
+
+Optional server-side voice defaults can also be placed in `~/.config/synra-standalone.env`:
+
+```bash
+SYNRA_ELEVENLABS_API_KEY=
+SYNRA_ELEVENLABS_VOICE_ID=
+SYNRA_ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+SYNRA_ELEVENLABS_OUTPUT_FORMAT=mp3_44100_128
+```
+
+## Mic and Camera
+
+The dedicated Electron kiosk shell defaults to local mic/camera permission auto-grant so Synra can listen and request camera frames on the Jetson display without hidden browser prompts.
+
+To disable that for a manual permission test:
+
+```bash
+SYNRA_KIOSK_AUTO_GRANT_MEDIA=false ~/synra-jetson-station/scripts/start-electron-kiosk.sh
+```
+
+Useful camera check:
+
+```bash
+curl http://127.0.0.1:5191/api/vision/public
+```
+
+Inside Synra, use `Voice Diagnostics`, `Vision On`, and `Analyze View` to test the live browser path.
 
 ## Configure Home Assistant
 

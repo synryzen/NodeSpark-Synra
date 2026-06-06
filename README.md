@@ -31,6 +31,12 @@ Fresh Jetson install:
 curl -fsSL https://raw.githubusercontent.com/synryzen/NodeSpark-Synra/main/scripts/install-jetson.sh | bash
 ```
 
+Guided install page:
+
+```text
+https://synryzen.github.io/NodeSpark-Synra/jetson-install.html
+```
+
 Default runtime:
 
 ```text
@@ -46,6 +52,15 @@ Diagnostics:
 ```
 
 The recommended production kiosk is the Electron shell at `~/synra-jetson-station/scripts/start-electron-kiosk.sh`. Snap Chromium remains a fallback through `~/synra-standalone/scripts/start-jetson-kiosk.sh`.
+
+After install, open `http://JETSON_IP:5191/`, go to Settings, and configure:
+
+- `AI`: local or remote OpenAI-compatible model endpoint.
+- `Voice`: paste ElevenLabs API key, load voices, choose a voice, then test voice.
+- `Home`: optional Home Assistant URL/token and default target.
+- `NodeSparkHub`: optional subscriber pairing.
+
+The Electron kiosk defaults to local mic/camera permission auto-grant for the dedicated Jetson station shell. Browser and mobile users still control permissions through their browser.
 
 ## GitHub Page
 

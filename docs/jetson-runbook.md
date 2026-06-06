@@ -267,13 +267,15 @@ SYNRA_KIOSK_MAX_RENDER_WIDTH=1600 SYNRA_KIOSK_MAX_RENDER_HEIGHT=1000 ~/synra-jet
 SYNRA_KIOSK_MAX_RENDER_WIDTH=1920 SYNRA_KIOSK_MAX_RENDER_HEIGHT=1200 ~/synra-jetson-station/scripts/start-electron-kiosk.sh
 ```
 
-If Synra is running as an unattended kiosk and you want Chromium to automatically accept camera/mic prompts, opt in explicitly:
+The dedicated Electron kiosk shell defaults to local camera/mic permission auto-grant for the Jetson station. This keeps the unattended kiosk from getting stuck behind hidden media prompts.
+
+To disable media auto-grant for a manual permission test:
 
 ```bash
-SYNRA_KIOSK_AUTO_GRANT_MEDIA=true ~/synra-jetson-station/scripts/start-electron-kiosk.sh
+SYNRA_KIOSK_AUTO_GRANT_MEDIA=false ~/synra-jetson-station/scripts/start-electron-kiosk.sh
 ```
 
-Leave this off for normal use so browser media permissions remain visible to the user.
+Browser/mobile clients still use normal browser permission prompts.
 
 For local Chrome inspection and performance probes:
 

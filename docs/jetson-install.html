@@ -268,7 +268,35 @@ SYNRA_MODEL_NAME=qwen2.5:1.5b
 SYNRA_MODEL_LABEL=qwen2.5:1.5b
 SYNRA_MODEL_API_KEY=</code></pre>
         <pre><code>systemctl --user restart synra-standalone.service
+systemctl --user restart synra-electron-kiosk.service
 curl http://127.0.0.1:5191/api/health</code></pre>
+      </section>
+
+      <section id="configure-voice">
+        <h2>Configure Voice and ElevenLabs</h2>
+        <p>Open Synra at <code>http://JETSON_IP:5191/</code>, then use Settings &gt; Voice.</p>
+        <ol>
+          <li>Choose <code>ElevenLabs</code>.</li>
+          <li>Paste your ElevenLabs API key.</li>
+          <li>Click <code>Load ElevenLabs Voices</code>.</li>
+          <li>Choose a voice by name.</li>
+          <li>Click <code>Test Voice</code>.</li>
+          <li>Use <code>Voice Diagnostics</code> if sound does not play.</li>
+        </ol>
+        <p>Optional server-side defaults can be placed in <code>~/.config/synra-standalone.env</code>:</p>
+        <pre><code>SYNRA_ELEVENLABS_API_KEY=
+SYNRA_ELEVENLABS_VOICE_ID=
+SYNRA_ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+SYNRA_ELEVENLABS_OUTPUT_FORMAT=mp3_44100_128</code></pre>
+      </section>
+
+      <section id="mic-camera">
+        <h2>Mic and Camera</h2>
+        <p>The dedicated Electron kiosk shell defaults to local mic/camera permission auto-grant for the Jetson station. Browser users still control permissions through their browser.</p>
+        <pre><code>curl http://127.0.0.1:5191/api/vision/public</code></pre>
+        <p>Inside Synra, use <code>Voice Diagnostics</code>, <code>Vision On</code>, and <code>Analyze View</code> to test the live path.</p>
+        <p>To disable auto-grant for manual permission testing:</p>
+        <pre><code>SYNRA_KIOSK_AUTO_GRANT_MEDIA=false ~/synra-jetson-station/scripts/start-electron-kiosk.sh</code></pre>
       </section>
 
       <section>
@@ -284,6 +312,8 @@ SYNRA_HOME_ASSISTANT_DEFAULT_LIGHT=light.living_room</code></pre>
         <h2>Launch Kiosk</h2>
         <p>The recommended production kiosk is Electron:</p>
         <pre><code>~/synra-jetson-station/scripts/start-electron-kiosk.sh</code></pre>
+        <p>The installer creates a GNOME autostart entry. After an update, restart the running kiosk:</p>
+        <pre><code>systemctl --user restart synra-electron-kiosk.service</code></pre>
         <p>It launches this runtime URL:</p>
         <pre><code>http://127.0.0.1:5191/?profile=jetson&amp;mode=kiosk&amp;fps=30&amp;live=1&amp;quality=sharp&amp;scale=1&amp;maxw=2560&amp;maxh=1600&amp;avatar=code1&amp;telemetry=1</code></pre>
         <p>Snap Chromium is kept only as a fallback:</p>
