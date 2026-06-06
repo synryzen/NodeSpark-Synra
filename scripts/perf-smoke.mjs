@@ -344,6 +344,13 @@ const elevenLabsVoiceSettingsAreAvailable =
   serverScript.includes("handle_elevenlabs_tts") &&
   serverScript.includes("xi-api-key") &&
   serverScript.includes("audioBase64");
+const browserFallbackVoiceIsDeliberate =
+  mainScript.includes('id="browserVoiceSelect"') &&
+  mainScript.includes("PREFERRED_BROWSER_VOICE_HINTS") &&
+  mainScript.includes("preferredBrowserVoice") &&
+  mainScript.includes("selectedBrowserVoice") &&
+  mainScript.includes("utterance.voice = browserVoice") &&
+  mainScript.includes("Browser fallback voice:");
 const productAccessSplitIsExplicit =
   mainScript.includes('id="nodeSparkAccessInput"') &&
   mainScript.includes('id="openSkillSettingsButton"') &&
@@ -470,6 +477,7 @@ const result = {
     jetsonOpsHelpersAreAvailable &&
     voiceReliabilityControlsAreAvailable &&
     elevenLabsVoiceSettingsAreAvailable &&
+    browserFallbackVoiceIsDeliberate &&
     productAccessSplitIsExplicit &&
     voicePolishIsAvailable &&
     elevenLabsVoicePickerIsAvailable &&
@@ -549,6 +557,7 @@ const result = {
     "Jetson operations include health, log export, and Mac dev launch helpers",
     "voice controls include immediate stop and audio diagnostics",
     "ElevenLabs voice settings and server-side TTS proxy are wired with browser fallback",
+    "browser speech fallback deliberately chooses and exposes a system voice",
     "ElevenLabs voices can be loaded and selected by name",
     "voice diagnostics include audio unlock and playback-blocked feedback",
     "Electron kiosk can auto-grant local mic/camera permissions for the dedicated station",

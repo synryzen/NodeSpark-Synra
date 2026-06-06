@@ -26,6 +26,8 @@ export function saveModelSettings(settings: ModelSettings): void {
 export function loadVoiceSettings(): VoiceSettings {
   return readJson<VoiceSettings>(voiceKey, {
     provider: "browser",
+    browserVoiceURI: "",
+    browserVoiceName: "",
     elevenLabsApiKey: "",
     elevenLabsVoiceId: "",
     elevenLabsVoiceName: "",

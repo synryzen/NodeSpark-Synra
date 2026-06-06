@@ -149,6 +149,25 @@ const PRESENCE_NUDGES = [
   "Systems are calm.",
   "I am standing by."
 ];
+const PREFERRED_BROWSER_VOICE_HINTS = [
+  "samantha",
+  "victoria",
+  "zira",
+  "aria",
+  "jenny",
+  "susan",
+  "karen",
+  "moira",
+  "tessa",
+  "serena",
+  "ava",
+  "emma",
+  "amy",
+  "joanna",
+  "salli",
+  "kendra",
+  "female"
+];
 
 const runtimeMode = resolveRuntimeMode();
 const initialPerformanceTier = resolveInitialPerformanceTier();
@@ -479,6 +498,13 @@ app.innerHTML = `
           </select>
         </label>
         <label>
+          Browser fallback voice
+          <select id="browserVoiceSelect">
+            <option value="">Best available English female voice</option>
+          </select>
+        </label>
+        <p id="browserVoiceStatus" class="settings-note">Browser speech uses the best available English female-style system voice when ElevenLabs is not configured.</p>
+        <label>
           ElevenLabs API key
           <input id="elevenLabsApiKeyInput" type="password" autocomplete="off" placeholder="Paste ElevenLabs API key" />
         </label>
@@ -766,6 +792,8 @@ const memoryFactsInput = must<HTMLElement, HTMLTextAreaElement>("memoryFactsInpu
 const memoryRoutinesInput = must<HTMLElement, HTMLTextAreaElement>("memoryRoutinesInput");
 const memoryDevicesInput = must<HTMLElement, HTMLTextAreaElement>("memoryDevicesInput");
 const voiceProviderInput = must<HTMLElement, HTMLSelectElement>("voiceProviderInput");
+const browserVoiceSelect = must<HTMLElement, HTMLSelectElement>("browserVoiceSelect");
+const browserVoiceStatusEl = must<HTMLElement, HTMLElement>("browserVoiceStatus");
 const elevenLabsApiKeyInput = must<HTMLElement, HTMLInputElement>("elevenLabsApiKeyInput");
 const loadElevenLabsVoicesButton = must<HTMLElement, HTMLButtonElement>("loadElevenLabsVoicesButton");
 const voiceDiagnosticsButton = must<HTMLElement, HTMLButtonElement>("voiceDiagnosticsButton");
@@ -848,9 +876,15 @@ applyBackground(resolveBackground(state.visual.backgroundId));
 applyControlMode(resolveInitialControlMode());
 void bootAvatarRuntime();
 refreshServerModelStatus().catch(() => {});
+populateBrowserVoiceSelect();
 refreshVoiceStatus();
 refreshVisionStatus().catch(() => {});
-if ("speechSynthesis" in window) speechSynthesis.addEventListener("voiceschanged", refreshVoiceStatus);
+if ("speechSynthesis" in window) {
+  speechSynthesis.addEventListener("voiceschanged", () => {
+    populateBrowserVoiceSelect();
+    refreshVoiceStatus();
+  });
+}
 requestAnimationFrame(render);
 refreshModelLabel();
 refreshAiConnectionPanel();
@@ -1181,6 +1215,14 @@ voiceProviderInput.addEventListener("change", () => {
   refreshVoiceStatus();
 });
 
+browserVoiceSelect.addEventListener("change", () => {
+  const selected = selectedBrowserVoice();
+  state.voiceSettings = { ...readVoiceSettingsFromInputs(), browserVoiceName: selected?.name ?? "" };
+  saveVoiceSettings(state.voiceSettings);
+  updateBrowserVoiceStatus(browserVoiceStatusText());
+  refreshVoiceStatus();
+});
+
 elevenLabsApiKeyInput.addEventListener("input", () => {
   updateElevenLabsVoiceStatus(elevenLabsVoiceStatusText());
 });
@@ -1271,6 +1313,7 @@ function applyProviderPreset(provider: string): void {
 
 function populateVoiceSettingsInputs(): void {
   voiceProviderInput.value = resolveVoiceProvider(state.voiceSettings.provider);
+  populateBrowserVoiceSelect();
   elevenLabsApiKeyInput.value = state.voiceSettings.elevenLabsApiKey;
   elevenLabsVoiceIdInput.value = state.voiceSettings.elevenLabsVoiceId;
   populateElevenLabsVoiceSelect();
@@ -1283,8 +1326,11 @@ function populateVoiceSettingsInputs(): void {
 
 function readVoiceSettingsFromInputs(): VoiceSettings {
   const selected = state.elevenLabsVoices.find((voice) => voice.voiceId === elevenLabsVoiceIdInput.value.trim());
+  const browserVoice = selectedBrowserVoice();
   return {
     provider: resolveVoiceProvider(voiceProviderInput.value),
+    browserVoiceURI: browserVoice?.voiceURI ?? state.voiceSettings.browserVoiceURI ?? "",
+    browserVoiceName: browserVoice?.name ?? state.voiceSettings.browserVoiceName ?? "",
     elevenLabsApiKey: elevenLabsApiKeyInput.value.trim(),
     elevenLabsVoiceId: elevenLabsVoiceIdInput.value.trim(),
     elevenLabsVoiceName: selected?.name ?? state.voiceSettings.elevenLabsVoiceName ?? "",
@@ -1293,6 +1339,82 @@ function readVoiceSettingsFromInputs(): VoiceSettings {
     elevenLabsStability: clampUnit(Number(elevenLabsStabilityInput.value), 0.48),
     elevenLabsSimilarityBoost: clampUnit(Number(elevenLabsSimilarityInput.value), 0.78)
   };
+}
+
+function populateBrowserVoiceSelect(): void {
+  const voices = browserSpeechVoices();
+  if (!("speechSynthesis" in window)) {
+    browserVoiceSelect.innerHTML = `<option value="">Browser speech unavailable</option>`;
+    updateBrowserVoiceStatus("Browser speech is not available in this kiosk/browser.");
+    return;
+  }
+  if (voices.length === 0) {
+    browserVoiceSelect.innerHTML = `<option value="">No browser voices loaded yet</option>`;
+    updateBrowserVoiceStatus("No browser voices are loaded yet. Use ElevenLabs for reliable speech.");
+    return;
+  }
+  const preferred = resolveBrowserVoice(state.voiceSettings.browserVoiceURI, voices);
+  const sorted = [...voices].sort((a, b) => voiceSortKey(a).localeCompare(voiceSortKey(b)));
+  browserVoiceSelect.innerHTML = sorted
+    .map((voice) => `<option value="${escapeHtml(voice.voiceURI)}">${escapeHtml(`${voice.name} (${voice.lang})`)}</option>`)
+    .join("");
+  browserVoiceSelect.value = preferred?.voiceURI ?? "";
+  if (!state.voiceSettings.browserVoiceURI && preferred) {
+    state.voiceSettings = { ...state.voiceSettings, browserVoiceURI: preferred.voiceURI, browserVoiceName: preferred.name };
+    saveVoiceSettings(state.voiceSettings);
+  }
+  updateBrowserVoiceStatus(browserVoiceStatusText());
+}
+
+function browserSpeechVoices(): SpeechSynthesisVoice[] {
+  if (!("speechSynthesis" in window)) return [];
+  return speechSynthesis.getVoices();
+}
+
+function selectedBrowserVoice(): SpeechSynthesisVoice | null {
+  return resolveBrowserVoice(browserVoiceSelect.value || state.voiceSettings.browserVoiceURI, browserSpeechVoices());
+}
+
+function resolveBrowserVoice(voiceURI: string | undefined, voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  if (voiceURI) {
+    const exact = voices.find((voice) => voice.voiceURI === voiceURI);
+    if (exact) return exact;
+  }
+  return preferredBrowserVoice(voices);
+}
+
+function preferredBrowserVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  if (voices.length === 0) return null;
+  const scored = voices
+    .map((voice) => ({ voice, score: browserVoiceScore(voice) }))
+    .sort((a, b) => b.score - a.score || a.voice.name.localeCompare(b.voice.name));
+  return scored[0]?.voice ?? voices[0] ?? null;
+}
+
+function browserVoiceScore(voice: SpeechSynthesisVoice): number {
+  const name = `${voice.name} ${voice.voiceURI}`.toLowerCase();
+  const languageScore = voice.lang.toLowerCase().startsWith("en-us") ? 20 : voice.lang.toLowerCase().startsWith("en") ? 12 : 0;
+  const hintScore = PREFERRED_BROWSER_VOICE_HINTS.reduce((score, hint, index) => name.includes(hint) ? Math.max(score, 40 - index) : score, 0);
+  return languageScore + hintScore + (voice.default ? 2 : 0);
+}
+
+function voiceSortKey(voice: SpeechSynthesisVoice): string {
+  const preferred = browserVoiceScore(voice) > 20 ? "0" : "1";
+  return `${preferred}-${voice.lang}-${voice.name}`;
+}
+
+function browserVoiceStatusText(): string {
+  if (!("speechSynthesis" in window)) return "Browser speech is unavailable here. Configure ElevenLabs for voice.";
+  const voices = browserSpeechVoices();
+  if (voices.length === 0) return "No browser voices are loaded. Configure ElevenLabs for reliable voice.";
+  const selected = selectedBrowserVoice();
+  if (!selected) return "Browser fallback will use the system default voice.";
+  const languageNote = selected.lang.toLowerCase().startsWith("en") ? "" : " Install an English system voice or use ElevenLabs for a better Synra voice.";
+  return `Browser fallback voice: ${selected.name} (${selected.lang}).${languageNote}`;
+}
+
+function updateBrowserVoiceStatus(message: string): void {
+  browserVoiceStatusEl.textContent = message;
 }
 
 function populateElevenLabsVoiceSelect(): void {
@@ -2948,6 +3070,8 @@ function fallbackToBrowserSpeech(text: string, serial = speechSerial): void {
   speechSynthesis.cancel();
   setSynraState("speaking", text);
   const utterance = new SpeechSynthesisUtterance(text);
+  const browserVoice = selectedBrowserVoice();
+  if (browserVoice) utterance.voice = browserVoice;
   utterance.rate = 0.96;
   utterance.pitch = 1.04;
   utterance.onstart = () => {
@@ -3081,6 +3205,7 @@ async function ensureMicrophoneReady(): Promise<boolean> {
 }
 
 function refreshVoiceStatus(): void {
+  updateBrowserVoiceStatus(browserVoiceStatusText());
   if (state.voiceSettings.provider === "elevenLabs") {
     const configured = Boolean(state.voiceSettings.elevenLabsApiKey && state.voiceSettings.elevenLabsVoiceId);
     const voiceName = state.voiceSettings.elevenLabsVoiceName || state.elevenLabsVoices.find((voice) => voice.voiceId === state.voiceSettings.elevenLabsVoiceId)?.name || "";
@@ -3099,7 +3224,9 @@ function refreshVoiceStatus(): void {
   else if (canListen) updateVoiceStatus("Listen ready");
   else updateVoiceStatus("Text ready");
   updateElevenLabsVoiceStatus(elevenLabsVoiceStatusText());
-  setConnectionTruth("voice", canSpeak || canListen ? "ready" : "configured", canSpeak || canListen ? "Browser voice path available" : "Text input is available");
+  const selected = selectedBrowserVoice();
+  const browserDetail = selected ? `Browser voice path available: ${selected.name}` : "Browser voice path available";
+  setConnectionTruth("voice", canSpeak || canListen ? "ready" : "configured", canSpeak || canListen ? browserDetail : "Text input is available");
 }
 
 function updateVoiceStatus(label: string): void {
@@ -3976,12 +4103,19 @@ async function runVoiceDiagnostics(): Promise<void> {
   const audioReady = await unlockAudioPlayback();
   const devices = await audioDeviceDiagnostics();
   const provider = voiceProviderLabel(state.voiceSettings.provider);
+  const browserVoices = browserSpeechVoices();
+  const browserVoice = selectedBrowserVoice();
+  const browserState = "speechSynthesis" in window
+    ? browserVoice
+      ? `Browser fallback voice: ${browserVoice.name} (${browserVoice.lang}); ${browserVoices.length} system voices visible.`
+      : `Browser speech is available but no system voices are visible.`
+    : "Browser speech is unavailable in this runtime.";
   const elevenLabsState = state.voiceSettings.provider === "elevenLabs"
     ? state.voiceSettings.elevenLabsApiKey && state.voiceSettings.elevenLabsVoiceId
       ? `ElevenLabs configured${state.voiceSettings.elevenLabsVoiceName ? ` with ${state.voiceSettings.elevenLabsVoiceName}` : ""}.`
       : "ElevenLabs needs an API key and selected voice."
     : "Browser speech is selected.";
-  const message = `Voice diagnostics: ${provider}. Audio unlock ${audioReady ? "ready" : "blocked"}. ${devices} ${elevenLabsState}`;
+  const message = `Voice diagnostics: ${provider}. Audio unlock ${audioReady ? "ready" : "blocked"}. ${devices} ${browserState} ${elevenLabsState}`;
   updateVoiceStatus(audioReady ? "Voice diagnostics" : "Playback blocked");
   setConnectionTruth("voice", audioReady ? "ready" : "permission-needed", message);
   pushMessage("synra", message);

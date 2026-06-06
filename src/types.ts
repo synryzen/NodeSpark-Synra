@@ -34,6 +34,8 @@ export interface SynraMemory {
 
 export interface VoiceSettings {
   provider: VoiceProvider;
+  browserVoiceURI: string;
+  browserVoiceName: string;
   elevenLabsApiKey: string;
   elevenLabsVoiceId: string;
   elevenLabsVoiceName: string;
