@@ -321,7 +321,7 @@ SYNRA_HOME_ASSISTANT_DEFAULT_LIGHT=light.living_room</code></pre>
         <p>The installer creates a user-level Electron kiosk service. After an update, restart the running kiosk:</p>
         <pre><code>systemctl --user restart synra-electron-kiosk.service</code></pre>
         <p>It launches this runtime URL:</p>
-        <pre><code>http://127.0.0.1:5191/?profile=jetson&amp;mode=kiosk&amp;fps=30&amp;live=1&amp;quality=sharp&amp;scale=1&amp;maxw=2560&amp;maxh=1600&amp;avatar=code1&amp;telemetry=1</code></pre>
+        <pre><code>http://127.0.0.1:5191/?profile=jetson&amp;mode=kiosk&amp;fps=30&amp;live=1&amp;quality=sharp&amp;scale=1&amp;maxw=2560&amp;maxh=1600&amp;avatar=classic&amp;telemetry=1</code></pre>
         <p>Snap Chromium is kept only as a manual fallback:</p>
         <pre><code>~/synra-standalone/scripts/start-jetson-kiosk.sh</code></pre>
         <p>Keep only one kiosk shell enabled. The installer disables older Chromium autostart launchers because running Chromium behind Electron can make Synra extremely slow after reboot.</p>

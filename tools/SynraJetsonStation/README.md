@@ -155,7 +155,7 @@ Inside Synra, open `Settings` > `Display` and use `Switch to Windowed Setup` or 
 This launches the existing Synra app URL outside snap Chromium confinement:
 
 ```text
-http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=30&live=1&quality=sharp&scale=1&maxw=2560&maxh=1600&avatar=code1&telemetry=1
+http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=30&live=1&quality=sharp&scale=1&maxw=2560&maxh=1600&avatar=classic&telemetry=1
 ```
 
 The shell applies GPU-focused Chromium switches before Electron starts, including WebGL/WebGL2, `ignore-gpu-blocklist`, optional ANGLE backend selection, and opt-in local remote debugging. When `SYNRA_KIOSK_REMOTE_DEBUG=true`, the debug endpoint is:

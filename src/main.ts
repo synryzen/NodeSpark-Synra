@@ -7,11 +7,13 @@ import { SynraAvatarRuntime } from "./hub-runtime/drivers/avatar3d";
 import type { SynraActionName, SynraMode } from "./hub-runtime/types/avatar";
 import { askModel, classifySynraRequest, localSynraReply } from "./model-client";
 import { SynraMotionPlayer, type SynraMotionClipSpec } from "./motion-player";
-import { loadCompanionSettings, loadHomeAssistantSettings, loadMemory, loadModelSettings, loadProductSettings, loadVisualSettings, loadVoiceSettings, saveCompanionSettings, saveHomeAssistantSettings, saveMemory, saveModelSettings, saveProductSettings, saveVisualSettings, saveVoiceSettings } from "./storage";
+import { SERVER_SECRET_SENTINEL, loadCompanionSettings, loadHomeAssistantSettings, loadMemory, loadModelSettings, loadProductSettings, loadVisualSettings, loadVoiceSettings, saveCompanionSettings, saveHomeAssistantSettings, saveMemory, saveModelSettings, saveProductSettings, saveVisualSettings, saveVoiceSettings } from "./storage";
 import type { CompanionSettings, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraMessage, SynraSkillMode, SynraState, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
+import packageInfo from "../package.json";
 
 const app = document.querySelector<HTMLElement>("#app");
 if (!app) throw new Error("Missing app root.");
+const SYNRA_STANDALONE_VERSION = String((packageInfo as { version?: string }).version ?? "0.1.0");
 
 type SynraBackground = {
   id: string;
@@ -46,11 +48,13 @@ type PendingAction = {
   action: "turn_on" | "turn_off" | "toggle";
   label: string;
   entityId?: string;
+  confirmationToken?: string;
   createdAt: number;
 } | {
   type: "nodespark_workflow";
   workflowName: string;
   label: string;
+  confirmationToken?: string;
   createdAt: number;
 };
 
@@ -259,7 +263,7 @@ Object.assign(window, {
     backgroundCount: SYNRA_BACKGROUNDS.length,
     motion: state.motionPlayer.snapshot,
     voiceStatus: state.voiceStatus,
-    productSettings: state.productSettings,
+    productSettings: publicProductSettings(),
     homeAssistantSettings: publicHomeAssistantSettings(),
     skillAccess: skillAccessSnapshot(),
     visionStatus: state.visionStatus,
@@ -655,7 +659,7 @@ app.innerHTML = `
           <button type="button" id="saveKnownUserButton">Save User</button>
         </div>
         <div id="knownUsersList" class="known-users-list"></div>
-        <p class="settings-note">Face setup is opt-in and local to this device. Synra uses it as a future recognition profile, and you can delete users anytime.</p>
+        <p class="settings-note">Face setup is opt-in and local to this device. Raw camera frames are not saved to memory, sanitized backups exclude face images, and you can delete known users anytime.</p>
       </section>
       <section class="settings-panel" data-settings-panel="home" role="tabpanel" hidden>
         <h3>Home Assistant</h3>
@@ -725,7 +729,7 @@ app.innerHTML = `
           <span>Hub</span>
           <strong id="nodeSparkPairedHubStatus">No Hub token</strong>
         </div>
-        <p class="settings-note">Generate the PIN in NodeSparkHub, enter it once here, and Synra will store the paired-device token locally. Workflow execution will still require confirmation before anything runs.</p>
+        <p class="settings-note">Generate the PIN in NodeSparkHub and enter it once here. Synra keeps the paired-device token server-side, stores only a configured marker in the browser, and requires confirmation before any workflow runs.</p>
       </section>
       <section class="settings-panel" data-settings-panel="display" role="tabpanel" hidden>
         <h3>Display</h3>
@@ -755,8 +759,12 @@ app.innerHTML = `
           <strong>synryzen.com</strong>
           <span>Product</span>
           <strong>Synra Standalone</strong>
+          <span>Version</span>
+          <strong id="settingsVersionStatus">4.3</strong>
+          <span>Secrets</span>
+          <strong>Server-managed markers</strong>
         </div>
-        <p class="settings-note">Synra is a standalone companion assistant with optional Home Assistant and NodeSparkHub skills.</p>
+        <p class="settings-note">Synra is a standalone companion assistant with optional Home Assistant and NodeSparkHub skills. Backups are intentionally secret-free.</p>
       </section>
       <menu>
         <button value="cancel">Cancel</button>
@@ -766,6 +774,8 @@ app.innerHTML = `
         <button type="button" id="forgetMemoriesButton">Forget Memory</button>
         <button type="button" id="exportMemoryButton">Export Memory</button>
         <button type="button" id="importMemoryButton">Import Memory</button>
+        <button type="button" id="exportBackupButton">Export Backup</button>
+        <button type="button" id="importBackupButton">Restore Backup</button>
         <button id="saveSettingsButton" value="default">Save</button>
       </menu>
     </form>
@@ -811,7 +821,7 @@ app.innerHTML = `
       </section>
       <div class="wizard-trust">
         <strong>Privacy defaults</strong>
-        <p>No raw audio or camera frames are saved to memory. Wake word processing starts local-first, face setup is opt-in, and Home Assistant actions still require confirmation.</p>
+        <p>No raw audio or camera frames are saved to memory. Wake word processing starts local-first, face setup is opt-in, backups exclude face images and credentials, and Home Assistant actions require confirmation.</p>
       </div>
       <menu>
         <button type="button" id="wizardSkipButton">Later</button>
@@ -836,6 +846,8 @@ app.innerHTML = `
         <a href="${SYNRYZEN_WEBSITE_URL}" target="_blank" rel="noreferrer">${SYNRYZEN_WEBSITE_URL}</a>
         <span>Core modes</span>
         <strong>Companion, Home Assistant, NodeSparkHub skill</strong>
+        <span>Version</span>
+        <strong>${SYNRA_STANDALONE_VERSION}</strong>
       </div>
       <section class="about-section">
         <h3>NodeSparkHub</h3>
@@ -979,6 +991,8 @@ const testVoiceButton = must<HTMLElement, HTMLButtonElement>("testVoiceButton");
 const forgetMemoriesButton = must<HTMLElement, HTMLButtonElement>("forgetMemoriesButton");
 const exportMemoryButton = must<HTMLElement, HTMLButtonElement>("exportMemoryButton");
 const importMemoryButton = must<HTMLElement, HTMLButtonElement>("importMemoryButton");
+const exportBackupButton = must<HTMLElement, HTMLButtonElement>("exportBackupButton");
+const importBackupButton = must<HTMLElement, HTMLButtonElement>("importBackupButton");
 const saveSettingsButton = must<HTMLElement, HTMLButtonElement>("saveSettingsButton");
 const settingsAvatarStatusEl = must<HTMLElement, HTMLElement>("settingsAvatarStatus");
 const settingsBackgroundStatusEl = must<HTMLElement, HTMLElement>("settingsBackgroundStatus");
@@ -986,6 +1000,7 @@ const settingsQualityStatusEl = must<HTMLElement, HTMLElement>("settingsQualityS
 const settingsModeStatusEl = must<HTMLElement, HTMLElement>("settingsModeStatus");
 const settingsKioskWindowStatusEl = must<HTMLElement, HTMLElement>("settingsKioskWindowStatus");
 const settingsScreenTimeoutStatusEl = must<HTMLElement, HTMLElement>("settingsScreenTimeoutStatus");
+const settingsVersionStatusEl = must<HTMLElement, HTMLElement>("settingsVersionStatus");
 const kioskWindowToggleButton = must<HTMLElement, HTMLButtonElement>("kioskWindowToggleButton");
 
 const renderer = USE_HUB_AVATAR_RUNTIME ? null : createRenderer();
@@ -1039,6 +1054,7 @@ resize();
 window.addEventListener("resize", resize);
 
 setSynraState("idle", "Starting Synra.");
+void migrateBrowserSecretsToServer();
 document.body.dataset.runtimeMode = runtimeMode;
 populateQualitySelect();
 applyRenderQuality(resolveRenderQuality(state.visual.renderQuality));
@@ -1375,6 +1391,14 @@ importMemoryButton.addEventListener("click", () => {
   importMemoryFromSettings();
 });
 
+exportBackupButton.addEventListener("click", () => {
+  exportSanitizedBackupFromSettings();
+});
+
+importBackupButton.addEventListener("click", () => {
+  importSanitizedBackupFromSettings();
+});
+
 homeAssistantEntitySelect.addEventListener("change", () => {
   if (!homeAssistantEntitySelect.value) return;
   homeAssistantLightEntityInput.value = homeAssistantEntitySelect.value;
@@ -1411,35 +1435,49 @@ elevenLabsVoiceIdInput.addEventListener("change", () => {
 });
 
 saveSettingsButton.addEventListener("click", () => {
-  const temperature = Number(temperatureInput.value);
-  const next: ModelSettings = {
-    provider: resolveModelProvider(providerInput.value),
-    endpoint: endpointInput.value.trim(),
-    model: modelInput.value.trim(),
-    apiKey: apiKeyInput.value,
-    temperature: Number.isFinite(temperature) ? Math.min(Math.max(temperature, 0), 2) : 0.2,
-    systemPrompt: systemPromptInput.value.trim()
-  };
-  state.settings = next;
-  state.voiceSettings = readVoiceSettingsFromInputs();
-  state.productSettings = readProductSettingsFromInputs();
-  state.homeAssistantSettings = readHomeAssistantSettingsFromInputs();
-  state.memory = readMemorySettingsFromInputs();
-  state.companionSettings = readCompanionSettingsFromInputs();
-  saveModelSettings(next);
-  saveVoiceSettings(state.voiceSettings);
-  saveProductSettings(state.productSettings);
-  saveHomeAssistantSettings(state.homeAssistantSettings);
-  saveMemory(state.memory);
-  saveCompanionSettings(state.companionSettings);
-  refreshModelLabel();
-  refreshAiConnectionPanel();
-  refreshSkillPanel();
-  refreshNodeSparkPairingStatus();
-  refreshVoiceStatus();
-  refreshSystemHealthPanel();
-  refreshCompanionPresence();
+  void saveSettingsFromDialog();
 });
+
+async function saveSettingsFromDialog(): Promise<void> {
+  try {
+    const temperature = Number(temperatureInput.value);
+    const next: ModelSettings = {
+      provider: resolveModelProvider(providerInput.value),
+      endpoint: endpointInput.value.trim(),
+      model: modelInput.value.trim(),
+      apiKey: apiKeyInput.value,
+      temperature: Number.isFinite(temperature) ? Math.min(Math.max(temperature, 0), 2) : 0.2,
+      systemPrompt: systemPromptInput.value.trim()
+    };
+    const nextVoice = readVoiceSettingsFromInputs();
+    const nextProduct = readProductSettingsFromInputs();
+    const nextHomeAssistant = readHomeAssistantSettingsFromInputs();
+    await saveServerManagedSecrets(next, nextVoice, nextProduct, nextHomeAssistant);
+    state.settings = next;
+    state.voiceSettings = nextVoice;
+    state.productSettings = nextProduct;
+    state.homeAssistantSettings = nextHomeAssistant;
+    state.memory = readMemorySettingsFromInputs();
+    state.companionSettings = readCompanionSettingsFromInputs();
+    saveModelSettings(next);
+    saveVoiceSettings(state.voiceSettings);
+    saveProductSettings(state.productSettings);
+    saveHomeAssistantSettings(state.homeAssistantSettings);
+    saveMemory(state.memory);
+    saveCompanionSettings(state.companionSettings);
+    refreshModelLabel();
+    refreshAiConnectionPanel();
+    refreshSkillPanel();
+    refreshNodeSparkPairingStatus();
+    refreshVoiceStatus();
+    refreshSystemHealthPanel();
+    refreshCompanionPresence();
+    setSynraState("idle", "Settings saved. Secrets are stored server-side.");
+  } catch (error) {
+    setSynraState("offline", error instanceof Error ? error.message : "Settings could not be saved.");
+    void playMotionRoute("concerned", { restart: true, returnToIdle: true });
+  }
+}
 
 kioskWindowToggleButton.addEventListener("click", () => {
   void toggleKioskWindowMode();
@@ -1491,7 +1529,8 @@ function openSettingsDialog(initialTab = "ai"): void {
   providerInput.value = resolveModelProvider(state.settings.provider);
   endpointInput.value = state.settings.endpoint;
   modelInput.value = state.settings.model;
-  apiKeyInput.value = state.settings.apiKey;
+  apiKeyInput.value = displaySecretValue(state.settings.apiKey);
+  apiKeyInput.placeholder = isServerManagedSecret(state.settings.apiKey) ? "Server-managed API key saved" : "";
   temperatureInput.value = String(state.settings.temperature ?? 0.2);
   systemPromptInput.value = state.settings.systemPrompt ?? "";
   populateProductSettingsInputs();
@@ -1775,7 +1814,8 @@ function applyProviderPreset(provider: string): void {
 function populateVoiceSettingsInputs(): void {
   voiceProviderInput.value = resolveVoiceProvider(state.voiceSettings.provider);
   populateBrowserVoiceSelect();
-  elevenLabsApiKeyInput.value = state.voiceSettings.elevenLabsApiKey;
+  elevenLabsApiKeyInput.value = displaySecretValue(state.voiceSettings.elevenLabsApiKey);
+  elevenLabsApiKeyInput.placeholder = isServerManagedSecret(state.voiceSettings.elevenLabsApiKey) ? "Server-managed API key saved" : "";
   elevenLabsVoiceIdInput.value = state.voiceSettings.elevenLabsVoiceId;
   populateElevenLabsVoiceSelect();
   elevenLabsModelIdInput.value = state.voiceSettings.elevenLabsModelId || "eleven_multilingual_v2";
@@ -1892,10 +1932,11 @@ function populateElevenLabsVoiceSelect(): void {
 
 function elevenLabsVoiceStatusText(): string {
   if (resolveVoiceProvider(voiceProviderInput.value) !== "elevenLabs") return "Browser speech is selected.";
-  if (!elevenLabsApiKeyInput.value.trim()) return "Paste an ElevenLabs API key, then load voices.";
+  const keyReady = Boolean(elevenLabsApiKeyInput.value.trim() || state.voiceSettings.elevenLabsApiKey.trim());
+  if (!keyReady) return "Paste an ElevenLabs API key, then load voices.";
   if (!elevenLabsVoiceIdInput.value.trim()) return "Load voices and choose one, or paste a voice ID.";
   const voice = state.elevenLabsVoices.find((item) => item.voiceId === elevenLabsVoiceIdInput.value.trim());
-  return voice ? `Selected ${voice.name}.` : "Voice ID saved. Load voices to show its name.";
+  return voice ? `Selected ${voice.name}.` : "Voice ID saved. Server-managed keys are supported.";
 }
 
 function updateElevenLabsVoiceStatus(message: string): void {
@@ -1968,7 +2009,8 @@ function refreshNodeSparkPairingStatus(): void {
 function populateHomeAssistantSettingsInputs(): void {
   homeAssistantEnabledInput.value = state.homeAssistantSettings.enabled ? "on" : "off";
   homeAssistantUrlInput.value = state.homeAssistantSettings.url;
-  homeAssistantTokenInput.value = state.homeAssistantSettings.token;
+  homeAssistantTokenInput.value = displaySecretValue(state.homeAssistantSettings.token);
+  homeAssistantTokenInput.placeholder = isServerManagedSecret(state.homeAssistantSettings.token) ? "Server-managed token saved" : "";
   homeAssistantLightEntityInput.value = state.homeAssistantSettings.defaultLightEntity;
   populateHomeAssistantEntitySelect();
 }
@@ -2076,13 +2118,206 @@ function importMemoryFromSettings(): void {
   }
 }
 
+function exportSanitizedBackupFromSettings(): void {
+  state.memory = readMemorySettingsFromInputs();
+  state.companionSettings = readCompanionSettingsFromInputs();
+  state.visual = {
+    ...state.visual,
+    avatarId: resolveInitialAvatarId(),
+    backgroundId: resolveBackground(state.visual.backgroundId).id,
+    renderQuality: resolveRenderQuality(state.visual.renderQuality),
+    controlMode: resolveInitialControlMode()
+  };
+  saveMemory(state.memory);
+  saveCompanionSettings(state.companionSettings);
+  const backup = {
+    kind: "synra-standalone-sanitized-backup",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    appVersion: SYNRA_STANDALONE_VERSION,
+    settings: {
+      model: {
+        provider: resolveModelProvider(providerInput.value),
+        endpoint: endpointDisplayLabel(endpointInput.value.trim()),
+        model: modelInput.value.trim(),
+        apiKeyConfigured: secretConfigured(apiKeyInput.value.trim() || state.settings.apiKey)
+      },
+      voice: {
+        provider: resolveVoiceProvider(voiceProviderInput.value),
+        browserVoiceName: state.voiceSettings.browserVoiceName,
+        elevenLabsVoiceIdConfigured: secretConfigured(elevenLabsVoiceIdInput.value.trim()),
+        elevenLabsApiKeyConfigured: secretConfigured(elevenLabsApiKeyInput.value.trim() || state.voiceSettings.elevenLabsApiKey)
+      },
+      homeAssistant: publicHomeAssistantSettings(),
+      product: publicProductSettings(),
+      visual: state.visual,
+      companion: {
+        ...state.companionSettings,
+        knownUsers: state.companionSettings.knownUsers.map((user) => ({
+          ...user,
+          faceSamples: [],
+          faceSampleCount: user.faceSamples.length
+        }))
+      },
+      memory: state.memory
+    }
+  };
+  const exported = JSON.stringify(backup, null, 2);
+  navigator.clipboard?.writeText(exported).then(
+    () => setSynraState("idle", "Secret-free Synra backup copied to clipboard."),
+    () => setSynraState("idle", "Secret-free Synra backup is ready in the memory field.")
+  );
+  memoryFactsInput.value = `${memoryFactsInput.value.trim()}\n\n${exported}`.trim();
+}
+
+function importSanitizedBackupFromSettings(): void {
+  const raw = window.prompt("Paste a Synra sanitized backup JSON. Secrets and face samples are never restored from backups.");
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw) as { kind?: string; settings?: { memory?: Partial<typeof state.memory>; companion?: Partial<CompanionSettings>; visual?: Partial<typeof state.visual> } };
+    if (parsed.kind !== "synra-standalone-sanitized-backup" || !parsed.settings) {
+      setSynraState("offline", "That backup is not a Synra sanitized backup.");
+      return;
+    }
+    if (parsed.settings.memory) {
+      const memory = parsed.settings.memory;
+      state.memory = {
+        preferredName: redactMemoryFact(String(memory.preferredName ?? "")),
+        style: redactMemoryFact(String(memory.style ?? "")) || "warm, direct, and useful",
+        savedFacts: Array.isArray(memory.savedFacts) ? memory.savedFacts.map((item) => redactMemoryFact(String(item))).filter(Boolean).slice(-40) : [],
+        routines: Array.isArray(memory.routines) ? memory.routines.map((item) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : [],
+        devices: Array.isArray(memory.devices) ? memory.devices.map((item) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : [],
+        rooms: Array.isArray(memory.rooms) ? memory.rooms.map((item) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : [],
+        preferences: Array.isArray(memory.preferences) ? memory.preferences.map((item) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : []
+      };
+      saveMemory(state.memory);
+      populateMemorySettingsInputs();
+    }
+    if (parsed.settings.companion) {
+      const companion = parsed.settings.companion;
+      const knownUsers = Array.isArray(companion.knownUsers)
+        ? companion.knownUsers.map((user) => ({
+          id: String(user.id || `user-${Date.now().toString(36)}`),
+          name: String(user.name || "").slice(0, 80),
+          relationship: String(user.relationship || "").slice(0, 80),
+          faceSamples: [],
+          recognitionEnabled: user.recognitionEnabled === true,
+          createdAt: String(user.createdAt || new Date().toISOString()),
+          updatedAt: new Date().toISOString()
+        })).filter((user) => user.name).slice(0, 12)
+        : state.companionSettings.knownUsers;
+      state.companionSettings = {
+        ...state.companionSettings,
+        setupComplete: companion.setupComplete !== false,
+        ownerName: String(companion.ownerName || state.companionSettings.ownerName).slice(0, 80),
+        wakeWordMode: normalizeWakeWordMode(String(companion.wakeWordMode || state.companionSettings.wakeWordMode)),
+        wakePhrase: String(companion.wakePhrase || DEFAULT_WAKE_PHRASE).slice(0, 40),
+        screenTimeoutMinutes: normalizeScreenTimeout(Number(companion.screenTimeoutMinutes ?? state.companionSettings.screenTimeoutMinutes)),
+        allowAlwaysListening: companion.allowAlwaysListening === true,
+        allowCameraRecognition: companion.allowCameraRecognition === true,
+        allowFaceSampleStorage: companion.allowFaceSampleStorage === true,
+        allowMemorySuggestions: companion.allowMemorySuggestions !== false,
+        knownUsers
+      };
+      saveCompanionSettings(state.companionSettings);
+      populateCompanionSettingsInputs();
+      renderKnownUsers();
+    }
+    if (parsed.settings.visual) {
+      state.visual = {
+        ...state.visual,
+        avatarId: isSynraAvatarId(String(parsed.settings.visual.avatarId ?? "")) ? parsed.settings.visual.avatarId as SynraAvatarId : state.visual.avatarId,
+        backgroundId: resolveBackground(String(parsed.settings.visual.backgroundId ?? "")).id,
+        renderQuality: resolveRenderQuality(parsed.settings.visual.renderQuality),
+        controlMode: parsed.settings.visual.controlMode === "live" ? "live" : "manual"
+      };
+      saveVisualSettings(state.visual);
+      applyRenderQuality(state.visual.renderQuality);
+      applyBackground(resolveBackground(state.visual.backgroundId));
+      applyControlMode(state.visual.controlMode);
+    }
+    setSynraState("idle", "Sanitized backup restored. Re-enter any credentials that are not already server-managed.");
+  } catch {
+    setSynraState("offline", "That backup import was not valid JSON.");
+  }
+}
+
+async function saveServerManagedSecrets(settings: ModelSettings, voice: VoiceSettings, product: ProductSettings, homeAssistant: HomeAssistantSettings): Promise<void> {
+  const response = await fetch("/api/secrets/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: { apiKey: settings.apiKey },
+      voice: {
+        elevenLabsApiKey: voice.elevenLabsApiKey,
+        elevenLabsVoiceId: voice.elevenLabsVoiceId
+      },
+      product: {
+        nodeSparkHubUrl: product.nodeSparkHubUrl,
+        nodeSparkDeviceToken: product.nodeSparkDeviceToken
+      },
+      homeAssistant: {
+        url: homeAssistant.url,
+        token: homeAssistant.token,
+        defaultLightEntity: homeAssistant.defaultLightEntity
+      }
+    })
+  });
+  const result = (await response.json()) as { ok?: boolean; error?: string };
+  if (!response.ok || !result.ok) {
+    throw new Error(result.error ?? "Synra could not save server-managed secrets.");
+  }
+}
+
+async function migrateBrowserSecretsToServer(): Promise<void> {
+  const hasBrowserSecret =
+    [state.settings.apiKey, state.voiceSettings.elevenLabsApiKey, state.productSettings.nodeSparkDeviceToken, state.homeAssistantSettings.token]
+      .some((value) => value.trim() && !isServerManagedSecret(value));
+  if (!hasBrowserSecret) return;
+  try {
+    await saveServerManagedSecrets(state.settings, state.voiceSettings, state.productSettings, state.homeAssistantSettings);
+    saveModelSettings(state.settings);
+    saveVoiceSettings(state.voiceSettings);
+    saveProductSettings(state.productSettings);
+    saveHomeAssistantSettings(state.homeAssistantSettings);
+    setSynraState("idle", "Existing secrets were moved to server-managed storage.");
+  } catch {
+    setConnectionTruth("ai", "configured", "Server route; browser secret migration pending");
+  }
+}
+
+function isServerManagedSecret(value: string | undefined): boolean {
+  return value === SERVER_SECRET_SENTINEL;
+}
+
+function displaySecretValue(value: string | undefined): string {
+  return isServerManagedSecret(value) ? "" : value ?? "";
+}
+
+function secretConfigured(value: string | undefined): boolean {
+  return Boolean(value?.trim());
+}
+
 function publicHomeAssistantSettings(): Omit<HomeAssistantSettings, "token"> & { tokenConfigured: boolean } {
   return {
     enabled: state.homeAssistantSettings.enabled,
     url: endpointDisplayLabel(state.homeAssistantSettings.url),
-    tokenConfigured: Boolean(state.homeAssistantSettings.token.trim()),
+    tokenConfigured: secretConfigured(state.homeAssistantSettings.token),
     defaultLightEntity: state.homeAssistantSettings.defaultLightEntity,
     knownEntities: state.homeAssistantSettings.knownEntities
+  };
+}
+
+function publicProductSettings(): Omit<ProductSettings, "nodeSparkDeviceToken"> & { nodeSparkDeviceTokenConfigured: boolean } {
+  return {
+    synraSkillMode: state.productSettings.synraSkillMode,
+    nodeSparkAccess: state.productSettings.nodeSparkAccess,
+    nodeSparkHubUrl: endpointDisplayLabel(state.productSettings.nodeSparkHubUrl),
+    nodeSparkDeviceId: state.productSettings.nodeSparkDeviceId,
+    nodeSparkDeviceName: state.productSettings.nodeSparkDeviceName,
+    nodeSparkHubId: state.productSettings.nodeSparkHubId,
+    nodeSparkTokenExpiresAt: state.productSettings.nodeSparkTokenExpiresAt,
+    nodeSparkDeviceTokenConfigured: secretConfigured(state.productSettings.nodeSparkDeviceToken)
   };
 }
 
@@ -2614,8 +2849,8 @@ async function tryHandlePendingAction(normalized: string): Promise<LocalCommandR
   if (/^(confirm|yes|do it|go|proceed|okay|ok)$/.test(normalized)) {
     const action = state.pendingAction;
     state.pendingAction = null;
-    if (action.type === "smart_home") return smartHomeLightCommand(action.action, action.entityId);
-    if (action.type === "nodespark_workflow") return runNodeSparkWorkflowCommand(action.workflowName);
+    if (action.type === "smart_home") return smartHomeLightCommand(action.action, action.entityId, action.confirmationToken);
+    if (action.type === "nodespark_workflow") return runNodeSparkWorkflowCommand(action.workflowName, action.confirmationToken);
   }
   return null;
 }
@@ -2833,6 +3068,19 @@ async function ensureCameraReady(): Promise<boolean> {
   }
 }
 
+async function prepareServerConfirmation(kind: "smart_home" | "nodespark_workflow", label: string, details: Record<string, string>): Promise<string> {
+  const response = await fetch("/api/confirmations/prepare", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind, label, details })
+  });
+  const result = (await response.json()) as { ok?: boolean; confirmationToken?: string; error?: string };
+  if (!response.ok || !result.ok || !result.confirmationToken) {
+    throw new Error(result.error ?? `Could not prepare ${label}.`);
+  }
+  return result.confirmationToken;
+}
+
 async function prepareSmartHomeLightCommand(action: "turn_on" | "turn_off" | "toggle", normalized = ""): Promise<LocalCommandResult> {
   if (!nodeSparkModeAllowsHomeAssistant()) {
     return { text: "Synra is currently in NodeSparkHub Controller focus. Switch to Hybrid or Home Assistant companion to control smart-home devices.", motion: "ask_question" };
@@ -2841,13 +3089,24 @@ async function prepareSmartHomeLightCommand(action: "turn_on" | "turn_off" | "to
   const target = matchHomeAssistantEntity(normalized);
   if (!configured) return smartHomeLightCommand(action, target?.entityId);
   const targetLabel = target?.name ?? homeAssistantDefaultEntityLabel();
+  const entityId = target?.entityId ?? state.homeAssistantSettings.defaultLightEntity;
   const label = action === "toggle" ? `toggle ${targetLabel}` : `turn ${targetLabel} ${action === "turn_on" ? "on" : "off"}`;
-  const risk = smartHomeRiskLevel(action, target?.entityId ?? state.homeAssistantSettings.defaultLightEntity);
+  const risk = smartHomeRiskLevel(action, entityId);
+  let confirmationToken = "";
+  try {
+    confirmationToken = await prepareServerConfirmation("smart_home", label, { action, entityId });
+  } catch (error) {
+    return {
+      text: `I could not prepare the smart-home confirmation: ${error instanceof Error ? error.message : "the local bridge did not respond."}`,
+      motion: "concerned"
+    };
+  }
   state.pendingAction = {
     type: "smart_home",
     action,
     label,
     entityId: target?.entityId,
+    confirmationToken,
     createdAt: performance.now()
   };
   return {
@@ -2952,7 +3211,7 @@ function nodeSparkWorkflowSubtext(workflow: NodeSparkWorkflowSummary): string {
   return detail || lastRun || "Tap to prepare. Synra will ask before anything starts.";
 }
 
-async function callNodeSparkAction(action: string, workflowName = ""): Promise<NodeSparkActionResponse> {
+async function callNodeSparkAction(action: string, workflowName = "", confirmationToken = ""): Promise<NodeSparkActionResponse> {
   const settings = state.productSettings;
   const response = await fetch("/api/nodespark/action", {
     method: "POST",
@@ -2960,6 +3219,7 @@ async function callNodeSparkAction(action: string, workflowName = ""): Promise<N
     body: JSON.stringify({
       action,
       workflowName,
+      confirmationToken,
       hubUrl: settings.nodeSparkHubUrl.trim(),
       deviceToken: settings.nodeSparkDeviceToken.trim(),
       deviceId: settings.nodeSparkDeviceId,
@@ -3046,13 +3306,25 @@ async function prepareNodeSparkWorkflowRunCommand(normalized: string): Promise<L
   if (!workflowName) {
     return { text: "Tell me the exact NodeSparkHub workflow name to run. I will ask for confirmation before it starts.", motion: "ask_question", routeLabel: "NodeSpark Command Center" };
   }
+  const hubUrl = state.productSettings.nodeSparkHubUrl.trim();
+  let confirmationToken = "";
+  try {
+    confirmationToken = await prepareServerConfirmation("nodespark_workflow", `run NodeSparkHub workflow ${workflowName}`, { hubUrl, workflowName });
+  } catch (error) {
+    return {
+      text: `I could not prepare the NodeSparkHub confirmation: ${error instanceof Error ? error.message : "the local bridge did not respond."}`,
+      motion: "concerned",
+      routeLabel: "NodeSpark Command Center"
+    };
+  }
   state.pendingAction = {
     type: "nodespark_workflow",
     workflowName,
     label: `run NodeSparkHub workflow ${workflowName}`,
+    confirmationToken,
     createdAt: performance.now()
   };
-  const hubLabel = endpointDisplayLabel(state.productSettings.nodeSparkHubUrl);
+  const hubLabel = endpointDisplayLabel(hubUrl);
   return {
     text: `I prepared ${workflowName}. Nothing has started yet. Review the card, then choose Run Workflow or Cancel.`,
     motion: "ask_question",
@@ -3067,10 +3339,10 @@ async function prepareNodeSparkWorkflowRunCommand(normalized: string): Promise<L
   };
 }
 
-async function runNodeSparkWorkflowCommand(workflowName: string): Promise<LocalCommandResult> {
+async function runNodeSparkWorkflowCommand(workflowName: string, confirmationToken = ""): Promise<LocalCommandResult> {
   setConnectionTruth("nodeSpark", "checking", `Running ${workflowName}`);
   try {
-    const result = await callNodeSparkAction("runWorkflow", workflowName);
+    const result = await callNodeSparkAction("runWorkflow", workflowName, confirmationToken);
     if (!result.ok) {
       setConnectionTruth("nodeSpark", "unreachable", result.error ?? "Workflow run failed");
       return {
@@ -3283,20 +3555,26 @@ async function smartHomeIsConfigured(): Promise<boolean> {
   }
 }
 
-async function smartHomeLightCommand(action: "turn_on" | "turn_off" | "toggle", entityId?: string): Promise<LocalCommandResult> {
+async function smartHomeLightCommand(action: "turn_on" | "turn_off" | "toggle", entityId?: string, confirmationToken = ""): Promise<LocalCommandResult> {
   setSynraState("thinking", "Checking smart home.");
   try {
     const response = await fetch("/api/tools/smart-home", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, entityId, homeAssistant: homeAssistantToolPayload() })
+      body: JSON.stringify({ action, entityId, confirmationToken, homeAssistant: homeAssistantToolPayload() })
     });
-    const result = (await response.json()) as { ok?: boolean; configured?: boolean; entityId?: string; error?: string; risk?: string };
+    const result = (await response.json()) as { ok?: boolean; configured?: boolean; entityId?: string; error?: string; risk?: string; confirmationRequired?: boolean };
     if (result.ok) {
       const target = friendlyHomeAssistantTargetName(result.entityId);
       const risk = result.risk ? ` Risk was ${result.risk}.` : "";
       const text = action === "toggle" ? `Done. I toggled ${target}.${risk}` : `Done. I turned ${target} ${action === "turn_on" ? "on" : "off"}.${risk}`;
       return { text, motion: "confirm" };
+    }
+    if (result.confirmationRequired) {
+      return {
+        text: "That smart-home confirmation expired or was not accepted. Ask me again and I will prepare a fresh confirmation.",
+        motion: "ask_question"
+      };
     }
     return {
       text: result.configured === false
@@ -3436,11 +3714,15 @@ function speak(text: string): void {
   stopElevenLabsAudio();
   clearSpeechFallback();
   void unlockAudioPlayback();
-  if (state.voiceSettings.provider === "elevenLabs" && state.voiceSettings.elevenLabsApiKey && state.voiceSettings.elevenLabsVoiceId) {
+  if (canUseElevenLabsSpeech()) {
     void playElevenLabsSpeech(text, serial);
     return;
   }
   fallbackToBrowserSpeech(text, serial);
+}
+
+function canUseElevenLabsSpeech(settings = state.voiceSettings): boolean {
+  return settings.provider === "elevenLabs" && Boolean(settings.elevenLabsVoiceId.trim());
 }
 
 async function unlockAudioPlayback(): Promise<boolean> {
@@ -4350,6 +4632,7 @@ function refreshSettingsDisplayStatus(): void {
   settingsQualityStatusEl.textContent = renderQualityLabel(resolveRenderQuality(state.visual.renderQuality));
   settingsModeStatusEl.textContent = resolveControlMode(state.visual.controlMode) === "live" ? "Live" : "Manual";
   settingsScreenTimeoutStatusEl.textContent = screenTimeoutLabel(state.companionSettings.screenTimeoutMinutes);
+  settingsVersionStatusEl.textContent = SYNRA_STANDALONE_VERSION;
 }
 
 async function refreshKioskWindowControls(): Promise<void> {
@@ -4624,9 +4907,9 @@ async function runVoiceDiagnostics(): Promise<void> {
       : `Browser speech is available but no system voices are visible.`
     : "Browser speech is unavailable in this runtime.";
   const elevenLabsState = state.voiceSettings.provider === "elevenLabs"
-    ? state.voiceSettings.elevenLabsApiKey && state.voiceSettings.elevenLabsVoiceId
-      ? `ElevenLabs configured${state.voiceSettings.elevenLabsVoiceName ? ` with ${state.voiceSettings.elevenLabsVoiceName}` : ""}.`
-      : "ElevenLabs needs an API key and selected voice."
+    ? canUseElevenLabsSpeech()
+      ? `ElevenLabs configured${state.voiceSettings.elevenLabsVoiceName ? ` with ${state.voiceSettings.elevenLabsVoiceName}` : ""}. Server-managed API keys are supported.`
+      : "ElevenLabs needs a selected voice."
     : "Browser speech is selected.";
   const message = `Voice diagnostics: ${provider}. Audio unlock ${audioReady ? "ready" : "blocked"}. ${devices} ${browserState} ${elevenLabsState}`;
   updateVoiceStatus(audioReady ? "Voice diagnostics" : "Playback blocked");
@@ -4646,10 +4929,10 @@ async function testVoiceConnection(): Promise<void> {
   setSynraState("speaking", `Voice test started with ${providerLabel}.`);
   try {
     await unlockAudioPlayback();
-    const elevenReady = state.voiceSettings.provider === "elevenLabs" && Boolean(state.voiceSettings.elevenLabsApiKey && state.voiceSettings.elevenLabsVoiceId);
+    const elevenReady = canUseElevenLabsSpeech();
     speak(elevenReady ? "Synra voice test. ElevenLabs voice is connected." : "Synra voice test. Browser speech is ready.");
-    setConnectionTruth("voice", state.voiceSettings.provider === "elevenLabs" && !elevenReady ? "not-configured" : "ready", elevenReady ? "ElevenLabs test started" : state.voiceSettings.provider === "elevenLabs" ? "ElevenLabs fallback needs API key and voice ID" : "Browser speech test started");
-    pushMessage("synra", elevenReady ? "Voice test started with ElevenLabs." : state.voiceSettings.provider === "elevenLabs" ? "ElevenLabs needs an API key and voice ID. I started browser speech fallback instead." : "Voice test started with browser speech.");
+    setConnectionTruth("voice", state.voiceSettings.provider === "elevenLabs" && !elevenReady ? "not-configured" : "ready", elevenReady ? "ElevenLabs test started" : state.voiceSettings.provider === "elevenLabs" ? "ElevenLabs fallback needs a selected voice" : "Browser speech test started");
+    pushMessage("synra", elevenReady ? "Voice test started with ElevenLabs." : state.voiceSettings.provider === "elevenLabs" ? "ElevenLabs needs a selected voice. I started browser speech fallback instead." : "Voice test started with browser speech.");
   } finally {
     window.setTimeout(() => {
       testVoiceButton.disabled = false;

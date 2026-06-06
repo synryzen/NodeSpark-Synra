@@ -21,9 +21,33 @@ COPYFILE_DISABLE=1 tar --no-xattrs \
 scp "$ARCHIVE" "${JETSON_USER}@${JETSON_HOST}:/tmp/synra-jetson-station-electron.tgz"
 
 ssh -tt "${JETSON_USER}@${JETSON_HOST}" "set -euo pipefail
+BACKUP_DIR=\"/home/${JETSON_USER}/synra-backups\"
+mkdir -p \"\$BACKUP_DIR\"
+BACKUP=\"\$BACKUP_DIR/synra-station-state-\$(date +%Y%m%d%H%M%S).tgz\"
+cd \"/home/${JETSON_USER}\"
+backup_paths=()
+for path in '.config/Electron' '.config/systemd/user/synra-electron-kiosk.service' 'synra-jetson-station/.env'; do
+  if [ -e \"\$path\" ]; then
+    backup_paths+=(\"\$path\")
+  fi
+done
+if [ \"\${#backup_paths[@]}\" -gt 0 ]; then
+  tar --ignore-failed-read -czf \"\$BACKUP\" \"\${backup_paths[@]}\"
+  chmod 600 \"\$BACKUP\"
+  echo \"Synra Station state backup: \$BACKUP\"
+fi
+ENV_BACKUP=\"\"
+if [ -f '$REMOTE_DIR/.env' ]; then
+  ENV_BACKUP=\"\$(mktemp)\"
+  cp '$REMOTE_DIR/.env' \"\$ENV_BACKUP\"
+fi
 rm -rf '$REMOTE_DIR'
 mkdir -p '$REMOTE_DIR'
 tar -xzf /tmp/synra-jetson-station-electron.tgz -C '$REMOTE_DIR'
+if [ -n \"\$ENV_BACKUP\" ]; then
+  cp \"\$ENV_BACKUP\" '$REMOTE_DIR/.env'
+  rm -f \"\$ENV_BACKUP\"
+fi
 find '$REMOTE_DIR' -name '._*' -delete
 find '$REMOTE_DIR' -name '.DS_Store' -delete
 chmod +x '$REMOTE_DIR/scripts/'*.sh

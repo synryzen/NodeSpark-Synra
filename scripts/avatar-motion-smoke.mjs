@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const defaultUrl = "http://192.168.1.165:5191/?profile=jetson&mode=kiosk&fps=30&live=1&quality=sharp&scale=1&avatar=code1&test=1";
+const defaultUrl = "http://192.168.1.165:5191/?profile=jetson&mode=kiosk&fps=30&live=1&quality=sharp&scale=1&avatar=classic&test=1";
 const smokeUrl = process.env.SYNRA_SMOKE_URL || defaultUrl;
 const motionLimit = Number(process.env.SYNRA_SMOKE_MOTION_LIMIT || "0");
 const motionPauseMs = Number(process.env.SYNRA_SMOKE_MOTION_PAUSE_MS || "650");

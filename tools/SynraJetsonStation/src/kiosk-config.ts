@@ -66,7 +66,7 @@ export function buildKioskLaunchConfig(env: KioskEnv = process.env): KioskLaunch
   params.set("scale", stringEnv(env, "SYNRA_KIOSK_RENDER_SCALE", "1"));
   params.set("maxw", stringEnv(env, "SYNRA_KIOSK_MAX_RENDER_WIDTH", "2560"));
   params.set("maxh", stringEnv(env, "SYNRA_KIOSK_MAX_RENDER_HEIGHT", "1600"));
-  params.set("avatar", stringEnv(env, "SYNRA_KIOSK_AVATAR", "code1"));
+  params.set("avatar", stringEnv(env, "SYNRA_KIOSK_AVATAR", "classic"));
   params.set("telemetry", "1");
 
   return {

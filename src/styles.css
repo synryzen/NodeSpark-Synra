@@ -1316,7 +1316,7 @@ body[data-synra-state="offline"] .signal-dot {
 }
 
 dialog {
-  width: min(640px, calc(100vw - 32px));
+  width: min(760px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
   overflow: auto;
   background: #101820;
@@ -1374,6 +1374,7 @@ dialog::backdrop {
   display: grid;
   gap: 12px;
   min-width: 0;
+  padding: 2px 0;
 }
 
 .settings-panel[hidden] {
@@ -1690,12 +1691,17 @@ dialog::backdrop {
 }
 
 .settings menu {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 8px;
   margin: 0;
+  border-top: 1px solid rgb(255 255 255 / 10%);
   padding: 0;
+  padding-top: 12px;
+}
+
+.settings menu button {
+  min-height: 40px;
 }
 
 @keyframes markPulse {

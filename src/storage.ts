@@ -8,6 +8,7 @@ const voiceKey = "synraStandalone.voiceSettings.v1";
 const productKey = "synraStandalone.productSettings.v1";
 const homeAssistantKey = "synraStandalone.homeAssistantSettings.v1";
 const companionKey = "synraStandalone.companionSettings.v1";
+export const SERVER_SECRET_SENTINEL = "__server_secret__";
 
 export function loadModelSettings(): ModelSettings {
   return readJson<ModelSettings>(modelKey, {
@@ -21,7 +22,10 @@ export function loadModelSettings(): ModelSettings {
 }
 
 export function saveModelSettings(settings: ModelSettings): void {
-  localStorage.setItem(modelKey, JSON.stringify(settings));
+  localStorage.setItem(modelKey, JSON.stringify({
+    ...settings,
+    apiKey: secretSentinelOrBlank(settings.apiKey)
+  }));
 }
 
 export function loadVoiceSettings(): VoiceSettings {
@@ -40,7 +44,10 @@ export function loadVoiceSettings(): VoiceSettings {
 }
 
 export function saveVoiceSettings(settings: VoiceSettings): void {
-  localStorage.setItem(voiceKey, JSON.stringify(settings));
+  localStorage.setItem(voiceKey, JSON.stringify({
+    ...settings,
+    elevenLabsApiKey: secretSentinelOrBlank(settings.elevenLabsApiKey)
+  }));
 }
 
 export function loadProductSettings(): ProductSettings {
@@ -57,7 +64,10 @@ export function loadProductSettings(): ProductSettings {
 }
 
 export function saveProductSettings(settings: ProductSettings): void {
-  localStorage.setItem(productKey, JSON.stringify(settings));
+  localStorage.setItem(productKey, JSON.stringify({
+    ...settings,
+    nodeSparkDeviceToken: secretSentinelOrBlank(settings.nodeSparkDeviceToken)
+  }));
 }
 
 export function loadHomeAssistantSettings(): HomeAssistantSettings {
@@ -71,7 +81,10 @@ export function loadHomeAssistantSettings(): HomeAssistantSettings {
 }
 
 export function saveHomeAssistantSettings(settings: HomeAssistantSettings): void {
-  localStorage.setItem(homeAssistantKey, JSON.stringify(settings));
+  localStorage.setItem(homeAssistantKey, JSON.stringify({
+    ...settings,
+    token: secretSentinelOrBlank(settings.token)
+  }));
 }
 
 export function loadCompanionSettings(): CompanionSettings {
@@ -132,4 +145,9 @@ function readJson<T>(key: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function secretSentinelOrBlank(value: string): string {
+  const trimmed = value.trim();
+  return trimmed ? SERVER_SECRET_SENTINEL : "";
 }

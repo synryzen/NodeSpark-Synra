@@ -40,7 +40,7 @@ https://synryzen.github.io/NodeSpark-Synra/jetson-install.html
 Default runtime:
 
 ```text
-http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=30&live=1&quality=sharp&scale=1&maxw=2560&maxh=1600&avatar=code1&telemetry=1
+http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=30&live=1&quality=sharp&scale=1&maxw=2560&maxh=1600&avatar=classic&telemetry=1
 ```
 
 Diagnostics:

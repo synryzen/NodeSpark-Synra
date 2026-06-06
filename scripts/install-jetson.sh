@@ -22,6 +22,33 @@ command_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
+backup_synra_state() {
+  local backup_dir backup path
+  backup_dir="$HOME/synra-backups"
+  backup="$backup_dir/synra-jetson-state-$(date +%Y%m%d%H%M%S).tgz"
+  mkdir -p "$backup_dir"
+  cd "$HOME"
+  local backup_paths=()
+  for path in \
+    ".config/synra-standalone" \
+    ".config/synra-standalone.env" \
+    ".config/Electron" \
+    ".config/systemd/user/synra-standalone.service" \
+    ".config/systemd/user/synra-standalone-watchdog.service" \
+    ".config/systemd/user/synra-standalone-watchdog.timer" \
+    ".config/systemd/user/synra-electron-kiosk.service" \
+    ".config/autostart.disabled"; do
+    if [ -e "$path" ]; then
+      backup_paths+=("$path")
+    fi
+  done
+  if [ "${#backup_paths[@]}" -gt 0 ]; then
+    tar --ignore-failed-read -czf "$backup" "${backup_paths[@]}"
+    chmod 600 "$backup"
+    echo "Synra state backup: $backup"
+  fi
+}
+
 ensure_node() {
   if command_exists node && command_exists npm; then
     local major
@@ -127,13 +154,41 @@ EnvironmentFile=-$ENV_FILE
 ExecStart=/usr/bin/python3 $APP_DIR/scripts/synra_server.py
 Restart=always
 RestartSec=3
+StartLimitIntervalSec=60
+StartLimitBurst=10
 
 [Install]
 WantedBy=default.target
 SERVICE
 
+  cat > "$HOME/.config/systemd/user/synra-standalone-watchdog.service" <<SERVICE
+[Unit]
+Description=Synra Standalone health watchdog
+
+[Service]
+Type=oneshot
+WorkingDirectory=$APP_DIR
+EnvironmentFile=-$ENV_FILE
+ExecStart=$APP_DIR/scripts/synra-watchdog.sh
+SERVICE
+
+  cat > "$HOME/.config/systemd/user/synra-standalone-watchdog.timer" <<SERVICE
+[Unit]
+Description=Run Synra Standalone health watchdog
+
+[Timer]
+OnBootSec=45
+OnUnitActiveSec=60
+AccuracySec=10
+Unit=synra-standalone-watchdog.service
+
+[Install]
+WantedBy=timers.target
+SERVICE
+
   systemctl --user daemon-reload
   systemctl --user enable synra-standalone.service
+  systemctl --user enable --now synra-standalone-watchdog.timer
   systemctl --user restart synra-standalone.service
 }
 
@@ -242,6 +297,7 @@ main() {
   ensure_node
   ensure_source
   write_default_env
+  backup_synra_state
   install_standalone
   install_standalone_service
   install_electron_station

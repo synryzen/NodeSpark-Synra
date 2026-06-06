@@ -10,6 +10,8 @@ import subprocess
 import time
 import urllib.error
 import base64
+import hashlib
+import secrets
 import urllib.parse
 import urllib.request
 from glob import glob
@@ -20,8 +22,15 @@ from typing import Any
 
 APP_DIR = Path(__file__).resolve().parents[1]
 DIST_DIR = APP_DIR / "dist"
+CONFIG_DIR = Path(os.environ.get("SYNRA_CONFIG_DIR", Path.home() / ".config" / "synra-standalone")).expanduser()
+SECRETS_PATH = CONFIG_DIR / "secrets.json"
+SERVER_SECRET_SENTINEL = "__server_secret__"
+APP_VERSION = os.environ.get("SYNRA_APP_VERSION", "").strip()
+STATION_VERSION = os.environ.get("SYNRA_STATION_VERSION", "").strip()
 STARTED_AT = time.time()
 LAST_TELEMETRY: dict[str, Any] = {}
+PENDING_CONFIRMATIONS: dict[str, dict[str, Any]] = {}
+CONFIRMATION_TTL_SECONDS = int(os.environ.get("SYNRA_CONFIRMATION_TTL_SECONDS", "45"))
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -32,7 +41,7 @@ def env_bool(name: str, default: bool = False) -> bool:
 
 
 class SynraHandler(SimpleHTTPRequestHandler):
-    server_version = "SynraStandalone/0.1"
+    server_version = "SynraStandalone/4.3"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, directory=str(DIST_DIR), **kwargs)
@@ -85,6 +94,9 @@ class SynraHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/telemetry/public"):
             self.send_json(200, {"ok": True, "telemetry": LAST_TELEMETRY})
             return
+        if self.path.startswith("/api/release/public"):
+            self.send_json(200, release_public_status())
+            return
         super().do_GET()
 
     def do_POST(self) -> None:
@@ -126,6 +138,12 @@ class SynraHandler(SimpleHTTPRequestHandler):
             return
         if self.path.startswith("/api/telemetry"):
             self.handle_telemetry()
+            return
+        if self.path.startswith("/api/confirmations/prepare"):
+            self.handle_prepare_confirmation()
+            return
+        if self.path.startswith("/api/secrets/save"):
+            self.handle_save_secrets()
             return
         self.send_json(404, {"ok": False, "error": "Unknown Synra API route."})
 
@@ -197,7 +215,7 @@ class SynraHandler(SimpleHTTPRequestHandler):
                     english_language_guardrail(),
                 ],
             }
-            response = post_json(endpoint, payload, str(body.get("apiKey") or "").strip())
+            response = post_json(endpoint, payload, secret_or_body("modelApiKey", str(body.get("apiKey") or "").strip(), "SYNRA_MODEL_API_KEY"))
             text = extract_model_text(response)
             if not text:
                 self.send_json(200, {"ok": False, "error": "External model returned no assistant text."})
@@ -224,8 +242,8 @@ class SynraHandler(SimpleHTTPRequestHandler):
         try:
             body = self.read_json_body()
             text = str(body.get("text") or "").strip()
-            api_key = str(body.get("apiKey") or os.environ.get("SYNRA_ELEVENLABS_API_KEY", "")).strip()
-            voice_id = str(body.get("voiceId") or os.environ.get("SYNRA_ELEVENLABS_VOICE_ID", "")).strip()
+            api_key = secret_or_body("elevenLabsApiKey", str(body.get("apiKey") or "").strip(), "SYNRA_ELEVENLABS_API_KEY")
+            voice_id = secret_or_body("elevenLabsVoiceId", str(body.get("voiceId") or "").strip(), "SYNRA_ELEVENLABS_VOICE_ID")
             model_id = str(body.get("modelId") or os.environ.get("SYNRA_ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")).strip()
             output_format = str(body.get("outputFormat") or os.environ.get("SYNRA_ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_128")).strip()
             stability = clamp_float(body.get("stability"), 0.0, 1.0, 0.48)
@@ -269,7 +287,7 @@ class SynraHandler(SimpleHTTPRequestHandler):
     def handle_elevenlabs_voices(self) -> None:
         try:
             body = self.read_json_body()
-            api_key = str(body.get("apiKey") or os.environ.get("SYNRA_ELEVENLABS_API_KEY", "")).strip()
+            api_key = secret_or_body("elevenLabsApiKey", str(body.get("apiKey") or "").strip(), "SYNRA_ELEVENLABS_API_KEY")
             if not api_key:
                 self.send_json(200, {"ok": False, "error": "No ElevenLabs API key is configured."})
                 return
@@ -305,6 +323,19 @@ class SynraHandler(SimpleHTTPRequestHandler):
                 self.send_json(200, {"ok": False, "configured": True, "error": "No smart-home entity is configured."})
                 return
             risk = smart_home_risk_level(action, entity_id)
+            if not consume_confirmation_token(str(body.get("confirmationToken") or ""), "smart_home", confirmation_fingerprint("smart_home", {"action": action, "entityId": entity_id})):
+                self.send_json(
+                    200,
+                    {
+                        "ok": False,
+                        "configured": True,
+                        "confirmationRequired": True,
+                        "risk": risk,
+                        "entityId": entity_id,
+                        "error": "Smart-home actions require a fresh Synra confirmation token.",
+                    },
+                )
+                return
             response = call_home_assistant_service(action, entity_id, config)
             self.send_json(200, {"ok": True, "configured": True, "action": action, "entityId": entity_id, "risk": risk, "response": response})
         except urllib.error.HTTPError as error:
@@ -369,7 +400,7 @@ class SynraHandler(SimpleHTTPRequestHandler):
         try:
             body = self.read_json_body()
             hub_url = normalize_nodespark_hub_url(str(body.get("hubUrl") or "").strip())
-            device_token = str(body.get("deviceToken") or "").strip()
+            device_token = secret_or_body("nodesparkDeviceToken", str(body.get("deviceToken") or "").strip())
             if not hub_url:
                 self.send_json(200, {"ok": False, "configured": False, "error": "No NodeSparkHub URL is configured."})
                 return
@@ -400,7 +431,26 @@ class SynraHandler(SimpleHTTPRequestHandler):
                 self.send_json(200, {"ok": False, "error": "Synra could not create a valid device ID. Reload and try again."})
                 return
             paired = call_nodespark_pair(hub_url, code, device_id, device_name)
-            self.send_json(200, {"ok": True, "configured": True, **paired})
+            save_local_secrets(
+                {
+                    "nodeSparkHubUrl": hub_url,
+                    "nodeSparkDeviceToken": paired.get("deviceToken", ""),
+                    "nodeSparkHubId": paired.get("hubId", ""),
+                    "nodeSparkTokenExpiresAt": paired.get("expiresAt", ""),
+                }
+            )
+            self.send_json(
+                200,
+                {
+                    "ok": True,
+                    "configured": True,
+                    "hubUrl": paired.get("hubUrl", endpoint_label(hub_url)),
+                    "hubId": paired.get("hubId", ""),
+                    "deviceToken": SERVER_SECRET_SENTINEL,
+                    "tokenConfigured": True,
+                    "expiresAt": paired.get("expiresAt", ""),
+                },
+            )
         except urllib.error.HTTPError as error:
             message = read_http_error(error) or f"NodeSparkHub rejected pairing with HTTP {error.code}."
             self.send_json(200, {"ok": False, "configured": True, "error": message})
@@ -413,7 +463,7 @@ class SynraHandler(SimpleHTTPRequestHandler):
         try:
             body = self.read_json_body()
             hub_url = normalize_nodespark_hub_url(str(body.get("hubUrl") or "").strip())
-            device_token = str(body.get("deviceToken") or "").strip()
+            device_token = secret_or_body("nodesparkDeviceToken", str(body.get("deviceToken") or "").strip())
             action = str(body.get("action") or "").strip()
             device_id = str(body.get("deviceId") or "").strip()
             device_name = str(body.get("deviceName") or "Synra Standalone Jetson").strip() or "Synra Standalone Jetson"
@@ -423,11 +473,27 @@ class SynraHandler(SimpleHTTPRequestHandler):
             if not device_token:
                 self.send_json(200, {"ok": False, "configured": True, "error": "Synra is not paired with NodeSparkHub yet."})
                 return
+            workflow_name = str(body.get("workflowName") or "").strip()
+            if action == "runWorkflow" and not consume_confirmation_token(
+                str(body.get("confirmationToken") or ""),
+                "nodespark_workflow",
+                confirmation_fingerprint("nodespark_workflow", {"hubUrl": hub_url, "workflowName": workflow_name}),
+            ):
+                self.send_json(
+                    200,
+                    {
+                        "ok": False,
+                        "configured": True,
+                        "confirmationRequired": True,
+                        "error": "NodeSparkHub workflow runs require a fresh Synra confirmation token.",
+                    },
+                )
+                return
             result = call_nodespark_action(
                 hub_url=hub_url,
                 device_token=device_token,
                 action=action,
-                workflow_name=str(body.get("workflowName") or "").strip(),
+                workflow_name=workflow_name,
                 device_id=device_id,
                 device_name=device_name,
             )
@@ -447,7 +513,7 @@ class SynraHandler(SimpleHTTPRequestHandler):
             image_base64 = normalize_data_url_image(str(body.get("imageBase64") or "").strip())
             endpoint = normalize_chat_endpoint(str(body.get("endpoint") or os.environ.get("SYNRA_VISION_MODEL_ENDPOINT") or model_endpoint()).strip())
             model = str(body.get("model") or os.environ.get("SYNRA_VISION_MODEL_NAME") or model_name()).strip()
-            api_key = str(body.get("apiKey") or os.environ.get("SYNRA_VISION_MODEL_API_KEY") or os.environ.get("SYNRA_MODEL_API_KEY", "")).strip()
+            api_key = secret_or_body("modelApiKey", str(body.get("apiKey") or "").strip(), "SYNRA_VISION_MODEL_API_KEY") or os.environ.get("SYNRA_MODEL_API_KEY", "").strip()
             if not image_base64:
                 self.send_json(200, {"ok": False, "error": "No transient vision frame was provided."})
                 return
@@ -493,6 +559,35 @@ class SynraHandler(SimpleHTTPRequestHandler):
         except Exception as error:
             self.send_json(200, {"ok": False, "error": str(error)})
 
+    def handle_prepare_confirmation(self) -> None:
+        try:
+            body = self.read_json_body()
+            kind = str(body.get("kind") or "").strip()
+            details = body.get("details") if isinstance(body.get("details"), dict) else {}
+            if kind not in {"smart_home", "nodespark_workflow"}:
+                self.send_json(400, {"ok": False, "error": "Unsupported confirmation kind."})
+                return
+            fingerprint = confirmation_fingerprint(kind, details)
+            token = create_confirmation_token(kind, fingerprint, str(body.get("label") or kind).strip())
+            self.send_json(
+                200,
+                {
+                    "ok": True,
+                    "confirmationToken": token,
+                    "expiresInSeconds": CONFIRMATION_TTL_SECONDS,
+                },
+            )
+        except Exception as error:
+            self.send_json(200, {"ok": False, "error": sanitize_error(error)})
+
+    def handle_save_secrets(self) -> None:
+        try:
+            body = self.read_json_body()
+            saved = save_browser_supplied_secrets(body)
+            self.send_json(200, {"ok": True, "saved": saved, "public": release_public_status()})
+        except Exception as error:
+            self.send_json(200, {"ok": False, "error": sanitize_error(error)})
+
     def read_json_body(self) -> dict[str, Any]:
         length = int(self.headers.get("content-length", "0"))
         if length <= 0:
@@ -501,12 +596,224 @@ class SynraHandler(SimpleHTTPRequestHandler):
         return json.loads(raw.decode("utf-8"))
 
     def send_json(self, status: int, payload: dict[str, Any]) -> None:
-        data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        data = json.dumps(redact_public_payload(payload), separators=(",", ":")).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+
+def read_package_version(path: Path) -> str:
+    try:
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+        return str(parsed.get("version") or "").strip()
+    except Exception:
+        return ""
+
+
+def app_version() -> str:
+    return APP_VERSION or read_package_version(APP_DIR / "package.json") or "0.1.0"
+
+
+def station_version() -> str:
+    station_dir = Path(os.environ.get("SYNRA_STATION_DIR", APP_DIR.parent / "synra-jetson-station")).expanduser()
+    return (
+        STATION_VERSION
+        or read_package_version(APP_DIR / "tools" / "SynraJetsonStation" / "package.json")
+        or read_package_version(station_dir / "package.json")
+        or app_version()
+    )
+
+
+def load_local_secrets() -> dict[str, str]:
+    try:
+        if not SECRETS_PATH.exists():
+            return {}
+        parsed = json.loads(SECRETS_PATH.read_text(encoding="utf-8"))
+        if not isinstance(parsed, dict):
+            return {}
+        return {str(key): str(value) for key, value in parsed.items() if isinstance(value, str)}
+    except Exception:
+        return {}
+
+
+def save_local_secrets(values: dict[str, str]) -> dict[str, str]:
+    secrets_dir = SECRETS_PATH.parent
+    secrets_dir.mkdir(parents=True, exist_ok=True)
+    current = load_local_secrets()
+    for key, value in values.items():
+        normalized = str(value or "").strip()
+        if not normalized or is_secret_placeholder(normalized):
+            continue
+        current[key] = normalized
+    SECRETS_PATH.write_text(json.dumps(current, indent=2, sort_keys=True), encoding="utf-8")
+    try:
+        SECRETS_PATH.chmod(0o600)
+    except Exception:
+        pass
+    return current
+
+
+def is_secret_placeholder(value: str) -> bool:
+    normalized = value.strip()
+    return normalized in {SERVER_SECRET_SENTINEL, "configured", "server-managed"}
+
+
+def secret_or_body(secret_key: str, body_value: str = "", env_name: str = "") -> str:
+    value = str(body_value or "").strip()
+    if value and not is_secret_placeholder(value):
+        return value
+    if env_name:
+        env_value = os.environ.get(env_name, "").strip()
+        if env_value:
+            return env_value
+    return load_local_secrets().get(secret_key, "").strip()
+
+
+def save_browser_supplied_secrets(body: dict[str, Any]) -> dict[str, bool]:
+    saved: dict[str, bool] = {}
+    values: dict[str, str] = {}
+
+    model = body.get("model") if isinstance(body.get("model"), dict) else {}
+    if str(model.get("apiKey") or "").strip() and not is_secret_placeholder(str(model.get("apiKey") or "")):
+        values["modelApiKey"] = str(model.get("apiKey") or "").strip()
+        saved["modelApiKey"] = True
+
+    voice = body.get("voice") if isinstance(body.get("voice"), dict) else {}
+    if str(voice.get("elevenLabsApiKey") or "").strip() and not is_secret_placeholder(str(voice.get("elevenLabsApiKey") or "")):
+        values["elevenLabsApiKey"] = str(voice.get("elevenLabsApiKey") or "").strip()
+        saved["elevenLabsApiKey"] = True
+    if str(voice.get("elevenLabsVoiceId") or "").strip():
+        values["elevenLabsVoiceId"] = str(voice.get("elevenLabsVoiceId") or "").strip()
+        saved["elevenLabsVoiceId"] = True
+
+    home = body.get("homeAssistant") if isinstance(body.get("homeAssistant"), dict) else {}
+    if str(home.get("url") or "").strip():
+        values["homeAssistantUrl"] = str(home.get("url") or "").strip()
+        saved["homeAssistantUrl"] = True
+    if str(home.get("token") or "").strip() and not is_secret_placeholder(str(home.get("token") or "")):
+        values["homeAssistantToken"] = str(home.get("token") or "").strip()
+        saved["homeAssistantToken"] = True
+    if str(home.get("defaultLightEntity") or "").strip():
+        values["homeAssistantDefaultLightEntity"] = str(home.get("defaultLightEntity") or "").strip()
+        saved["homeAssistantDefaultLightEntity"] = True
+
+    product = body.get("product") if isinstance(body.get("product"), dict) else {}
+    if str(product.get("nodeSparkHubUrl") or "").strip():
+        values["nodeSparkHubUrl"] = str(product.get("nodeSparkHubUrl") or "").strip()
+        saved["nodeSparkHubUrl"] = True
+    if str(product.get("nodeSparkDeviceToken") or "").strip() and not is_secret_placeholder(str(product.get("nodeSparkDeviceToken") or "")):
+        values["nodeSparkDeviceToken"] = str(product.get("nodeSparkDeviceToken") or "").strip()
+        saved["nodeSparkDeviceToken"] = True
+
+    if values:
+        save_local_secrets(values)
+    return saved
+
+
+def release_public_status() -> dict[str, Any]:
+    local = load_local_secrets()
+    return {
+        "ok": True,
+        "versions": {
+            "standalone": app_version(),
+            "station": station_version(),
+            "server": app_version(),
+            "assetBundle": os.environ.get("SYNRA_ASSET_BUNDLE_VERSION", app_version()).strip(),
+            "modelConfig": public_model_name(),
+        },
+        "secrets": {
+            "modelApiKey": bool(os.environ.get("SYNRA_MODEL_API_KEY", "").strip() or local.get("modelApiKey")),
+            "elevenLabsApiKey": bool(os.environ.get("SYNRA_ELEVENLABS_API_KEY", "").strip() or local.get("elevenLabsApiKey")),
+            "homeAssistantToken": bool(os.environ.get("SYNRA_HOME_ASSISTANT_TOKEN", "").strip() or local.get("homeAssistantToken")),
+            "nodeSparkDeviceToken": bool(local.get("nodeSparkDeviceToken")),
+        },
+        "config": {
+            "model": public_model_name(),
+            "modelRoutes": public_model_routes(),
+            "modelEndpoint": endpoint_label(model_endpoint()),
+            "homeAssistantConfigured": smart_home_configured(),
+            "nodeSparkHub": endpoint_label(local.get("nodeSparkHubUrl", "")),
+        },
+    }
+
+
+def confirmation_fingerprint(kind: str, details: dict[str, Any]) -> str:
+    canonical = json.dumps({"kind": kind, "details": details}, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def create_confirmation_token(kind: str, fingerprint: str, label: str) -> str:
+    cleanup_confirmations()
+    token = secrets.token_urlsafe(24)
+    PENDING_CONFIRMATIONS[token] = {
+        "kind": kind,
+        "fingerprint": fingerprint,
+        "label": label[:120],
+        "expiresAt": time.time() + CONFIRMATION_TTL_SECONDS,
+    }
+    return token
+
+
+def consume_confirmation_token(token: str, kind: str, fingerprint: str) -> bool:
+    cleanup_confirmations()
+    entry = PENDING_CONFIRMATIONS.pop(token.strip(), None)
+    if not entry:
+        return False
+    return entry.get("kind") == kind and entry.get("fingerprint") == fingerprint and float(entry.get("expiresAt", 0)) >= time.time()
+
+
+def cleanup_confirmations() -> None:
+    now = time.time()
+    expired = [token for token, entry in PENDING_CONFIRMATIONS.items() if float(entry.get("expiresAt", 0)) < now]
+    for token in expired:
+        PENDING_CONFIRMATIONS.pop(token, None)
+
+
+def sanitize_error(error: Exception) -> str:
+    return redact_secret_text(str(error))
+
+
+def redact_secret_text(value: str) -> str:
+    text = value
+    for secret_value in load_local_secrets().values():
+        if secret_value and len(secret_value) >= 6:
+            text = text.replace(secret_value, "[redacted]")
+    text = re.sub(r"(?i)(bearer\s+)[a-z0-9._~+/=-]{8,}", r"\1[redacted]", text)
+    text = re.sub(r"(?i)(api[_ -]?key|token|secret|password)(['\"]?\s*[:=]\s*['\"]?)[^'\"\s,}]{4,}", r"\1\2[redacted]", text)
+    return text[:600]
+
+
+def redact_public_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            lower = str(key).lower()
+            if lower == "audiobase64":
+                redacted[key] = item
+                continue
+            if lower == "confirmationtoken":
+                redacted[key] = item
+                continue
+            if any(secret_key in lower for secret_key in ("apikey", "api_key", "token", "secret", "password")):
+                if isinstance(item, dict):
+                    redacted[key] = redact_public_payload(item)
+                    continue
+                if item == SERVER_SECRET_SENTINEL or isinstance(item, bool):
+                    redacted[key] = item
+                elif item:
+                    redacted[key] = public_secret_label(str(item))
+                else:
+                    redacted[key] = item
+                continue
+            redacted[key] = redact_public_payload(item)
+        return redacted
+    if isinstance(value, list):
+        return [redact_public_payload(item) for item in value]
+    if isinstance(value, str):
+        return redact_secret_text(value)
+    return value
 
 
 def model_endpoint() -> str:
@@ -567,25 +874,27 @@ def public_model_routes() -> dict[str, str]:
 def smart_home_configured(config: dict[str, str] | None = None) -> bool:
     if config is not None:
         return bool(config.get("url", "").strip()) and bool(config.get("token", "").strip())
+    local = load_local_secrets()
     return (
-        env_bool("SYNRA_SMART_HOME_ENABLED", False)
-        and bool(os.environ.get("SYNRA_HOME_ASSISTANT_URL", "").strip())
-        and bool(os.environ.get("SYNRA_HOME_ASSISTANT_TOKEN", "").strip())
+        (env_bool("SYNRA_SMART_HOME_ENABLED", False) or bool(local.get("homeAssistantUrl") or local.get("homeAssistantToken")))
+        and bool(os.environ.get("SYNRA_HOME_ASSISTANT_URL", "").strip() or local.get("homeAssistantUrl"))
+        and bool(os.environ.get("SYNRA_HOME_ASSISTANT_TOKEN", "").strip() or local.get("homeAssistantToken"))
     )
 
 
 def home_assistant_config_from_body(body: dict[str, Any]) -> dict[str, str]:
     candidate = body.get("homeAssistant")
+    local = load_local_secrets()
     if isinstance(candidate, dict) and candidate.get("enabled") is True:
         return {
-            "url": str(candidate.get("url") or "").strip(),
-            "token": str(candidate.get("token") or "").strip(),
-            "defaultLightEntity": str(candidate.get("defaultLightEntity") or "").strip(),
+            "url": str(candidate.get("url") or local.get("homeAssistantUrl") or "").strip(),
+            "token": secret_or_body("homeAssistantToken", str(candidate.get("token") or "").strip(), "SYNRA_HOME_ASSISTANT_TOKEN"),
+            "defaultLightEntity": str(candidate.get("defaultLightEntity") or local.get("homeAssistantDefaultLightEntity") or "").strip(),
         }
     return {
-        "url": os.environ.get("SYNRA_HOME_ASSISTANT_URL", "").strip(),
-        "token": os.environ.get("SYNRA_HOME_ASSISTANT_TOKEN", "").strip(),
-        "defaultLightEntity": os.environ.get("SYNRA_HOME_ASSISTANT_DEFAULT_LIGHT", "").strip(),
+        "url": os.environ.get("SYNRA_HOME_ASSISTANT_URL", "").strip() or local.get("homeAssistantUrl", "").strip(),
+        "token": os.environ.get("SYNRA_HOME_ASSISTANT_TOKEN", "").strip() or local.get("homeAssistantToken", "").strip(),
+        "defaultLightEntity": os.environ.get("SYNRA_HOME_ASSISTANT_DEFAULT_LIGHT", "").strip() or local.get("homeAssistantDefaultLightEntity", "").strip(),
     }
 
 
@@ -876,7 +1185,7 @@ def call_nodespark_pair(hub_url: str, code: str, device_id: str, device_name: st
         "deviceName": device_name[:80],
         "platform": "Jetson",
         "osVersion": platform.platform()[:80],
-        "appVersion": "Synra Standalone 0.1",
+        "appVersion": f"Synra Standalone {app_version()}",
     }
     data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(f"{hub_url}/pair", data=data, method="POST")
@@ -1015,7 +1324,7 @@ def add_nodespark_client_headers(request: urllib.request.Request) -> None:
         "User-Agent",
         os.environ.get(
             "SYNRA_NODESPARK_USER_AGENT",
-            "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36 SynraStandalone/0.1 Chrome-Compatible",
+            f"Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36 SynraStandalone/{app_version()} Chrome-Compatible",
         ),
     )
     request.add_header("Referer", os.environ.get("SYNRA_NODESPARK_REFERER", "https://nodespark.msidragon.com/"))
@@ -1145,7 +1454,7 @@ def post_json(endpoint: str, payload: dict[str, Any], api_key: str) -> dict[str,
     request = urllib.request.Request(endpoint, data=data, method="POST")
     request.add_header("Content-Type", "application/json")
     request.add_header("Accept", "application/json")
-    request.add_header("User-Agent", os.environ.get("SYNRA_MODEL_USER_AGENT", "NodeSparkHub/4.1 SynraStandalone/0.1 OpenAI-Compatible Client"))
+    request.add_header("User-Agent", os.environ.get("SYNRA_MODEL_USER_AGENT", f"NodeSparkHub/4.3 SynraStandalone/{app_version()} OpenAI-Compatible Client"))
     request.add_header("HTTP-Referer", os.environ.get("SYNRA_MODEL_HTTP_REFERER", "https://nodespark.local/synra"))
     request.add_header("X-Title", os.environ.get("SYNRA_MODEL_X_TITLE", "Synra Standalone"))
     if api_key:

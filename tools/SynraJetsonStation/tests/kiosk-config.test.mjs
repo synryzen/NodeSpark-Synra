@@ -16,6 +16,7 @@ test("builds the default Jetson kiosk URL for the existing Synra app", () => {
   assert.equal(config.url.searchParams.get("telemetry"), "1");
   assert.equal(config.url.searchParams.get("quality"), "sharp");
   assert.equal(config.url.searchParams.get("fps"), "30");
+  assert.equal(config.url.searchParams.get("avatar"), "classic");
   assert.equal(config.angleBackend, "vulkan");
   assert.equal(config.autoGrantMedia, true);
   assert.equal(config.window.width, 1920);

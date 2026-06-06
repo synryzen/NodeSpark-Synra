@@ -35,7 +35,7 @@ if (missing.length) {
   process.exit(1);
 }
 
-const avatarMb = bytesToMb(statSync(join(root, "public/avatars/synra-code1.vrm")).size);
+const avatarMb = bytesToMb(statSync(join(root, "public/avatars/synra.vrm")).size);
 const avatarCount = readdirSync(join(root, "public/avatars")).filter((file) => file.endsWith(".vrm")).length;
 const backgroundCount = readdirSync(join(root, "public/backgrounds")).filter((file) => file.endsWith(".png")).length;
 const motionCount = countFiles(join(root, "public/motions"), ".vrma");
@@ -50,8 +50,11 @@ const modelClientScript = readFileSync(join(root, "src/model-client.ts"), "utf8"
 const hubRuntimeScript = readFileSync(join(root, "src/hub-runtime/drivers/avatar3d.ts"), "utf8");
 const styles = readFileSync(join(root, "src/styles.css"), "utf8");
 const kioskIsLean = kioskScript.includes("mode=kiosk") && kioskScript.includes("fps=${KIOSK_FPS}") && kioskScript.includes("--force-device-scale-factor=1");
-const code1IsDefaultAvatar = readFileSync(join(root, "src/avatar-catalog.ts"), "utf8").includes('DEFAULT_SYNRA_AVATAR_ID: SynraAvatarId = "code1"');
-const kioskRequestsCode1Avatar = kioskScript.includes("SYNRA_KIOSK_AVATAR:-code1") && kioskScript.includes("avatar=${KIOSK_AVATAR}");
+const classicIsFirstAndDefaultAvatar =
+  readFileSync(join(root, "src/avatar-catalog.ts"), "utf8").includes('id: "classic"') &&
+  readFileSync(join(root, "src/avatar-catalog.ts"), "utf8").indexOf('id: "classic"') < readFileSync(join(root, "src/avatar-catalog.ts"), "utf8").indexOf('id: "code1"') &&
+  readFileSync(join(root, "src/avatar-catalog.ts"), "utf8").includes('DEFAULT_SYNRA_AVATAR_ID: SynraAvatarId = "classic"');
+const kioskRequestsClassicAvatar = kioskScript.includes("SYNRA_KIOSK_AVATAR:-classic") && kioskScript.includes("avatar=${KIOSK_AVATAR}");
 const jetsonInstallerCanBootstrap =
   installerScript.includes("https://github.com/synryzen/NodeSpark-Synra.git") &&
   installerScript.includes("synra-standalone.service") &&
@@ -246,7 +249,7 @@ const aiConnectionsAreConfigurable =
   serverScript.includes("handle_external_chat") &&
   serverScript.includes("normalize_chat_endpoint");
 const externalModelProxyMatchesHubConnectionStyle =
-  serverScript.includes("NodeSparkHub/4.1 SynraStandalone") &&
+  serverScript.includes("NodeSparkHub/4.3 SynraStandalone") &&
   serverScript.includes('request.add_header("Accept", "application/json")') &&
   serverScript.includes('request.add_header("HTTP-Referer"') &&
   serverScript.includes("describe_http_error");
@@ -333,7 +336,7 @@ const nodeSparkStatusSkillIsAvailable =
   serverScript.includes("call_nodespark_action") &&
   serverScript.includes("add_nodespark_auth_headers") &&
   serverScript.includes("add_nodespark_client_headers") &&
-  serverScript.includes("SynraStandalone/0.1 Chrome-Compatible") &&
+  serverScript.includes("SynraStandalone/{app_version()} Chrome-Compatible") &&
   serverScript.includes('if path != "/health"') &&
   serverScript.includes('for path in ("/health", "/api/health", "/api/status")') &&
   serverScript.includes("if error.code in {401, 403}") &&
@@ -451,8 +454,8 @@ const result = {
     backgroundCount >= 6 &&
     motionCount >= 97 &&
     kioskIsLean &&
-    code1IsDefaultAvatar &&
-    kioskRequestsCode1Avatar &&
+    classicIsFirstAndDefaultAvatar &&
+    kioskRequestsClassicAvatar &&
     jetsonInstallerCanBootstrap &&
     electronKioskIsPackaged &&
     electronKioskWindowModeIsAvailable &&
@@ -528,8 +531,8 @@ const result = {
   checks: [
     "standalone app does not depend on NodeSparkHub",
     "runtime includes all three Synra avatars",
-    "Code 1 is the default Synra avatar",
-    "Jetson kiosk requests the Code 1 avatar",
+    "Synra Classic is first and default",
+    "Jetson kiosk requests Synra Classic by default",
     "Jetson installer can bootstrap app service and Electron kiosk",
     "Electron kiosk package is included in the Synra repo",
     "Electron kiosk can switch between windowed setup and fullscreen kiosk modes",

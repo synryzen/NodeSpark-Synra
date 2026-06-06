@@ -28,7 +28,7 @@ export const SYNRA_AVATARS: SynraAvatarOption[] = [
   }
 ];
 
-export const DEFAULT_SYNRA_AVATAR_ID: SynraAvatarId = "code1";
+export const DEFAULT_SYNRA_AVATAR_ID: SynraAvatarId = "classic";
 
 export function getSynraAvatar(id: string | null | undefined): SynraAvatarOption {
   return SYNRA_AVATARS.find((avatar) => avatar.id === id) ?? SYNRA_AVATARS.find((avatar) => avatar.id === DEFAULT_SYNRA_AVATAR_ID) ?? SYNRA_AVATARS[0];
