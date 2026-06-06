@@ -8,7 +8,7 @@ This guide installs Synra Standalone and the dedicated Electron kiosk shell on a
 - A local Python API server on port `5191`.
 - A user-level systemd service named `synra-standalone.service`.
 - The production Electron kiosk shell at `~/synra-jetson-station`.
-- A GNOME autostart entry for the Electron kiosk.
+- A user-level systemd service named `synra-electron-kiosk.service`.
 - A private starter config at `~/.config/synra-standalone.env`.
 
 ## Requirements
@@ -74,11 +74,13 @@ It launches:
 http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=30&live=1&quality=sharp&scale=1&maxw=2560&maxh=1600&avatar=code1&telemetry=1
 ```
 
-Snap Chromium is kept only as a fallback:
+Snap Chromium is kept only as a manual fallback:
 
 ```bash
 ~/synra-standalone/scripts/start-jetson-kiosk.sh
 ```
+
+Only run one kiosk shell at a time. The installer disables old `synra-kiosk.desktop` and `synra-standalone-kiosk.desktop` autostart files so snap Chromium does not run behind Electron after reboot.
 
 ## Configure AI
 

@@ -113,7 +113,8 @@ install_standalone() {
 
 install_standalone_service() {
   log "Installing user service"
-  mkdir -p "$HOME/.config/systemd/user" "$HOME/.config/autostart"
+  mkdir -p "$HOME/.config/systemd/user" "$HOME/.config/autostart" "$HOME/.config/autostart.disabled"
+  disable_legacy_kiosk_autostarts
   cat > "$HOME/.config/systemd/user/synra-standalone.service" <<SERVICE
 [Unit]
 Description=Synra Standalone Jetson Companion
@@ -136,6 +137,39 @@ SERVICE
   systemctl --user restart synra-standalone.service
 }
 
+disable_legacy_kiosk_autostarts() {
+  local desktop_file
+  for desktop_file in "$HOME/.config/autostart/synra-standalone-kiosk.desktop" "$HOME/.config/autostart/synra-kiosk.desktop"; do
+    if [ -f "$desktop_file" ]; then
+      mv "$desktop_file" "$HOME/.config/autostart.disabled/$(basename "$desktop_file").disabled.$(date +%Y%m%d%H%M%S)"
+    fi
+  done
+}
+
+detect_display() {
+  if [ -n "${DISPLAY:-}" ]; then
+    printf '%s\n' "$DISPLAY"
+  elif [ -S /tmp/.X11-unix/X0 ]; then
+    printf ':0\n'
+  elif [ -S /tmp/.X11-unix/X1 ]; then
+    printf ':1\n'
+  else
+    printf ':0\n'
+  fi
+}
+
+detect_xauthority() {
+  if [ -n "${XAUTHORITY:-}" ] && [ -f "$XAUTHORITY" ]; then
+    printf '%s\n' "$XAUTHORITY"
+  elif [ -f "$XDG_RUNTIME_DIR/gdm/Xauthority" ]; then
+    printf '%s\n' "$XDG_RUNTIME_DIR/gdm/Xauthority"
+  elif [ -f "$HOME/.Xauthority" ]; then
+    printf '%s\n' "$HOME/.Xauthority"
+  else
+    printf '%s\n' "$HOME/.Xauthority"
+  fi
+}
+
 install_electron_station() {
   [ "$INSTALL_ELECTRON" = "true" ] || return 0
   [ -d "$SOURCE_DIR/tools/SynraJetsonStation" ] || fail "tools/SynraJetsonStation is missing from the source checkout"
@@ -154,13 +188,42 @@ install_electron_station() {
   npm run typecheck
   npm run test:kiosk
 
-  cat > "$HOME/.config/autostart/synra-electron-kiosk.desktop" <<DESKTOP
-[Desktop Entry]
-Type=Application
-Name=Synra Electron Kiosk
-Exec=$STATION_DIR/scripts/start-electron-kiosk.sh
-X-GNOME-Autostart-enabled=true
-DESKTOP
+  install_electron_service
+}
+
+install_electron_service() {
+  local display_value xauthority_value runtime_dir
+  display_value="$(detect_display)"
+  runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+  xauthority_value="$(XDG_RUNTIME_DIR="$runtime_dir" detect_xauthority)"
+
+  cat > "$HOME/.config/systemd/user/synra-electron-kiosk.service" <<SERVICE
+[Unit]
+Description=Synra Electron Kiosk
+After=synra-standalone.service graphical-session.target
+Wants=synra-standalone.service
+
+[Service]
+Type=simple
+WorkingDirectory=$STATION_DIR
+Environment=DISPLAY=$display_value
+Environment=XDG_RUNTIME_DIR=$runtime_dir
+Environment=XAUTHORITY=$xauthority_value
+Environment=SYNRA_STANDALONE_URL=http://127.0.0.1:${SYNRA_PORT:-5191}/
+Environment=SYNRA_KIOSK_REMOTE_DEBUG=false
+ExecStartPre=-/usr/bin/xset s off -dpms
+ExecStart=$STATION_DIR/scripts/start-electron-kiosk.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+SERVICE
+
+  rm -f "$HOME/.config/autostart/synra-electron-kiosk.desktop"
+  systemctl --user daemon-reload
+  systemctl --user enable synra-electron-kiosk.service
+  systemctl --user restart synra-electron-kiosk.service
 }
 
 print_summary() {

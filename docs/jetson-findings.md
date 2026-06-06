@@ -24,11 +24,11 @@ Last checked: June 2, 2026.
 
 ## Kiosk Display
 
-- The active graphical session is X11 on `DISPLAY=:1`.
+- The active graphical session is X11. On the tested Jetson it has appeared as `DISPLAY=:0` after reboot; detect the active socket instead of hard-coding `:1`.
 - Launching kiosk from SSH requires:
 
 ```bash
-export DISPLAY=:1
+export DISPLAY="${DISPLAY:-:0}"
 export XAUTHORITY=/run/user/1000/gdm/Xauthority
 export XDG_RUNTIME_DIR=/run/user/1000
 ```

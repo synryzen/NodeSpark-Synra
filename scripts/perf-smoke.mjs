@@ -55,7 +55,8 @@ const kioskRequestsCode1Avatar = kioskScript.includes("SYNRA_KIOSK_AVATAR:-code1
 const jetsonInstallerCanBootstrap =
   installerScript.includes("https://github.com/synryzen/NodeSpark-Synra.git") &&
   installerScript.includes("synra-standalone.service") &&
-  installerScript.includes("synra-electron-kiosk.desktop") &&
+  installerScript.includes("synra-electron-kiosk.service") &&
+  installerScript.includes("disable_legacy_kiosk_autostarts") &&
   installerScript.includes("tools/SynraJetsonStation");
 const electronKioskIsPackaged =
   electronKioskScript.includes("start-electron-kiosk") &&

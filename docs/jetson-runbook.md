@@ -244,17 +244,19 @@ It launches the Synra runtime outside snap Chromium confinement:
 http://127.0.0.1:5191/?profile=jetson&mode=kiosk&fps=30&live=1&quality=sharp&scale=1&maxw=2560&maxh=1600&avatar=code1&telemetry=1
 ```
 
-The Electron autostart file is:
+The production Electron kiosk is managed by the user service:
 
 ```text
-~/.config/autostart/synra-electron-kiosk.desktop
+~/.config/systemd/user/synra-electron-kiosk.service
 ```
 
-The older snap Chromium launcher is still available as a fallback:
+The older snap Chromium launcher is still available as a manual fallback:
 
 ```bash
 ~/synra-standalone/scripts/start-jetson-kiosk.sh
 ```
+
+Do not leave old Chromium `.desktop` autostart launchers enabled while Electron is enabled. If both start after reboot, the snap Chromium GPU process can consume several CPU cores and make Synra look slow even when Electron is healthy.
 
 If the Jetson uses a different Chromium binary, try:
 

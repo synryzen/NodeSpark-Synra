@@ -51,7 +51,7 @@ Diagnostics:
 ~/synra-jetson-station/scripts/electron-gpu-check.sh
 ```
 
-The recommended production kiosk is the Electron shell at `~/synra-jetson-station/scripts/start-electron-kiosk.sh`. Snap Chromium remains a fallback through `~/synra-standalone/scripts/start-jetson-kiosk.sh`.
+The recommended production kiosk is the Electron shell managed by `synra-electron-kiosk.service`. Older snap Chromium kiosk autostarts are disabled during install/deploy because running both shells after reboot can make the avatar extremely slow.
 
 After install, open `http://JETSON_IP:5191/`, go to Settings, and configure:
 
