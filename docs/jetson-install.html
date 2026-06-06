@@ -283,6 +283,9 @@ curl http://127.0.0.1:5191/api/health</code></pre>
           <li>Click <code>Test Voice</code>.</li>
           <li>Use <code>Voice Diagnostics</code> if sound does not play.</li>
         </ol>
+        <p>If fullscreen kiosk mode makes copy/paste awkward, open Settings &gt; Display and click <code>Switch to Windowed Setup</code>, or launch directly into a setup window:</p>
+        <pre><code>SYNRA_KIOSK_WINDOW_MODE=windowed ~/synra-jetson-station/scripts/start-electron-kiosk.sh</code></pre>
+        <p>After the voice is saved, use Settings &gt; Display &gt; <code>Return to Full Screen</code>.</p>
         <p>Optional server-side defaults can be placed in <code>~/.config/synra-standalone.env</code>:</p>
         <pre><code>SYNRA_ELEVENLABS_API_KEY=
 SYNRA_ELEVENLABS_VOICE_ID=
@@ -312,6 +315,8 @@ SYNRA_HOME_ASSISTANT_DEFAULT_LIGHT=light.living_room</code></pre>
         <h2>Launch Kiosk</h2>
         <p>The recommended production kiosk is Electron:</p>
         <pre><code>~/synra-jetson-station/scripts/start-electron-kiosk.sh</code></pre>
+        <p>For first-time setup, copy/paste, and API-key entry, use:</p>
+        <pre><code>SYNRA_KIOSK_WINDOW_MODE=windowed ~/synra-jetson-station/scripts/start-electron-kiosk.sh</code></pre>
         <p>The installer creates a GNOME autostart entry. After an update, restart the running kiosk:</p>
         <pre><code>systemctl --user restart synra-electron-kiosk.service</code></pre>
         <p>It launches this runtime URL:</p>

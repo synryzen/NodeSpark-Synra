@@ -64,6 +64,18 @@ const electronKioskIsPackaged =
   electronKioskConfig.includes('params.set("quality", stringEnv(env, "SYNRA_KIOSK_QUALITY", "sharp"))') &&
   electronKioskConfig.includes('params.set("maxw", stringEnv(env, "SYNRA_KIOSK_MAX_RENDER_WIDTH", "2560"))') &&
   electronKioskConfig.includes('params.set("maxh", stringEnv(env, "SYNRA_KIOSK_MAX_RENDER_HEIGHT", "1600"))');
+const electronKioskWindowModeIsAvailable =
+  electronKioskScript.includes("SYNRA_KIOSK_WINDOW_MODE") &&
+  electronKioskConfig.includes("SYNRA_KIOSK_WINDOW_MODE") &&
+  electronKioskConfig.includes('params.set("shell", "electron")') &&
+  electronKioskTests.includes("supports setup-friendly windowed kiosk mode") &&
+  electronKioskTests.includes("supports production fullscreen kiosk mode") &&
+  existsSync(join(root, "tools/SynraJetsonStation/src/kiosk-preload.ts")) &&
+  readFileSync(join(root, "tools/SynraJetsonStation/src/kiosk-preload.ts"), "utf8").includes("synraKiosk") &&
+  readFileSync(join(root, "tools/SynraJetsonStation/src/kiosk-shell.ts"), "utf8").includes("synra-kiosk:toggle-window-mode") &&
+  mainScript.includes("kioskWindowToggleButton") &&
+  mainScript.includes("Switch to Windowed Setup") &&
+  mainScript.includes("Return to Full Screen");
 const electronKioskRemoteDebugIsOptIn =
   electronKioskScript.includes('SYNRA_KIOSK_REMOTE_DEBUG="${SYNRA_KIOSK_REMOTE_DEBUG:-false}"') &&
   electronKioskConfig.includes("remote-debugging-port");
@@ -426,6 +438,7 @@ const result = {
     kioskRequestsCode1Avatar &&
     jetsonInstallerCanBootstrap &&
     electronKioskIsPackaged &&
+    electronKioskWindowModeIsAvailable &&
     electronKioskRemoteDebugIsOptIn &&
     electronKioskUsesStableJetsonBackend &&
     electronKioskTestsArePackaged &&
@@ -501,6 +514,7 @@ const result = {
     "Jetson kiosk requests the Code 1 avatar",
     "Jetson installer can bootstrap app service and Electron kiosk",
     "Electron kiosk package is included in the Synra repo",
+    "Electron kiosk can switch between windowed setup and fullscreen kiosk modes",
     "Electron kiosk remote debugging is opt-in",
     "Electron kiosk defaults to the stable Jetson Vulkan backend",
     "Electron kiosk tests are packaged with the repo",

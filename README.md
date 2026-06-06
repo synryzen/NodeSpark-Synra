@@ -60,6 +60,14 @@ After install, open `http://JETSON_IP:5191/`, go to Settings, and configure:
 - `Home`: optional Home Assistant URL/token and default target.
 - `NodeSparkHub`: optional subscriber pairing.
 
+For easier API-key setup on the Jetson display, start Electron in windowed mode:
+
+```bash
+SYNRA_KIOSK_WINDOW_MODE=windowed ~/synra-jetson-station/scripts/start-electron-kiosk.sh
+```
+
+You can also switch anytime inside Synra from `Settings` > `Display` with the window/fullscreen button. The Electron shell remembers the last selected mode.
+
 The Electron kiosk defaults to local mic/camera permission auto-grant for the dedicated Jetson station shell. Browser and mobile users still control permissions through their browser.
 
 ## GitHub Page

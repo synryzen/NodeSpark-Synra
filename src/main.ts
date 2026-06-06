@@ -67,6 +67,18 @@ type ElevenLabsVoice = {
   category?: string;
   previewUrl?: string;
 };
+type SynraKioskWindowMode = "fullscreen" | "windowed";
+type SynraKioskBridge = {
+  getWindowMode: () => Promise<SynraKioskWindowMode>;
+  setWindowMode: (mode: SynraKioskWindowMode) => Promise<SynraKioskWindowMode>;
+  toggleWindowMode: () => Promise<SynraKioskWindowMode>;
+};
+
+declare global {
+  interface Window {
+    synraKiosk?: SynraKioskBridge;
+  }
+}
 
 type VisionPublicStatus = {
   ok?: boolean;
@@ -644,7 +656,10 @@ app.innerHTML = `
           <strong id="settingsQualityStatus">Balanced</strong>
           <span>Mode</span>
           <strong id="settingsModeStatus">Manual</strong>
+          <span>Window</span>
+          <strong id="settingsKioskWindowStatus">Browser</strong>
         </div>
+        <button type="button" id="kioskWindowToggleButton">Open Windowed Setup</button>
         <p class="settings-note">Display controls stay in the right rail for fast kiosk adjustments without reopening settings.</p>
       </section>
       <section class="settings-panel" data-settings-panel="about" role="tabpanel" hidden>
@@ -815,6 +830,8 @@ const settingsAvatarStatusEl = must<HTMLElement, HTMLElement>("settingsAvatarSta
 const settingsBackgroundStatusEl = must<HTMLElement, HTMLElement>("settingsBackgroundStatus");
 const settingsQualityStatusEl = must<HTMLElement, HTMLElement>("settingsQualityStatus");
 const settingsModeStatusEl = must<HTMLElement, HTMLElement>("settingsModeStatus");
+const settingsKioskWindowStatusEl = must<HTMLElement, HTMLElement>("settingsKioskWindowStatus");
+const kioskWindowToggleButton = must<HTMLElement, HTMLButtonElement>("kioskWindowToggleButton");
 
 const renderer = USE_HUB_AVATAR_RUNTIME ? null : createRenderer();
 if (!renderer && !USE_HUB_AVATAR_RUNTIME) {
@@ -1263,6 +1280,10 @@ saveSettingsButton.addEventListener("click", () => {
   refreshSystemHealthPanel();
 });
 
+kioskWindowToggleButton.addEventListener("click", () => {
+  void toggleKioskWindowMode();
+});
+
 function openSettingsDialog(initialTab = "ai"): void {
   providerInput.value = resolveModelProvider(state.settings.provider);
   endpointInput.value = state.settings.endpoint;
@@ -1275,6 +1296,7 @@ function openSettingsDialog(initialTab = "ai"): void {
   populateMemorySettingsInputs();
   populateVoiceSettingsInputs();
   refreshSettingsDisplayStatus();
+  refreshKioskWindowControls().catch(() => {});
   setSettingsTab(initialTab);
   settingsDialog.showModal();
 }
@@ -3881,6 +3903,50 @@ function refreshSettingsDisplayStatus(): void {
   settingsBackgroundStatusEl.textContent = resolveBackground(state.visual.backgroundId).label;
   settingsQualityStatusEl.textContent = renderQualityLabel(resolveRenderQuality(state.visual.renderQuality));
   settingsModeStatusEl.textContent = resolveControlMode(state.visual.controlMode) === "live" ? "Live" : "Manual";
+}
+
+async function refreshKioskWindowControls(): Promise<void> {
+  const bridge = window.synraKiosk;
+  if (!bridge) {
+    settingsKioskWindowStatusEl.textContent = "Browser";
+    kioskWindowToggleButton.disabled = true;
+    kioskWindowToggleButton.textContent = "Electron Only";
+    kioskWindowToggleButton.title = "Windowed/fullscreen controls are available in the Synra Electron kiosk shell.";
+    return;
+  }
+
+  try {
+    const mode = await bridge.getWindowMode();
+    applyKioskWindowControlState(mode);
+  } catch {
+    settingsKioskWindowStatusEl.textContent = "Unavailable";
+    kioskWindowToggleButton.disabled = true;
+    kioskWindowToggleButton.textContent = "Window Control Unavailable";
+  }
+}
+
+async function toggleKioskWindowMode(): Promise<void> {
+  const bridge = window.synraKiosk;
+  if (!bridge) return;
+  kioskWindowToggleButton.disabled = true;
+  kioskWindowToggleButton.textContent = "Switching...";
+  try {
+    const mode = await bridge.toggleWindowMode();
+    applyKioskWindowControlState(mode);
+  } catch {
+    settingsKioskWindowStatusEl.textContent = "Switch failed";
+    kioskWindowToggleButton.textContent = "Try Again";
+    kioskWindowToggleButton.disabled = false;
+  }
+}
+
+function applyKioskWindowControlState(mode: SynraKioskWindowMode): void {
+  settingsKioskWindowStatusEl.textContent = mode === "fullscreen" ? "Fullscreen kiosk" : "Windowed setup";
+  kioskWindowToggleButton.disabled = false;
+  kioskWindowToggleButton.textContent = mode === "fullscreen" ? "Switch to Windowed Setup" : "Return to Full Screen";
+  kioskWindowToggleButton.title = mode === "fullscreen"
+    ? "Exit fullscreen kiosk mode so you can paste API keys and use normal window controls."
+    : "Return Synra to fullscreen kiosk mode.";
 }
 
 function skillAccessSnapshot(): Record<string, string> {

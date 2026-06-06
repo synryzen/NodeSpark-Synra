@@ -45,6 +45,28 @@ test("honors performance and viewport overrides without dropping kiosk telemetry
   assert.equal(config.window.height, 1600);
 });
 
+test("supports setup-friendly windowed kiosk mode", () => {
+  const config = buildKioskLaunchConfig(normalizeKioskEnv({
+    SYNRA_KIOSK_WINDOW_MODE: "windowed"
+  }));
+
+  assert.equal(config.window.windowMode, "windowed");
+  assert.equal(config.window.fullscreen, false);
+  assert.equal(config.window.kiosk, false);
+  assert.equal(config.url.searchParams.get("shell"), "electron");
+});
+
+test("supports production fullscreen kiosk mode", () => {
+  const config = buildKioskLaunchConfig(normalizeKioskEnv({
+    SYNRA_KIOSK_WINDOW_MODE: "fullscreen"
+  }));
+
+  assert.equal(config.window.windowMode, "fullscreen");
+  assert.equal(config.window.fullscreen, true);
+  assert.equal(config.window.kiosk, true);
+  assert.equal(config.url.searchParams.get("shell"), "electron");
+});
+
 test("builds GPU-focused Electron command line switches", () => {
   const switches = buildElectronCommandLineSwitches(buildKioskLaunchConfig(normalizeKioskEnv({
     SYNRA_KIOSK_ANGLE_BACKEND: "vulkan",

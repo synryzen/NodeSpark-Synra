@@ -138,6 +138,14 @@ Then use the app UI:
 7. Click `Test Voice`.
 8. Click `Voice Diagnostics` if sound does not play.
 
+If the Jetson is running fullscreen kiosk mode and you need normal copy/paste, switch to `Settings` > `Display` and click `Switch to Windowed Setup`. You can also launch directly into a setup window:
+
+```bash
+SYNRA_KIOSK_WINDOW_MODE=windowed ~/synra-jetson-station/scripts/start-electron-kiosk.sh
+```
+
+After the API key and voice are saved, click `Return to Full Screen` in `Settings` > `Display`.
+
 Synra stores voice settings in the browser's local storage. The local Python server only receives the ElevenLabs API key when listing voices or generating speech.
 
 Optional server-side voice defaults can also be placed in `~/.config/synra-standalone.env`:

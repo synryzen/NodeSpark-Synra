@@ -1,8 +1,10 @@
 export type KioskEnv = Record<string, string | undefined>;
+export type KioskWindowMode = "fullscreen" | "windowed";
 
 export interface KioskWindowConfig {
   width: number;
   height: number;
+  windowMode: KioskWindowMode;
   fullscreen: boolean;
   kiosk: boolean;
   alwaysOnTop: boolean;
@@ -45,13 +47,19 @@ function numberEnv(env: KioskEnv, name: string, fallback: number, min = 1): numb
   return Number.isFinite(raw) && raw >= min ? raw : fallback;
 }
 
+function windowModeEnv(env: KioskEnv): KioskWindowMode {
+  return stringEnv(env, "SYNRA_KIOSK_WINDOW_MODE", "fullscreen").toLowerCase() === "windowed" ? "windowed" : "fullscreen";
+}
+
 export function buildKioskLaunchConfig(env: KioskEnv = process.env): KioskLaunchConfig {
   const base = stringEnv(env, "SYNRA_STANDALONE_URL", "http://127.0.0.1:5191/");
   const url = new URL(base);
   const params = url.searchParams;
+  const windowMode = windowModeEnv(env);
 
   params.set("profile", stringEnv(env, "SYNRA_KIOSK_PROFILE", "jetson"));
   params.set("mode", stringEnv(env, "SYNRA_KIOSK_MODE", "kiosk"));
+  params.set("shell", "electron");
   params.set("fps", stringEnv(env, "SYNRA_KIOSK_FPS", "30"));
   params.set("live", stringEnv(env, "SYNRA_KIOSK_LIVE", "1"));
   params.set("quality", stringEnv(env, "SYNRA_KIOSK_QUALITY", "sharp"));
@@ -73,8 +81,9 @@ export function buildKioskLaunchConfig(env: KioskEnv = process.env): KioskLaunch
     window: {
       width: numberEnv(env, "SYNRA_KIOSK_WIDTH", 1920, 320),
       height: numberEnv(env, "SYNRA_KIOSK_HEIGHT", 1080, 240),
-      fullscreen: boolEnv(env, "SYNRA_KIOSK_FULLSCREEN", true),
-      kiosk: boolEnv(env, "SYNRA_KIOSK_NATIVE_KIOSK", true),
+      windowMode,
+      fullscreen: windowMode === "fullscreen" && boolEnv(env, "SYNRA_KIOSK_FULLSCREEN", true),
+      kiosk: windowMode === "fullscreen" && boolEnv(env, "SYNRA_KIOSK_NATIVE_KIOSK", true),
       alwaysOnTop: boolEnv(env, "SYNRA_KIOSK_ALWAYS_ON_TOP", false)
     }
   };

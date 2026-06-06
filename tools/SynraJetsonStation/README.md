@@ -144,6 +144,14 @@ npm run build
 bash scripts/start-electron-kiosk.sh
 ```
 
+For first-time setup, launch the shell as a normal window so API keys can be copied and pasted:
+
+```bash
+SYNRA_KIOSK_WINDOW_MODE=windowed bash scripts/start-electron-kiosk.sh
+```
+
+Inside Synra, open `Settings` > `Display` and use `Switch to Windowed Setup` or `Return to Full Screen`. The Electron shell remembers the last selected window mode for the next launch.
+
 This launches the existing Synra app URL outside snap Chromium confinement:
 
 ```text
@@ -163,6 +171,7 @@ Important tuning variables:
 - `SYNRA_KIOSK_GL_MODE`: default `none`; try `egl` only if Electron logs suggest it.
 - `SYNRA_KIOSK_REMOTE_DEBUG`: default `false`; set `true` only for diagnostics.
 - `SYNRA_KIOSK_AUTO_GRANT_MEDIA`: default `false`; only set `true` for unattended kiosks where camera/mic prompts are intentionally auto-accepted.
+- `SYNRA_KIOSK_WINDOW_MODE`: default `fullscreen`; use `windowed` for setup, copy/paste, and API-key entry.
 
 Run the GPU diagnostic after launching the Electron kiosk:
 

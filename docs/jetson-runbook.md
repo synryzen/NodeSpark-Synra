@@ -220,6 +220,14 @@ The recommended production kiosk is the dedicated Electron shell:
 ~/synra-jetson-station/scripts/start-electron-kiosk.sh
 ```
 
+For setup, copy/paste, and ElevenLabs key entry, start the Electron shell in a normal window:
+
+```bash
+SYNRA_KIOSK_WINDOW_MODE=windowed ~/synra-jetson-station/scripts/start-electron-kiosk.sh
+```
+
+Synra also has a `Settings` > `Display` button that switches between `Windowed setup` and `Fullscreen kiosk`. The selected mode is remembered for the next Electron launch.
+
 It launches the Synra runtime outside snap Chromium confinement:
 
 ```text
