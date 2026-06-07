@@ -249,10 +249,40 @@ const state = {
     vision: { status: "off", detail: "Camera off" }
   } as Record<ConnectionTruthKey, ConnectionTruth>
 };
+
+type PublicServerSettings = {
+  ok?: boolean;
+  voice?: {
+    provider?: string;
+    elevenLabsApiKeyConfigured?: boolean;
+    elevenLabsVoiceId?: string;
+    elevenLabsVoiceName?: string;
+    elevenLabsModelId?: string;
+    elevenLabsOutputFormat?: string;
+    elevenLabsStability?: string;
+    elevenLabsSimilarityBoost?: string;
+  };
+  homeAssistant?: {
+    enabled?: boolean;
+    url?: string;
+    tokenConfigured?: boolean;
+    defaultLightEntity?: string;
+  };
+  product?: {
+    nodeSparkAccess?: string;
+    nodeSparkHubUrl?: string;
+    nodeSparkDeviceName?: string;
+    nodeSparkHubId?: string;
+    nodeSparkDeviceTokenConfigured?: boolean;
+    nodeSparkTokenExpiresAt?: string;
+  };
+};
 let hubAvatarRuntime: SynraAvatarRuntime | null = null;
 let hubMotionClips: SynraMotionClipSpec[] = [];
 let hubMotionRoutes = new Map<string, string>();
 let hubMotionManifestReady = false;
+let hubMotionReturnTimer = 0;
+let hubMotionReturnSerial = 0;
 let activeVisionStream: MediaStream | null = null;
 let activeSpeechAudio: HTMLAudioElement | null = null;
 let activeSpeechAbort: AbortController | null = null;
@@ -1061,7 +1091,7 @@ resize();
 window.addEventListener("resize", resize);
 
 setSynraState("idle", "Starting Synra.");
-void migrateBrowserSecretsToServer();
+void hydrateServerManagedSettings();
 document.body.dataset.runtimeMode = runtimeMode;
 populateQualitySelect();
 applyRenderQuality(resolveRenderQuality(state.visual.renderQuality));
@@ -2257,11 +2287,19 @@ async function saveServerManagedSecrets(settings: ModelSettings, voice: VoiceSet
       model: { apiKey: settings.apiKey },
       voice: {
         elevenLabsApiKey: voice.elevenLabsApiKey,
-        elevenLabsVoiceId: voice.elevenLabsVoiceId
+        elevenLabsVoiceId: voice.elevenLabsVoiceId,
+        elevenLabsVoiceName: voice.elevenLabsVoiceName,
+        elevenLabsModelId: voice.elevenLabsModelId,
+        elevenLabsOutputFormat: voice.elevenLabsOutputFormat,
+        elevenLabsStability: String(voice.elevenLabsStability),
+        elevenLabsSimilarityBoost: String(voice.elevenLabsSimilarityBoost)
       },
       product: {
         nodeSparkHubUrl: product.nodeSparkHubUrl,
-        nodeSparkDeviceToken: product.nodeSparkDeviceToken
+        nodeSparkDeviceName: product.nodeSparkDeviceName,
+        nodeSparkHubId: product.nodeSparkHubId,
+        nodeSparkDeviceToken: product.nodeSparkDeviceToken,
+        nodeSparkTokenExpiresAt: product.nodeSparkTokenExpiresAt
       },
       homeAssistant: {
         url: homeAssistant.url,
@@ -2273,6 +2311,69 @@ async function saveServerManagedSecrets(settings: ModelSettings, voice: VoiceSet
   const result = (await response.json()) as { ok?: boolean; error?: string };
   if (!response.ok || !result.ok) {
     throw new Error(result.error ?? "Synra could not save server-managed secrets.");
+  }
+}
+
+async function hydrateServerManagedSettings(): Promise<void> {
+  await migrateBrowserSecretsToServer();
+  try {
+    const response = await fetch("/api/settings/public", { cache: "no-store" });
+    if (!response.ok) return;
+    const result = (await response.json()) as PublicServerSettings;
+    if (!result.ok) return;
+
+    const voice = result.voice;
+    if (voice) {
+      const stability = Number(voice.elevenLabsStability);
+      const similarity = Number(voice.elevenLabsSimilarityBoost);
+      const hasServerElevenLabs = voice.elevenLabsApiKeyConfigured === true || Boolean(voice.elevenLabsVoiceId?.trim());
+      state.voiceSettings = {
+        ...state.voiceSettings,
+        provider: hasServerElevenLabs ? "elevenLabs" : state.voiceSettings.provider,
+        elevenLabsApiKey: voice.elevenLabsApiKeyConfigured ? SERVER_SECRET_SENTINEL : state.voiceSettings.elevenLabsApiKey,
+        elevenLabsVoiceId: voice.elevenLabsVoiceId?.trim() || state.voiceSettings.elevenLabsVoiceId,
+        elevenLabsVoiceName: voice.elevenLabsVoiceName?.trim() || state.voiceSettings.elevenLabsVoiceName,
+        elevenLabsModelId: voice.elevenLabsModelId?.trim() || state.voiceSettings.elevenLabsModelId,
+        elevenLabsOutputFormat: voice.elevenLabsOutputFormat?.trim() || state.voiceSettings.elevenLabsOutputFormat,
+        elevenLabsStability: Number.isFinite(stability) ? stability : state.voiceSettings.elevenLabsStability,
+        elevenLabsSimilarityBoost: Number.isFinite(similarity) ? similarity : state.voiceSettings.elevenLabsSimilarityBoost
+      };
+      saveVoiceSettings(state.voiceSettings);
+    }
+
+    const product = result.product;
+    if (product?.nodeSparkHubUrl?.trim() || product?.nodeSparkDeviceTokenConfigured) {
+      state.productSettings = ensureNodeSparkDeviceId({
+        ...state.productSettings,
+        nodeSparkAccess: product.nodeSparkAccess === "subscriber" || product.nodeSparkDeviceTokenConfigured ? "subscriber" : state.productSettings.nodeSparkAccess,
+        nodeSparkHubUrl: product.nodeSparkHubUrl?.trim() || state.productSettings.nodeSparkHubUrl,
+        nodeSparkDeviceName: product.nodeSparkDeviceName?.trim() || state.productSettings.nodeSparkDeviceName || "Synra Standalone Jetson",
+        nodeSparkHubId: product.nodeSparkHubId?.trim() || state.productSettings.nodeSparkHubId,
+        nodeSparkDeviceToken: product.nodeSparkDeviceTokenConfigured ? SERVER_SECRET_SENTINEL : state.productSettings.nodeSparkDeviceToken,
+        nodeSparkTokenExpiresAt: product.nodeSparkTokenExpiresAt?.trim() || state.productSettings.nodeSparkTokenExpiresAt
+      });
+      saveProductSettings(state.productSettings);
+    }
+
+    const home = result.homeAssistant;
+    if (home?.url?.trim() || home?.tokenConfigured) {
+      state.homeAssistantSettings = {
+        ...state.homeAssistantSettings,
+        enabled: home.enabled === true || state.homeAssistantSettings.enabled,
+        url: home.url?.trim() || state.homeAssistantSettings.url,
+        token: home.tokenConfigured ? SERVER_SECRET_SENTINEL : state.homeAssistantSettings.token,
+        defaultLightEntity: home.defaultLightEntity?.trim() || state.homeAssistantSettings.defaultLightEntity
+      };
+      saveHomeAssistantSettings(state.homeAssistantSettings);
+    }
+
+    refreshSkillPanel();
+    refreshNodeSparkPairingStatus();
+    refreshVoiceStatus();
+    refreshSystemHealthPanel();
+    refreshAiConnectionPanel();
+  } catch {
+    setConnectionTruth("ai", "configured", "Server route; settings hydration unavailable");
   }
 }
 
@@ -2425,6 +2526,7 @@ function populateMotionSelect(): void {
 async function playMotionRoute(actionOrClipId: string, options: { restart?: boolean; loop?: boolean; returnToIdle?: boolean } = {}): Promise<void> {
   if (hubAvatarRuntime) {
     try {
+      if (!options.returnToIdle) window.clearTimeout(hubMotionReturnTimer);
       const mode = modeFromRoute(actionOrClipId);
       if (mode) {
         hubAvatarRuntime.setMode(mode, { playAuthoredLoop: true });
@@ -2441,6 +2543,7 @@ async function playMotionRoute(actionOrClipId: string, options: { restart?: bool
       if (hasMotionOption && motionSelect.value !== played && resolveMotionClipId(motionSelect.value) !== played) {
         motionSelect.value = played;
       }
+      if (options.returnToIdle && !options.loop) scheduleHubLivingIdleReturn(actionOrClipId);
     } catch (error) {
       activeMotionEl.textContent = error instanceof Error ? error.message : "Motion unavailable";
     }
@@ -2457,6 +2560,23 @@ async function playMotionRoute(actionOrClipId: string, options: { restart?: bool
   } else {
     activeMotionEl.textContent = state.motionPlayer.snapshot.lastError ?? "Motion unavailable";
   }
+}
+
+function scheduleHubLivingIdleReturn(actionOrClipId: string): void {
+  if (!hubAvatarRuntime) return;
+  const serial = ++hubMotionReturnSerial;
+  const clipId = resolveMotionClipId(actionOrClipId) ?? actionOrClipId;
+  const clip = hubMotionClips.find((item) => item.id === clipId);
+  const baseDelay = clip?.loop ? 2600 : 5200;
+  window.clearTimeout(hubMotionReturnTimer);
+  hubMotionReturnTimer = window.setTimeout(() => {
+    if (serial !== hubMotionReturnSerial || !hubAvatarRuntime) return;
+    if (state.synra === "speaking" || state.synra === "listening" || state.synra === "thinking") return;
+    hubAvatarRuntime.stopMotionTest();
+    hubAvatarRuntime.setMode("idle", { playAuthoredLoop: true });
+    hubAvatarRuntime.setSpeaking(false);
+    activeMotionEl.textContent = resolveMotionClipId(KIOSK_IDLE_ROUTE) ?? KIOSK_IDLE_ROUTE;
+  }, baseDelay);
 }
 
 function filterClipsByCategory(clips: SynraMotionClipSpec[], category: MotionCategory): SynraMotionClipSpec[] {

@@ -97,6 +97,9 @@ class SynraHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/release/public"):
             self.send_json(200, release_public_status())
             return
+        if self.path.startswith("/api/settings/public"):
+            self.send_json(200, settings_public_status())
+            return
         super().do_GET()
 
     def do_POST(self) -> None:
@@ -244,10 +247,11 @@ class SynraHandler(SimpleHTTPRequestHandler):
             text = str(body.get("text") or "").strip()
             api_key = secret_or_body("elevenLabsApiKey", str(body.get("apiKey") or "").strip(), "SYNRA_ELEVENLABS_API_KEY")
             voice_id = secret_or_body("elevenLabsVoiceId", str(body.get("voiceId") or "").strip(), "SYNRA_ELEVENLABS_VOICE_ID")
-            model_id = str(body.get("modelId") or os.environ.get("SYNRA_ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")).strip()
-            output_format = str(body.get("outputFormat") or os.environ.get("SYNRA_ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_128")).strip()
-            stability = clamp_float(body.get("stability"), 0.0, 1.0, 0.48)
-            similarity = clamp_float(body.get("similarityBoost"), 0.0, 1.0, 0.78)
+            local = load_local_secrets()
+            model_id = str(body.get("modelId") or os.environ.get("SYNRA_ELEVENLABS_MODEL_ID", "").strip() or local.get("elevenLabsModelId") or "eleven_multilingual_v2").strip()
+            output_format = str(body.get("outputFormat") or os.environ.get("SYNRA_ELEVENLABS_OUTPUT_FORMAT", "").strip() or local.get("elevenLabsOutputFormat") or "mp3_44100_128").strip()
+            stability = clamp_float(body.get("stability") or local.get("elevenLabsStability"), 0.0, 1.0, 0.48)
+            similarity = clamp_float(body.get("similarityBoost") or local.get("elevenLabsSimilarityBoost"), 0.0, 1.0, 0.78)
             if not text:
                 self.send_json(200, {"ok": False, "error": "No text was provided for ElevenLabs speech."})
                 return
@@ -436,6 +440,7 @@ class SynraHandler(SimpleHTTPRequestHandler):
             save_local_secrets(
                 {
                     "nodeSparkHubUrl": hub_url,
+                    "nodeSparkDeviceName": device_name,
                     "nodeSparkDeviceToken": paired.get("deviceToken", ""),
                     "nodeSparkHubId": paired.get("hubId", ""),
                     "nodeSparkTokenExpiresAt": paired.get("expiresAt", ""),
@@ -689,6 +694,21 @@ def save_browser_supplied_secrets(body: dict[str, Any]) -> dict[str, bool]:
     if str(voice.get("elevenLabsVoiceId") or "").strip():
         values["elevenLabsVoiceId"] = str(voice.get("elevenLabsVoiceId") or "").strip()
         saved["elevenLabsVoiceId"] = True
+    if str(voice.get("elevenLabsVoiceName") or "").strip():
+        values["elevenLabsVoiceName"] = str(voice.get("elevenLabsVoiceName") or "").strip()
+        saved["elevenLabsVoiceName"] = True
+    if str(voice.get("elevenLabsModelId") or "").strip():
+        values["elevenLabsModelId"] = str(voice.get("elevenLabsModelId") or "").strip()
+        saved["elevenLabsModelId"] = True
+    if str(voice.get("elevenLabsOutputFormat") or "").strip():
+        values["elevenLabsOutputFormat"] = str(voice.get("elevenLabsOutputFormat") or "").strip()
+        saved["elevenLabsOutputFormat"] = True
+    if str(voice.get("elevenLabsStability") or "").strip():
+        values["elevenLabsStability"] = str(voice.get("elevenLabsStability") or "").strip()
+        saved["elevenLabsStability"] = True
+    if str(voice.get("elevenLabsSimilarityBoost") or "").strip():
+        values["elevenLabsSimilarityBoost"] = str(voice.get("elevenLabsSimilarityBoost") or "").strip()
+        saved["elevenLabsSimilarityBoost"] = True
 
     home = body.get("homeAssistant") if isinstance(body.get("homeAssistant"), dict) else {}
     if str(home.get("url") or "").strip():
@@ -705,6 +725,15 @@ def save_browser_supplied_secrets(body: dict[str, Any]) -> dict[str, bool]:
     if str(product.get("nodeSparkHubUrl") or "").strip():
         values["nodeSparkHubUrl"] = str(product.get("nodeSparkHubUrl") or "").strip()
         saved["nodeSparkHubUrl"] = True
+    if str(product.get("nodeSparkDeviceName") or "").strip():
+        values["nodeSparkDeviceName"] = str(product.get("nodeSparkDeviceName") or "").strip()
+        saved["nodeSparkDeviceName"] = True
+    if str(product.get("nodeSparkHubId") or "").strip():
+        values["nodeSparkHubId"] = str(product.get("nodeSparkHubId") or "").strip()
+        saved["nodeSparkHubId"] = True
+    if str(product.get("nodeSparkTokenExpiresAt") or "").strip():
+        values["nodeSparkTokenExpiresAt"] = str(product.get("nodeSparkTokenExpiresAt") or "").strip()
+        saved["nodeSparkTokenExpiresAt"] = True
     if str(product.get("nodeSparkDeviceToken") or "").strip() and not is_secret_placeholder(str(product.get("nodeSparkDeviceToken") or "")):
         values["nodeSparkDeviceToken"] = str(product.get("nodeSparkDeviceToken") or "").strip()
         saved["nodeSparkDeviceToken"] = True
@@ -737,6 +766,42 @@ def release_public_status() -> dict[str, Any]:
             "modelEndpoint": endpoint_label(model_endpoint()),
             "homeAssistantConfigured": smart_home_configured(),
             "nodeSparkHub": endpoint_label(local.get("nodeSparkHubUrl", "")),
+        },
+    }
+
+
+def settings_public_status() -> dict[str, Any]:
+    local = load_local_secrets()
+    home_url = os.environ.get("SYNRA_HOME_ASSISTANT_URL", "").strip() or local.get("homeAssistantUrl", "").strip()
+    home_token_configured = bool(os.environ.get("SYNRA_HOME_ASSISTANT_TOKEN", "").strip() or local.get("homeAssistantToken"))
+    voice_id = os.environ.get("SYNRA_ELEVENLABS_VOICE_ID", "").strip() or local.get("elevenLabsVoiceId", "").strip()
+    model_id = os.environ.get("SYNRA_ELEVENLABS_MODEL_ID", "").strip() or local.get("elevenLabsModelId", "").strip()
+    output_format = os.environ.get("SYNRA_ELEVENLABS_OUTPUT_FORMAT", "").strip() or local.get("elevenLabsOutputFormat", "").strip()
+    return {
+        "ok": True,
+        "voice": {
+            "provider": "elevenLabs" if (voice_id or local.get("elevenLabsApiKey") or os.environ.get("SYNRA_ELEVENLABS_API_KEY", "").strip()) else "",
+            "elevenLabsApiKeyConfigured": bool(os.environ.get("SYNRA_ELEVENLABS_API_KEY", "").strip() or local.get("elevenLabsApiKey")),
+            "elevenLabsVoiceId": voice_id,
+            "elevenLabsVoiceName": local.get("elevenLabsVoiceName", "").strip(),
+            "elevenLabsModelId": model_id or "eleven_multilingual_v2",
+            "elevenLabsOutputFormat": output_format or "mp3_44100_128",
+            "elevenLabsStability": local.get("elevenLabsStability", "").strip(),
+            "elevenLabsSimilarityBoost": local.get("elevenLabsSimilarityBoost", "").strip(),
+        },
+        "homeAssistant": {
+            "enabled": bool(home_url and home_token_configured),
+            "url": home_url,
+            "tokenConfigured": home_token_configured,
+            "defaultLightEntity": os.environ.get("SYNRA_HOME_ASSISTANT_DEFAULT_LIGHT", "").strip() or local.get("homeAssistantDefaultLightEntity", "").strip(),
+        },
+        "product": {
+            "nodeSparkAccess": "subscriber" if local.get("nodeSparkHubUrl") or local.get("nodeSparkDeviceToken") else "",
+            "nodeSparkHubUrl": local.get("nodeSparkHubUrl", "").strip(),
+            "nodeSparkDeviceName": local.get("nodeSparkDeviceName", "").strip(),
+            "nodeSparkHubId": local.get("nodeSparkHubId", "").strip(),
+            "nodeSparkDeviceTokenConfigured": bool(local.get("nodeSparkDeviceToken")),
+            "nodeSparkTokenExpiresAt": local.get("nodeSparkTokenExpiresAt", "").strip(),
         },
     }
 
@@ -779,12 +844,19 @@ def sanitize_error(error: Exception) -> str:
 
 def redact_secret_text(value: str) -> str:
     text = value
-    for secret_value in load_local_secrets().values():
+    for key, secret_value in load_local_secrets().items():
+        if not is_sensitive_secret_key(key):
+            continue
         if secret_value and len(secret_value) >= 6:
             text = text.replace(secret_value, "[redacted]")
     text = re.sub(r"(?i)(bearer\s+)[a-z0-9._~+/=-]{8,}", r"\1[redacted]", text)
     text = re.sub(r"(?i)(api[_ -]?key|token|secret|password)(['\"]?\s*[:=]\s*['\"]?)[^'\"\s,}]{4,}", r"\1\2[redacted]", text)
     return text[:600]
+
+
+def is_sensitive_secret_key(key: str) -> bool:
+    lower = key.lower()
+    return any(part in lower for part in ("apikey", "api_key", "token", "secret", "password"))
 
 
 def redact_public_payload(value: Any) -> Any:
