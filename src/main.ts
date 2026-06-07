@@ -152,7 +152,7 @@ const STATE_MOTION_VARIETY: Record<SynraState, string[]> = {
   idle: ["mode:idle", "local_stand_1", "local_stand_4", "local_stand_5"],
   listening: ["mode:listening", "attentive", "lean_in", "look_camera"],
   thinking: ["mode:thinking", "ask_question", "compare", "look_screen"],
-  speaking: ["mode:speaking", "explain", "present", "answer", "teach"],
+  speaking: ["mode:speaking"],
   offline: ["error_calm", "concerned"]
 };
 

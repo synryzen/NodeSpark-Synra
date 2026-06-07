@@ -178,53 +178,53 @@ const SYNRA_SPEAKING_LIFE_PROFILE: SynraSpeakingLifeProfile = {
   calibrationMode: "auto",
   deviceProfile: "desktop",
   reduceMotion: false,
-  localInstalledOverlayStrength: 0.5,
-  proceduralOverlayStrength: 0.88,
+  localInstalledOverlayStrength: 0.18,
+  proceduralOverlayStrength: 0.56,
   mouthOpenScale: 0.56,
   fallbackOpenScale: 0.8,
   consonantPulseScale: 0.15,
   vowelHoldScale: 0.11,
   visemeAttack: 0.7,
   visemeRelease: 0.34,
-  headMotionScale: 1.22,
-  handBeatScale: 1.34,
-  microGestureScale: 1.18,
+  headMotionScale: 0.72,
+  handBeatScale: 0.48,
+  microGestureScale: 0.42,
   jawMotionScale: 1.14,
-  phraseGestureScale: 1.2,
-  speechGazeScale: 1.12
+  phraseGestureScale: 0.58,
+  speechGazeScale: 0.8
 };
 const SYNRA_SPEAKING_LIFE_CALIBRATIONS: Record<SynraSpeakingLifeCalibrationId, Partial<SynraSpeakingLifeProfile>> = {
   expressive_desktop: {
-    localInstalledOverlayStrength: 0.64,
-    proceduralOverlayStrength: 1.06,
+    localInstalledOverlayStrength: 0.24,
+    proceduralOverlayStrength: 0.68,
     mouthOpenScale: 0.68,
     fallbackOpenScale: 0.91,
     consonantPulseScale: 0.21,
     vowelHoldScale: 0.16,
     visemeAttack: 0.82,
     visemeRelease: 0.42,
-    headMotionScale: 1.44,
-    handBeatScale: 1.58,
-    microGestureScale: 1.34,
+    headMotionScale: 0.82,
+    handBeatScale: 0.58,
+    microGestureScale: 0.48,
     jawMotionScale: 1.3,
-    phraseGestureScale: 1.38,
-    speechGazeScale: 1.26
+    phraseGestureScale: 0.68,
+    speechGazeScale: 0.88
   },
   balanced_ios: {
-    localInstalledOverlayStrength: 0.54,
-    proceduralOverlayStrength: 0.86,
+    localInstalledOverlayStrength: 0.2,
+    proceduralOverlayStrength: 0.52,
     mouthOpenScale: 0.59,
     fallbackOpenScale: 0.8,
     consonantPulseScale: 0.16,
     vowelHoldScale: 0.12,
     visemeAttack: 0.72,
     visemeRelease: 0.36,
-    headMotionScale: 1.08,
-    handBeatScale: 1.08,
-    microGestureScale: 1,
+    headMotionScale: 0.64,
+    handBeatScale: 0.42,
+    microGestureScale: 0.36,
     jawMotionScale: 1.12,
-    phraseGestureScale: 1.06,
-    speechGazeScale: 1.06
+    phraseGestureScale: 0.52,
+    speechGazeScale: 0.76
   },
   reduced_motion: {
     localInstalledOverlayStrength: 0.28,
@@ -1821,16 +1821,16 @@ export class SynraAvatarRuntime {
     const onset = performanceFrame.onset;
     const phraseProgress = performanceFrame.phraseProgress;
     const phrase = Math.sin(phraseProgress * Math.PI * 2 + now * 0.18);
-    const syllable = Math.sin(now * (5.6 + energy * 2.2 + performanceFrame.mouthShapeVariety * 1.2) + phraseProgress * Math.PI * 6);
-    const micro = Math.sin(now * 9.4 + energy * 1.7 + performanceFrame.consonantBias * 0.9);
+    const syllable = Math.sin(now * (3.2 + energy * 1.1 + performanceFrame.mouthShapeVariety * 0.5) + phraseProgress * Math.PI * 3.4);
+    const micro = Math.sin(now * 4.8 + energy * 0.8 + performanceFrame.consonantBias * 0.35);
     const conversationalTurn = Math.sin(now * 0.48 + performanceFrame.gazeBias);
     const emphasisNod = Math.max(0, syllable) * (0.28 + onset * 0.72 + performanceFrame.vowelBias * 0.16);
     const emphasisBeat = Math.max(performanceFrame.emphasisBeat, performanceFrame.gestureIntent === "emphasis_beat" ? 0.42 : 0);
     const gestureLift = this.speechGestureLift(performanceFrame);
     const toneMotionScale = this.speechToneMotionScale(performanceFrame);
-    const activeSpeechLift = 0.82 + energy * 0.28 + performanceFrame.mouthShapeVariety * 0.1;
-    const phraseGesture = (0.58 + emphasisBeat * 0.34 + gestureLift * 0.22) * profile.phraseGestureScale * toneMotionScale * activeSpeechLift;
-    const weight = THREE.MathUtils.clamp(strength * (0.38 + energy * 0.76 + performanceFrame.mouthShapeVariety * 0.1 + emphasisBeat * 0.12), 0.08, 0.96);
+    const activeSpeechLift = 0.56 + energy * 0.18 + performanceFrame.mouthShapeVariety * 0.05;
+    const phraseGesture = (0.34 + emphasisBeat * 0.18 + gestureLift * 0.11) * profile.phraseGestureScale * toneMotionScale * activeSpeechLift;
+    const weight = THREE.MathUtils.clamp(strength * (0.18 + energy * 0.42 + performanceFrame.mouthShapeVariety * 0.05 + emphasisBeat * 0.06), 0.015, 0.46);
     const headScale = profile.headMotionScale;
     const handScale = profile.handBeatScale;
     const microScale = profile.microGestureScale;

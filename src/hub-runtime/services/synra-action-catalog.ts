@@ -347,7 +347,7 @@ const LOCAL_INSTALLED_MAPPING_QUALITY: Record<string, SynraLocalMotionMappingQua
   confused: { actionId: "confused", clipId: "Emotion_ConfusedTilt", quality: "acceptable", notes: "Assistant-specific confused tilt with a clearer questioning cue." },
   idle: { actionId: "idle", clipId: "Local_Rolock_Stand1", quality: "good", notes: "Calm stance with runtime life overlays." },
   listening: { actionId: "listening", clipId: "Local_Rolock_Stand2", quality: "good", notes: "Attentive stance with gaze/life overlays." },
-  speaking: { actionId: "speaking", clipId: "Local_Rolock_Stand3", quality: "acceptable", notes: "Stable speaking stance; gesture overlays/visemes carry speech." }
+  speaking: { actionId: "speaking", clipId: "Local_Rolock_Stand1", quality: "good", notes: "Calm speaking stance; visemes and subtle life overlays carry speech without full-body pose jumps." }
 };
 
 const SYNRA_ASSISTANT_MOTION_PRESET_MAP: Record<string, SynraAssistantMotionPreset> = {
@@ -451,10 +451,10 @@ const SYNRA_ASSISTANT_MOTION_PRESET_MAP: Record<string, SynraAssistantMotionPres
   },
   speaking: {
     actionId: "speaking",
-    clipId: "Local_Rolock_Stand3",
+    clipId: "Local_Rolock_Stand1",
     usage: "assistant",
-    quality: "acceptable",
-    notes: "Stable speaking stance; small gestures are layered through dispatcher/living state."
+    quality: "good",
+    notes: "Calm speaking stance; small face, gaze, and breath motion carry speech without full-body pose jumps."
   },
   idle_breathe: {
     actionId: "idle_breathe",
