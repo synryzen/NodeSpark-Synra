@@ -1,0 +1,56 @@
+name: Bug Report
+description: Report a reproducible Synra problem.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Synra. Please remove secrets, tokens, private IP credentials, face samples, and raw camera/audio data before posting.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the issue clearly.
+      placeholder: Synra's lips stopped before audio ended...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      placeholder: Synra should keep speaking motion until the voice ends.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Synra on Jetson kiosk.
+        2. Choose ElevenLabs voice.
+        3. Ask Synra...
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      options:
+        - Jetson Electron kiosk
+        - Jetson browser
+        - Mac browser
+        - iPhone/iPad
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 4.3.0 or commit SHA
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste only redacted logs. Screenshots are welcome when they do not expose secrets.

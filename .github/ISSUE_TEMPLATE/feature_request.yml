@@ -1,0 +1,40 @@
+name: Feature Request
+description: Suggest a focused improvement for Synra.
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What should Synra do better?
+      placeholder: Describe the user experience or technical gap.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      placeholder: Describe the feature, UI change, integration, performance improvement, or behavior change.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Avatar and motion
+        - Voice and lip sync
+        - Vision and camera
+        - Home Assistant
+        - NodeSparkHub pairing
+        - Jetson performance
+        - UI and settings
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes, screenshots, or references
+      description: Add mockups, screenshots, or links if useful. Do not include secrets.

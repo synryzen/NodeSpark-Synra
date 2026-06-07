@@ -112,11 +112,27 @@ Install page:
 https://synryzen.github.io/NodeSpark-Synra/jetson-install.html
 ```
 
+Contribute page:
+
+```text
+https://synryzen.github.io/NodeSpark-Synra/contribute.html
+```
+
 Roadmap:
 
 ```text
 docs/roadmap.md
 ```
+
+## Contribute
+
+Synra welcomes focused contributions that improve reliability, beauty, performance, documentation, and platform support.
+
+- Start here: [CONTRIBUTING.md](CONTRIBUTING.md).
+- Report bugs with the GitHub bug template.
+- Suggest focused enhancements with the feature request template.
+- Open pull requests with screenshots for visual/avatar changes and verification output for code changes.
+- Report security or privacy issues privately. See [SECURITY.md](SECURITY.md).
 
 ## Development
 
