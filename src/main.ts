@@ -72,6 +72,11 @@ type ElevenLabsVoice = {
   category?: string;
   previewUrl?: string;
 };
+type ElevenLabsSpeechAlignment = {
+  characters?: string[];
+  characterStartTimesSeconds?: number[];
+  characterEndTimesSeconds?: number[];
+};
 type SynraKioskWindowMode = "fullscreen" | "windowed";
 type SynraKioskBridge = {
   getWindowMode: () => Promise<SynraKioskWindowMode>;
@@ -3770,7 +3775,14 @@ async function playElevenLabsSpeech(text: string, serial: number): Promise<void>
         similarityBoost: state.voiceSettings.elevenLabsSimilarityBoost
       })
     });
-    const data = await response.json() as { ok?: boolean; error?: string; audioBase64?: string; mimeType?: string };
+    const data = await response.json() as {
+      ok?: boolean;
+      error?: string;
+      audioBase64?: string;
+      mimeType?: string;
+      alignment?: ElevenLabsSpeechAlignment | null;
+      normalizedAlignment?: ElevenLabsSpeechAlignment | null;
+    };
     if (serial !== speechSerial) return;
     if (!data.ok || !data.audioBase64) throw new Error(data.error || "ElevenLabs returned no audio.");
     const audioUrl = URL.createObjectURL(base64ToBlob(data.audioBase64, data.mimeType || "audio/mpeg"));
@@ -3778,8 +3790,9 @@ async function playElevenLabsSpeech(text: string, serial: number): Promise<void>
     activeSpeechAudio = audio;
     audio.onplay = () => {
       if (serial !== speechSerial) return;
+      clearSpeechFallback();
       updateVoiceStatus("ElevenLabs speaking");
-      startSpeechLipSync(text, serial, audio);
+      startSpeechLipSync(text, serial, audio, data.normalizedAlignment ?? data.alignment ?? null);
     };
     audio.onended = () => {
       if (activeSpeechAudio === audio) activeSpeechAudio = null;
@@ -3898,7 +3911,7 @@ function clearSpeechFallback(): void {
   state.speechFallbackTimer = 0;
 }
 
-function startSpeechLipSync(text: string, serial: number, audio?: HTMLAudioElement): void {
+function startSpeechLipSync(text: string, serial: number, audio?: HTMLAudioElement, alignment?: ElevenLabsSpeechAlignment | null): void {
   stopSpeechLipSync();
   hubAvatarRuntime?.setSpeaking(true);
   const durationMs = estimateSpeechDurationMs(text);
@@ -3911,7 +3924,7 @@ function startSpeechLipSync(text: string, serial: number, audio?: HTMLAudioEleme
     const audioDurationMs = audio && Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration * 1000 : durationMs;
     const elapsedMs = audio ? audio.currentTime * 1000 : performance.now() - startedAt;
     const ratio = Math.max(0, Math.min(1, elapsedMs / Math.max(700, audioDurationMs)));
-    const charIndex = ratio * Math.max(0, text.length - 1);
+    const charIndex = speechCharacterIndexAtAlignment(text, elapsedMs / 1000, alignment) ?? ratio * Math.max(0, text.length - 1);
     hubAvatarRuntime?.setVisemes(visemesForSpeechPosition(text, charIndex, 0.18, {
       ratio,
       durationMs: audioDurationMs,
@@ -3920,6 +3933,23 @@ function startSpeechLipSync(text: string, serial: number, audio?: HTMLAudioEleme
   };
   tick();
   activeLipSyncTimer = window.setInterval(tick, 32);
+}
+
+function speechCharacterIndexAtAlignment(text: string, seconds: number, alignment?: ElevenLabsSpeechAlignment | null): number | null {
+  const starts = alignment?.characterStartTimesSeconds;
+  const ends = alignment?.characterEndTimesSeconds;
+  if (!starts?.length || !ends?.length) return null;
+  const count = Math.min(starts.length, ends.length, text.length);
+  if (count <= 0) return null;
+  const clampedSeconds = Math.max(0, seconds);
+  for (let index = 0; index < count; index += 1) {
+    const start = Number(starts[index]);
+    const end = Number(ends[index]);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+    if (clampedSeconds >= start && clampedSeconds <= Math.max(start, end)) return index;
+  }
+  if (clampedSeconds < Number(starts[0] ?? 0)) return 0;
+  return count - 1;
 }
 
 function stopSpeechLipSync(): void {

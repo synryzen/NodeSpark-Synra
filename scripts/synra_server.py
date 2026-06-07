@@ -257,7 +257,7 @@ class SynraHandler(SimpleHTTPRequestHandler):
             if not voice_id:
                 self.send_json(200, {"ok": False, "error": "No ElevenLabs voice ID is configured."})
                 return
-            audio, mime_type = elevenlabs_text_to_speech(
+            audio, mime_type, alignment, normalized_alignment = elevenlabs_text_to_speech(
                 text=text[:2400],
                 api_key=api_key,
                 voice_id=voice_id,
@@ -275,6 +275,8 @@ class SynraHandler(SimpleHTTPRequestHandler):
                     "model": model_id,
                     "mimeType": mime_type,
                     "audioBase64": base64.b64encode(audio).decode("ascii"),
+                    "alignment": alignment,
+                    "normalizedAlignment": normalized_alignment,
                 },
             )
         except urllib.error.HTTPError as error:
@@ -1472,9 +1474,24 @@ def elevenlabs_text_to_speech(
     output_format: str,
     stability: float,
     similarity_boost: float,
-) -> tuple[bytes, str]:
+) -> tuple[bytes, str, dict[str, Any] | None, dict[str, Any] | None]:
     safe_voice = urllib.parse.quote(voice_id, safe="")
     safe_format = urllib.parse.quote(output_format, safe="")
+    if env_bool("SYNRA_ELEVENLABS_TIMESTAMPS", True):
+        try:
+            return elevenlabs_text_to_speech_with_timestamps(
+                text=text,
+                api_key=api_key,
+                voice_id=voice_id,
+                model_id=model_id,
+                output_format=output_format,
+                stability=stability,
+                similarity_boost=similarity_boost,
+            )
+        except urllib.error.HTTPError as error:
+            if error.code not in {400, 404, 422}:
+                raise
+
     endpoint = f"https://api.elevenlabs.io/v1/text-to-speech/{safe_voice}?output_format={safe_format}"
     payload = {
         "text": text,
@@ -1490,7 +1507,66 @@ def elevenlabs_text_to_speech(
     request.add_header("xi-api-key", api_key)
     with urllib.request.urlopen(request, timeout=float(os.environ.get("SYNRA_ELEVENLABS_TIMEOUT_SECONDS", "45"))) as response:
         mime_type = response.headers.get_content_type() or "audio/mpeg"
-        return response.read(), mime_type
+        return response.read(), mime_type, None, None
+
+
+def elevenlabs_text_to_speech_with_timestamps(
+    *,
+    text: str,
+    api_key: str,
+    voice_id: str,
+    model_id: str,
+    output_format: str,
+    stability: float,
+    similarity_boost: float,
+) -> tuple[bytes, str, dict[str, Any] | None, dict[str, Any] | None]:
+    safe_voice = urllib.parse.quote(voice_id, safe="")
+    safe_format = urllib.parse.quote(output_format, safe="")
+    endpoint = f"https://api.elevenlabs.io/v1/text-to-speech/{safe_voice}/with-timestamps?output_format={safe_format}"
+    payload = {
+        "text": text,
+        "model_id": model_id,
+        "voice_settings": {
+            "stability": stability,
+            "similarity_boost": similarity_boost,
+        },
+    }
+    request = urllib.request.Request(endpoint, data=json.dumps(payload).encode("utf-8"), method="POST")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "application/json")
+    request.add_header("xi-api-key", api_key)
+    with urllib.request.urlopen(request, timeout=float(os.environ.get("SYNRA_ELEVENLABS_TIMEOUT_SECONDS", "45"))) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    audio_base64 = str(data.get("audio_base64") or "").strip()
+    if not audio_base64:
+        raise ValueError("ElevenLabs timestamp response did not include audio.")
+    return (
+        base64.b64decode(audio_base64),
+        "audio/mpeg",
+        normalize_elevenlabs_alignment(data.get("alignment")),
+        normalize_elevenlabs_alignment(data.get("normalized_alignment")),
+    )
+
+
+def normalize_elevenlabs_alignment(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    characters = raw.get("characters")
+    starts = raw.get("character_start_times_seconds")
+    ends = raw.get("character_end_times_seconds")
+    if not isinstance(characters, list) or not isinstance(starts, list) or not isinstance(ends, list):
+        return None
+    count = min(len(characters), len(starts), len(ends))
+    if count <= 0:
+        return None
+    normalized_characters = [str(characters[index])[:4] for index in range(count)]
+    normalized_starts = [float(starts[index]) for index in range(count)]
+    normalized_ends = [float(ends[index]) for index in range(count)]
+    return {
+        "characters": normalized_characters,
+        "characterStartTimesSeconds": normalized_starts,
+        "characterEndTimesSeconds": normalized_ends,
+    }
 
 
 def elevenlabs_list_voices(*, api_key: str) -> list[dict[str, str]]:

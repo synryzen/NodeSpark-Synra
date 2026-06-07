@@ -380,11 +380,15 @@ const standaloneSpeechLipSyncIsDriven =
   mainScript.includes("visemesForSpeechPosition") &&
   mainScript.includes("startSpeechLipSync") &&
   mainScript.includes("stopSpeechLipSync") &&
+  mainScript.includes("speechCharacterIndexAtAlignment") &&
   mainScript.includes("hubAvatarRuntime?.setVisemes") &&
   mainScript.includes("audio.duration") &&
   mainScript.includes("audio.currentTime") &&
+  mainScript.includes("clearSpeechFallback();") &&
   mainScript.includes("startSpeechLipSync(text, serial") &&
-  mainScript.includes("stopSpeechLipSync();");
+  mainScript.includes("stopSpeechLipSync();") &&
+  serverScript.includes("with-timestamps") &&
+  serverScript.includes("normalizedAlignment");
 const browserFallbackVoiceIsDeliberate =
   mainScript.includes('id="browserVoiceSelect"') &&
   mainScript.includes("PREFERRED_BROWSER_VOICE_HINTS") &&
