@@ -1,15 +1,37 @@
 # NodeSpark Synra
 
-Synra Standalone is a companion AI assistant built from the Synra experience in NodeSpark and NodeSparkHub, but packaged as its own product path.
+![Synra Classic greeting inside the Orbit Lounge](docs/assets/screenshots/synra-greeting-wave.png)
 
-Synra is designed to:
+Synra Standalone is the dedicated companion path for Synra: a real-time anime AI assistant with voice, motion, memory, smart-home awareness, and optional NodeSparkHub Command Center pairing. It keeps the Synra experience from NodeSpark and NodeSparkHub, then packages it as a Jetson-first appliance-style runtime.
 
-- Talk, listen, and speak.
+<p>
+  <strong>Version:</strong> 4.3.0 &nbsp;|&nbsp;
+  <strong>Default avatar:</strong> Synra Classic &nbsp;|&nbsp;
+  <strong>Runtime:</strong> Jetson kiosk, browser, and Electron station &nbsp;|&nbsp;
+  <strong>Motion:</strong> 97 VRMA clips
+</p>
+
+## Experience
+
+Synra is designed to feel present without losing control, privacy, or reliability:
+
+- Speak with ElevenLabs voice output and timestamped lip-sync support.
 - Use local or cloud AI models through an OpenAI-compatible server path.
 - Remember user-approved preferences locally.
-- Run on Jetson as a lean kiosk companion.
-- Control smart-home tools only when configured and confirmed.
-- Connect to NodeSpark later as an optional skill, not a dependency.
+- Run on NVIDIA Jetson as a lean 30 FPS kiosk companion.
+- Control Home Assistant tools only when configured and confirmed.
+- Pair with NodeSparkHub as an optional subscriber skill, not a hard dependency.
+- Keep Synra Classic installed first as the main Synra identity.
+
+## Screenshots
+
+| Live companion | Settings and Home Assistant |
+| --- | --- |
+| ![Synra Classic standing in the Orbit Lounge live companion view](docs/assets/screenshots/synra-orbit-lounge-live.png) | ![Synra settings panel with Home Assistant configuration](docs/assets/screenshots/synra-settings-home-assistant.png) |
+
+| Motion and presence |
+| --- |
+| ![Synra Classic waving in the Orbit Lounge with control panels visible](docs/assets/screenshots/synra-greeting-wave.png) |
 
 ## Current Runtime
 
@@ -20,6 +42,8 @@ Synra is designed to:
 - Six Synra stage backgrounds.
 - Python same-origin API server for Jetson deployment.
 - Local model bridge, smart-home bridge, and privacy-safe camera diagnostics.
+- Server-managed secrets for API keys and device tokens.
+- Backup, restore, watchdog, release status, and health endpoints for appliance-style operation.
 
 ## Jetson
 
@@ -80,6 +104,12 @@ Project page:
 
 ```text
 https://synryzen.github.io/NodeSpark-Synra/
+```
+
+Install page:
+
+```text
+https://synryzen.github.io/NodeSpark-Synra/jetson-install.html
 ```
 
 Roadmap:
