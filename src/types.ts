@@ -13,7 +13,7 @@ export type VoiceProvider = "browser" | "elevenLabs";
 export type NodeSparkAccess = "locked" | "subscriber";
 export type SynraSkillMode = "hybrid" | "homeAssistant" | "nodeSparkHub";
 export type WakeWordMode = "off" | "local";
-export type ScreenTimeoutMinutes = 15 | 30 | 60 | 0;
+export type ScreenTimeoutMinutes = 10 | 15 | 30 | 60 | 0;
 
 export interface ModelSettings {
   provider: ModelProvider;

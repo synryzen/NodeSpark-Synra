@@ -9,6 +9,7 @@ const productKey = "synraStandalone.productSettings.v1";
 const homeAssistantKey = "synraStandalone.homeAssistantSettings.v1";
 const companionKey = "synraStandalone.companionSettings.v1";
 export const SERVER_SECRET_SENTINEL = "__server_secret__";
+const DEFAULT_WAKE_PHRASE = "Hello Synra";
 
 export function loadModelSettings(): ModelSettings {
   return readJson<ModelSettings>(modelKey, {
@@ -88,18 +89,36 @@ export function saveHomeAssistantSettings(settings: HomeAssistantSettings): void
 }
 
 export function loadCompanionSettings(): CompanionSettings {
-  return readJson<CompanionSettings>(companionKey, {
+  const settings = readJson<CompanionSettings>(companionKey, {
     setupComplete: false,
     ownerName: "",
     wakeWordMode: "off",
-    wakePhrase: "Hey Synra",
-    screenTimeoutMinutes: 30,
+    wakePhrase: DEFAULT_WAKE_PHRASE,
+    screenTimeoutMinutes: 10,
     allowAlwaysListening: false,
     allowCameraRecognition: false,
     allowFaceSampleStorage: false,
     allowMemorySuggestions: true,
     knownUsers: []
   });
+  const wasLegacyWakePhrase = !settings.wakePhrase?.trim() || settings.wakePhrase === "Hey Synra";
+  const wakePhrase = !wasLegacyWakePhrase
+    ? settings.wakePhrase.trim()
+    : DEFAULT_WAKE_PHRASE;
+  const wakeWordMode = wasLegacyWakePhrase && settings.wakeWordMode === "off" ? "local" : settings.wakeWordMode;
+  const rawScreenTimeout = Number(settings.screenTimeoutMinutes);
+  const screenTimeoutMinutes = rawScreenTimeout === 30
+    ? 10
+    : [10, 15, 60, 0].includes(rawScreenTimeout)
+    ? settings.screenTimeoutMinutes
+    : 10;
+  return {
+    ...settings,
+    wakeWordMode,
+    wakePhrase,
+    screenTimeoutMinutes,
+    allowAlwaysListening: wakeWordMode === "local" ? true : settings.allowAlwaysListening
+  };
 }
 
 export function saveCompanionSettings(settings: CompanionSettings): void {

@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 type SynraKioskWindowMode = "fullscreen" | "windowed";
-type SynraScreenTimeoutMinutes = 15 | 30 | 60 | 0;
+type SynraScreenTimeoutMinutes = 10 | 15 | 30 | 60 | 0;
 
 function normalizeWindowMode(value: unknown): SynraKioskWindowMode {
   return value === "windowed" ? "windowed" : "fullscreen";

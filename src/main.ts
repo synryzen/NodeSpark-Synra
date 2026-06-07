@@ -173,8 +173,8 @@ const PRESENCE_NUDGES = [
   "Systems are calm.",
   "I am standing by."
 ];
-const DEFAULT_WAKE_PHRASE = "Hey Synra";
-const DEFAULT_WAKE_LISTENING_LABEL = "Listening for Hey Synra";
+const DEFAULT_WAKE_PHRASE = "Hello Synra";
+const DEFAULT_WAKE_LISTENING_LABEL = "Listening for Hello Synra";
 const PREFERRED_BROWSER_VOICE_HINTS = [
   "samantha",
   "victoria",
@@ -559,16 +559,17 @@ app.innerHTML = `
           Wake word
           <select id="wakeWordModeInput">
             <option value="off">Off</option>
-            <option value="local">Local "Hey Synra"</option>
+            <option value="local">Local "Hello Synra"</option>
           </select>
         </label>
         <label>
           Wake phrase
-          <input id="wakePhraseInput" placeholder="Hey Synra" />
+          <input id="wakePhraseInput" placeholder="Hello Synra" />
         </label>
         <label>
           Screen timeout
           <select id="screenTimeoutInput">
+            <option value="10">10 minutes</option>
             <option value="15">15 minutes</option>
             <option value="30">30 minutes</option>
             <option value="60">1 hour</option>
@@ -836,12 +837,13 @@ app.innerHTML = `
           Wake word
           <select id="wizardWakeWordModeInput">
             <option value="off">Off for now</option>
-            <option value="local">Listen locally for Hey Synra</option>
+            <option value="local">Listen locally for Hello Synra</option>
           </select>
         </label>
         <label>
           Screen stays on
           <select id="wizardScreenTimeoutInput">
+            <option value="10">10 minutes</option>
             <option value="15">15 minutes</option>
             <option value="30">30 minutes</option>
             <option value="60">1 hour</option>
@@ -1130,7 +1132,9 @@ async function bootAvatarRuntime(): Promise<void> {
       document.body.dataset.webgl = "available";
       setSynraState("idle", `${getSynraAvatar(resolveInitialAvatarId()).label} is ready.`);
       if (runtimeMode === "kiosk") {
-        void playMotionRoute(KIOSK_IDLE_ROUTE, { loop: true, restart: true });
+        hubAvatarRuntime.setMode("idle", { playAuthoredLoop: false });
+        hubAvatarRuntime.setSpeaking(false);
+        activeMotionEl.textContent = "procedural idle";
       } else {
         void playMotionRoute("wave", { restart: true, returnToIdle: true });
       }
@@ -1641,7 +1645,7 @@ function normalizeWakeWordMode(value: string): WakeWordMode {
 
 function normalizeScreenTimeout(value: string | number): ScreenTimeoutMinutes {
   const numeric = Number(value);
-  return numeric === 15 || numeric === 30 || numeric === 60 ? numeric : 0;
+  return numeric === 10 || numeric === 15 || numeric === 30 || numeric === 60 ? numeric : 0;
 }
 
 function screenTimeoutLabel(minutes: ScreenTimeoutMinutes): string {
@@ -1714,7 +1718,7 @@ async function startWakeWordListening(): Promise<void> {
     if (!latest.includes(phrase)) return;
     void window.synraKiosk?.wakeDisplay?.();
     updateWakeWordStatus("Awake");
-    setSynraState("listening", "I heard Hey Synra.");
+    setSynraState("listening", `I heard ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}.`);
     stopWakeWordListening("Awake");
     void startListening();
   };
@@ -2529,7 +2533,7 @@ async function playMotionRoute(actionOrClipId: string, options: { restart?: bool
       if (!options.returnToIdle) window.clearTimeout(hubMotionReturnTimer);
       const mode = modeFromRoute(actionOrClipId);
       if (mode) {
-        hubAvatarRuntime.setMode(mode, { playAuthoredLoop: true });
+        hubAvatarRuntime.setMode(mode, { playAuthoredLoop: mode !== "idle" });
         hubAvatarRuntime.setSpeaking(mode === "speaking");
       } else if (hubMotionClips.some((clip) => clip.id === actionOrClipId)) {
         await hubAvatarRuntime.playGeneratedClip(actionOrClipId);
@@ -2573,9 +2577,9 @@ function scheduleHubLivingIdleReturn(actionOrClipId: string): void {
     if (serial !== hubMotionReturnSerial || !hubAvatarRuntime) return;
     if (state.synra === "speaking" || state.synra === "listening" || state.synra === "thinking") return;
     hubAvatarRuntime.stopMotionTest();
-    hubAvatarRuntime.setMode("idle", { playAuthoredLoop: true });
+    hubAvatarRuntime.setMode("idle", { playAuthoredLoop: false });
     hubAvatarRuntime.setSpeaking(false);
-    activeMotionEl.textContent = resolveMotionClipId(KIOSK_IDLE_ROUTE) ?? KIOSK_IDLE_ROUTE;
+    activeMotionEl.textContent = "procedural idle";
   }, baseDelay);
 }
 
@@ -4528,7 +4532,8 @@ function setSynraState(next: SynraState, caption: string): void {
   if (!shouldRestartStateMotion) return;
   const route = routeForSynraState(next);
   if (hubAvatarRuntime) {
-    hubAvatarRuntime.setMode(modeFromState(next), { playAuthoredLoop: true });
+    const mode = modeFromState(next);
+    hubAvatarRuntime.setMode(mode, { playAuthoredLoop: mode !== "idle" });
     hubAvatarRuntime.setSpeaking(next === "speaking");
     if (route && !route.startsWith("mode:")) void playMotionRoute(route, { loop: true, restart: next !== "idle" });
     return;

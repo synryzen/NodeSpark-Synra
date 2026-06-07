@@ -27,7 +27,8 @@ if (process.env.SYNRA_KIOSK_ENABLE_LOGGING === "true") {
 let blockerId: number | null = null;
 let mainWindow: BrowserWindow | null = null;
 let currentWindowMode: KioskWindowMode = launchConfig.window.windowMode;
-let screenTimeout: 15 | 30 | 60 | 0 = 0;
+type ScreenTimeoutMinutes = 10 | 15 | 30 | 60 | 0;
+let screenTimeout: ScreenTimeoutMinutes = 0;
 let screenSleepTimer: NodeJS.Timeout | null = null;
 
 function installPermissionPolicy(): void {
@@ -87,9 +88,14 @@ function applyWindowMode(window: BrowserWindow, windowMode: KioskWindowMode, per
   return currentWindowMode;
 }
 
-function setScreenTimeout(minutes: unknown): 15 | 30 | 60 | 0 {
-  screenTimeout = minutes === 15 || minutes === 30 || minutes === 60 ? minutes : 0;
+function setScreenTimeout(minutes: unknown): ScreenTimeoutMinutes {
+  screenTimeout = minutes === 10 || minutes === 15 || minutes === 30 || minutes === 60 ? minutes : 0;
   resetScreenSleepTimer();
+  const seconds = screenTimeout * 60;
+  void runDisplayCommand(screenTimeout === 0
+    ? ["s", "off", "-dpms"]
+    : ["s", String(seconds), String(seconds), "+dpms", "dpms", String(seconds), String(seconds), String(seconds)]);
+  logger.info("Synra display sleep timeout updated", { minutes: screenTimeout });
   return screenTimeout;
 }
 
