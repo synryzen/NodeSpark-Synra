@@ -109,6 +109,9 @@ class SynraHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/external-chat"):
             self.handle_external_chat()
             return
+        if self.path.startswith("/api/stt/elevenlabs"):
+            self.handle_elevenlabs_stt()
+            return
         if self.path.startswith("/api/tts/elevenlabs/voices"):
             self.handle_elevenlabs_voices()
             return
@@ -305,6 +308,54 @@ class SynraHandler(SimpleHTTPRequestHandler):
             self.send_json(200, {"ok": False, "provider": "ElevenLabs", "error": f"ElevenLabs voices are unreachable: {error.reason}."})
         except Exception as error:
             self.send_json(200, {"ok": False, "provider": "ElevenLabs", "error": str(error)})
+
+    def handle_elevenlabs_stt(self) -> None:
+        try:
+            body = self.read_json_body()
+            api_key = secret_or_body("elevenLabsApiKey", str(body.get("apiKey") or "").strip(), "SYNRA_ELEVENLABS_API_KEY")
+            audio_base64 = str(body.get("audioBase64") or "").strip()
+            mime_type = str(body.get("mimeType") or "audio/webm").strip() or "audio/webm"
+            model_id = str(body.get("modelId") or os.environ.get("SYNRA_ELEVENLABS_STT_MODEL_ID", "scribe_v2")).strip() or "scribe_v2"
+            language_code = str(body.get("languageCode") or "en").strip() or "en"
+            if not api_key:
+                self.send_json(200, {"ok": False, "provider": "ElevenLabs", "error": "No ElevenLabs API key is configured."})
+                return
+            if not audio_base64:
+                self.send_json(200, {"ok": False, "provider": "ElevenLabs", "error": "No microphone audio was provided."})
+                return
+            audio = base64.b64decode(audio_base64, validate=True)
+            if len(audio) < 400:
+                self.send_json(200, {"ok": False, "provider": "ElevenLabs", "error": "The microphone recording was too short."})
+                return
+            if len(audio) > int(os.environ.get("SYNRA_STT_MAX_BYTES", str(8 * 1024 * 1024))):
+                self.send_json(200, {"ok": False, "provider": "ElevenLabs", "error": "The microphone recording was too large."})
+                return
+            transcript = elevenlabs_speech_to_text(
+                audio=audio,
+                mime_type=mime_type,
+                api_key=api_key,
+                model_id=model_id,
+                language_code=language_code,
+            )
+            text = extract_transcript_text(transcript)
+            self.send_json(
+                200,
+                {
+                    "ok": bool(text),
+                    "provider": "ElevenLabs",
+                    "model": model_id,
+                    "text": text,
+                    "languageCode": str(transcript.get("language_code") or ""),
+                    "languageProbability": transcript.get("language_probability"),
+                    "error": "" if text else "No words were detected in the microphone recording.",
+                },
+            )
+        except urllib.error.HTTPError as error:
+            self.send_json(200, {"ok": False, "provider": "ElevenLabs", "error": describe_http_error("ElevenLabs speech-to-text", error)})
+        except urllib.error.URLError as error:
+            self.send_json(200, {"ok": False, "provider": "ElevenLabs", "error": f"ElevenLabs speech-to-text is unreachable: {error.reason}."})
+        except Exception as error:
+            self.send_json(200, {"ok": False, "provider": "ElevenLabs", "error": sanitize_error(error)})
 
     def handle_smart_home(self) -> None:
         try:
@@ -1667,6 +1718,82 @@ def elevenlabs_list_voices(*, api_key: str) -> list[dict[str, str]]:
             }
         )
     return result
+
+
+def elevenlabs_speech_to_text(*, audio: bytes, mime_type: str, api_key: str, model_id: str, language_code: str) -> dict[str, Any]:
+    try:
+        return post_elevenlabs_speech_to_text(
+            audio=audio,
+            mime_type=mime_type,
+            api_key=api_key,
+            model_id=model_id,
+            language_code=language_code,
+        )
+    except urllib.error.HTTPError as error:
+        if model_id != "scribe_v1" and error.code in {400, 404, 422}:
+            return post_elevenlabs_speech_to_text(
+                audio=audio,
+                mime_type=mime_type,
+                api_key=api_key,
+                model_id="scribe_v1",
+                language_code=language_code,
+            )
+        raise
+
+
+def post_elevenlabs_speech_to_text(*, audio: bytes, mime_type: str, api_key: str, model_id: str, language_code: str) -> dict[str, Any]:
+    boundary = f"----SynraSTT{secrets.token_hex(12)}"
+    fields = {
+        "model_id": model_id,
+        "language_code": language_code,
+        "tag_audio_events": "false",
+        "diarize": "false",
+    }
+    body = bytearray()
+    for key, value in fields.items():
+        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode("utf-8"))
+        body.extend(str(value).encode("utf-8"))
+        body.extend(b"\r\n")
+    extension = mime_extension(mime_type)
+    body.extend(f"--{boundary}\r\n".encode("utf-8"))
+    body.extend(f'Content-Disposition: form-data; name="file"; filename="synra-mic.{extension}"\r\n'.encode("utf-8"))
+    body.extend(f"Content-Type: {mime_type}\r\n\r\n".encode("utf-8"))
+    body.extend(audio)
+    body.extend(b"\r\n")
+    body.extend(f"--{boundary}--\r\n".encode("utf-8"))
+
+    request = urllib.request.Request("https://api.elevenlabs.io/v1/speech-to-text", data=bytes(body), method="POST")
+    request.add_header("Accept", "application/json")
+    request.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+    request.add_header("xi-api-key", api_key)
+    timeout = float(os.environ.get("SYNRA_STT_TIMEOUT_SECONDS", os.environ.get("SYNRA_ELEVENLABS_TIMEOUT_SECONDS", "45")))
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        parsed = json.loads(response.read().decode("utf-8"))
+        return parsed if isinstance(parsed, dict) else {}
+
+
+def mime_extension(mime_type: str) -> str:
+    normalized = mime_type.split(";", 1)[0].strip().lower()
+    if normalized == "audio/wav":
+        return "wav"
+    if normalized == "audio/mp4":
+        return "m4a"
+    if normalized == "audio/mpeg":
+        return "mp3"
+    if normalized == "audio/ogg":
+        return "ogg"
+    return "webm"
+
+
+def extract_transcript_text(transcript: dict[str, Any]) -> str:
+    text = clean_model_text(transcript.get("text"))
+    if text:
+        return text
+    words = transcript.get("words")
+    if isinstance(words, list):
+        return clean_model_text(" ".join(str(word.get("text") or "") for word in words if isinstance(word, dict)))
+    return ""
 
 
 def public_secret_label(value: str) -> str:

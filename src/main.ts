@@ -1078,6 +1078,8 @@ const loader = new GLTFLoader();
 loader.register((parser) => new VRMLoaderPlugin(parser));
 let activeRecognition: SpeechRecognition | null = null;
 let wakeWordRecognition: SpeechRecognition | null = null;
+let serverWakeWordActive = false;
+let serverWakeWordTimer = 0;
 let pendingFaceSample = "";
 
 if (USE_HUB_AVATAR_RUNTIME) {
@@ -1654,6 +1656,22 @@ function screenTimeoutLabel(minutes: ScreenTimeoutMinutes): string {
   return `${minutes} minutes`;
 }
 
+function speechRecognitionConstructor(): SpeechRecognitionConstructor | undefined {
+  return (
+    (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }).SpeechRecognition ||
+    (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }).webkitSpeechRecognition
+  );
+}
+
+function canUseServerTranscription(): boolean {
+  return Boolean(
+    navigator.mediaDevices?.getUserMedia &&
+    "MediaRecorder" in window &&
+    state.voiceSettings.provider === "elevenLabs" &&
+    state.voiceSettings.elevenLabsApiKey
+  );
+}
+
 function refreshCompanionPresence(): void {
   settingsScreenTimeoutStatusEl.textContent = screenTimeoutLabel(state.companionSettings.screenTimeoutMinutes);
   if (state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening) {
@@ -1683,10 +1701,12 @@ async function startWakeWordListening(): Promise<void> {
     updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
     return;
   }
-  const SpeechRecognitionCtor =
-    (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }).SpeechRecognition ||
-    (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }).webkitSpeechRecognition;
+  const SpeechRecognitionCtor = speechRecognitionConstructor();
   if (!SpeechRecognitionCtor) {
+    if (canUseServerTranscription()) {
+      startServerWakeWordListening(phrase);
+      return;
+    }
     updateWakeWordStatus("Wake word unavailable");
     return;
   }
@@ -1726,6 +1746,11 @@ async function startWakeWordListening(): Promise<void> {
 }
 
 function stopWakeWordListening(status = "Wake word off"): void {
+  serverWakeWordActive = false;
+  if (serverWakeWordTimer) {
+    window.clearTimeout(serverWakeWordTimer);
+    serverWakeWordTimer = 0;
+  }
   if (wakeWordRecognition) {
     try {
       wakeWordRecognition.abort?.();
@@ -1742,6 +1767,46 @@ function updateWakeWordStatus(status: string): void {
   state.wakeWordStatus = status;
   wakeWordStatusEl.textContent = status;
   startWakeWordButton.textContent = state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening ? "Restart Wake Word" : "Start Wake Word";
+}
+
+function startServerWakeWordListening(phrase: string): void {
+  if (serverWakeWordActive) {
+    updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
+    return;
+  }
+  serverWakeWordActive = true;
+  updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
+
+  const listenOnce = async (): Promise<void> => {
+    if (!serverWakeWordActive || state.companionSettings.wakeWordMode !== "local" || !state.companionSettings.allowAlwaysListening) return;
+    if (activeRecognition || state.synra === "speaking" || state.synra === "thinking") {
+      scheduleServerWakeWordTick(900, listenOnce);
+      return;
+    }
+    try {
+      const result = await recordAndTranscribeMicrophone({ durationMs: 3200, minRms: 0.018 });
+      const heard = result.text.trim().toLowerCase();
+      if (heard && heard.includes(phrase)) {
+        void window.synraKiosk?.wakeDisplay?.();
+        updateWakeWordStatus("Awake");
+        setSynraState("listening", `I heard ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}.`);
+        stopWakeWordListening("Awake");
+        void startListening();
+        return;
+      }
+      updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
+    } catch {
+      updateWakeWordStatus("Wake word paused");
+    }
+    if (serverWakeWordActive) scheduleServerWakeWordTick(850, listenOnce);
+  };
+
+  scheduleServerWakeWordTick(150, listenOnce);
+}
+
+function scheduleServerWakeWordTick(delayMs: number, callback: () => void): void {
+  if (serverWakeWordTimer) window.clearTimeout(serverWakeWordTimer);
+  serverWakeWordTimer = window.setTimeout(callback, delayMs);
 }
 
 async function captureKnownUserFaceSample(): Promise<void> {
@@ -4098,12 +4163,14 @@ async function startListening(): Promise<void> {
   } finally {
     listenButton.disabled = false;
   }
-  const SpeechRecognitionCtor =
-    (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }).SpeechRecognition ||
-    (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }).webkitSpeechRecognition;
+  const SpeechRecognitionCtor = speechRecognitionConstructor();
   if (!SpeechRecognitionCtor) {
+    if (canUseServerTranscription()) {
+      await startServerTranscriptionListening();
+      return;
+    }
     updateVoiceStatus("Listen unavailable");
-    setSynraState("idle", "Speech recognition is not available in this browser yet. Text input is ready.");
+    setSynraState("idle", "Speech recognition is not available in this browser yet. ElevenLabs speech-to-text is not configured.");
     return;
   }
   const recognition = new SpeechRecognitionCtor();
@@ -4139,6 +4206,116 @@ async function startListening(): Promise<void> {
   recognition.start();
 }
 
+async function startServerTranscriptionListening(): Promise<void> {
+  listenButton.disabled = true;
+  updateVoiceStatus("Listening");
+  setSynraState("listening", "Listening.");
+  try {
+    const result = await recordAndTranscribeMicrophone({ durationMs: 5200, minRms: 0.01 });
+    const text = result.text.trim();
+    if (!text) {
+      updateVoiceStatus("No speech heard");
+      setSynraState("idle", "I did not catch words that time.");
+      return;
+    }
+    updateVoiceStatus("Heard you");
+    setSynraState("thinking", "Heard you.");
+    await handleUserText(text);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Microphone transcription failed.";
+    updateVoiceStatus("Listen stopped");
+    setSynraState("idle", message);
+  } finally {
+    listenButton.disabled = false;
+    if (state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening) {
+      window.setTimeout(() => void startWakeWordListening(), 700);
+    }
+  }
+}
+
+async function recordAndTranscribeMicrophone(options: { durationMs: number; minRms: number }): Promise<{ text: string }> {
+  if (!navigator.mediaDevices?.getUserMedia || !("MediaRecorder" in window)) {
+    throw new Error("Microphone recording is not available in this kiosk/browser.");
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  let audioContext: AudioContext | null = null;
+  let sampleTimer = 0;
+  let peakRms = 0;
+  try {
+    const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (AudioContextCtor) {
+      audioContext = new AudioContextCtor();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 1024;
+      source.connect(analyser);
+      const samples = new Float32Array(analyser.fftSize);
+      sampleTimer = window.setInterval(() => {
+        analyser.getFloatTimeDomainData(samples);
+        let sum = 0;
+        for (const sample of samples) sum += sample * sample;
+        peakRms = Math.max(peakRms, Math.sqrt(sum / samples.length));
+      }, 120);
+    }
+
+    const mimeType = preferredAudioMimeType();
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const chunks: BlobPart[] = [];
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
+    };
+    await new Promise<void>((resolve, reject) => {
+      recorder.onerror = () => reject(new Error("Microphone recorder failed."));
+      recorder.onstop = () => resolve();
+      recorder.start(250);
+      window.setTimeout(() => {
+        if (recorder.state !== "inactive") recorder.stop();
+      }, options.durationMs);
+    });
+    if (peakRms < options.minRms) return { text: "" };
+    const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || "audio/webm" });
+    const audioBase64 = await blobToBase64(blob);
+    const response = await fetch("/api/stt/elevenlabs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        audioBase64,
+        mimeType: blob.type || "audio/webm",
+        apiKey: state.voiceSettings.elevenLabsApiKey,
+        languageCode: "en"
+      })
+    });
+    const data = await response.json() as { ok?: boolean; text?: string; error?: string };
+    if (!data.ok && data.error) throw new Error(data.error);
+    return { text: String(data.text || "").trim() };
+  } finally {
+    if (sampleTimer) window.clearInterval(sampleTimer);
+    for (const track of stream.getTracks()) track.stop();
+    if (audioContext) void audioContext.close();
+  }
+}
+
+function preferredAudioMimeType(): string {
+  const Recorder = window.MediaRecorder;
+  if (!Recorder?.isTypeSupported) return "";
+  for (const mimeType of ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"]) {
+    if (Recorder.isTypeSupported(mimeType)) return mimeType;
+  }
+  return "";
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Microphone audio could not be encoded."));
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      resolve(result.includes(",") ? result.split(",", 2)[1] || "" : result);
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
 async function ensureMicrophoneReady(): Promise<boolean> {
   if (!navigator.mediaDevices?.getUserMedia) return true;
   try {
@@ -4161,10 +4338,7 @@ function refreshVoiceStatus(): void {
     return;
   }
   const canSpeak = "speechSynthesis" in window;
-  const canListen = Boolean(
-    (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }).SpeechRecognition ||
-      (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }).webkitSpeechRecognition
-  );
+  const canListen = Boolean(speechRecognitionConstructor() || canUseServerTranscription());
   if (canSpeak && canListen) updateVoiceStatus("Speak + listen");
   else if (canSpeak) updateVoiceStatus("Speak ready");
   else if (canListen) updateVoiceStatus("Listen ready");

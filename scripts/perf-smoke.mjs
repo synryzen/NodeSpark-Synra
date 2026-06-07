@@ -87,7 +87,7 @@ const companionPresenceSetupIsAvailable =
   mainScript.includes("knownUserNameInput") &&
   mainScript.includes("captureUserFaceButton") &&
   mainScript.includes("startWakeWordListening") &&
-  mainScript.includes("Listening for Hey Synra") &&
+  mainScript.includes("Listening for Hello Synra") &&
   mainScript.includes("No raw audio or camera frames are saved to memory") &&
   mainScript.includes("companionSettings") &&
   mainScript.includes("loadCompanionSettings") &&
@@ -430,6 +430,14 @@ const voiceDiagnosticsAreAvailable =
   mainScript.includes("unlockAudioPlayback") &&
   mainScript.includes("Playback blocked") &&
   mainScript.includes("Voice diagnostics");
+const serverAssistedSpeechToTextIsAvailable =
+  mainScript.includes("recordAndTranscribeMicrophone") &&
+  mainScript.includes("startServerTranscriptionListening") &&
+  mainScript.includes("startServerWakeWordListening") &&
+  mainScript.includes("/api/stt/elevenlabs") &&
+  serverScript.includes("/api/stt/elevenlabs") &&
+  serverScript.includes("handle_elevenlabs_stt") &&
+  serverScript.includes("elevenlabs_speech_to_text");
 const electronKioskMediaCanBeEnabled =
   electronKioskScript.includes('SYNRA_KIOSK_AUTO_GRANT_MEDIA="${SYNRA_KIOSK_AUTO_GRANT_MEDIA:-true}"') &&
   electronKioskConfig.includes('autoGrantMedia: boolEnv(env, "SYNRA_KIOSK_AUTO_GRANT_MEDIA", true)') &&
@@ -530,6 +538,7 @@ const result = {
     voicePolishIsAvailable &&
     elevenLabsVoicePickerIsAvailable &&
     voiceDiagnosticsAreAvailable &&
+    serverAssistedSpeechToTextIsAvailable &&
     electronKioskMediaCanBeEnabled &&
     synraPersonalityIsUpgraded &&
     repeatedStateChangesDoNotRestartAvatar &&
@@ -611,6 +620,7 @@ const result = {
     "browser speech fallback deliberately chooses and exposes a system voice",
     "ElevenLabs voices can be loaded and selected by name",
     "voice diagnostics include audio unlock and playback-blocked feedback",
+    "server-assisted ElevenLabs speech-to-text backs up Jetson mic input",
     "Electron kiosk can auto-grant local mic/camera permissions for the dedicated station",
     "Synra personality prompt is upgraded for reliable companion behavior",
     "Synra free companion and premium NodeSpark Command Center access are explicit",
