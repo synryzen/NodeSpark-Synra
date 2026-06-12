@@ -18,7 +18,7 @@ assets without written permission. See [LICENSE](LICENSE),
 [TRADEMARKS.md](TRADEMARKS.md), and [ASSET_POLICY.md](ASSET_POLICY.md).
 
 <p>
-  <strong>Version:</strong> 4.3.0 &nbsp;|&nbsp;
+  <strong>Version:</strong> 4.4.0 &nbsp;|&nbsp;
   <strong>Default avatar:</strong> Synra Classic &nbsp;|&nbsp;
   <strong>Runtime:</strong> Jetson kiosk, browser, and Electron station &nbsp;|&nbsp;
   <strong>Motion:</strong> 97 VRMA clips

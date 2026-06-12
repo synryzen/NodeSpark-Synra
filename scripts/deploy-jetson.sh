@@ -8,7 +8,7 @@ ARCHIVE="/tmp/synra-standalone-dist.tgz"
 
 cd "$ROOT_DIR"
 npm run build
-COPYFILE_DISABLE=1 tar --no-xattrs -czf "$ARCHIVE" dist docs scripts package.json
+COPYFILE_DISABLE=1 tar --no-xattrs -czf "$ARCHIVE" dist docs scripts package.json tools/SynraJetsonStation/package.json
 scp "$ARCHIVE" "${JETSON_USER}@${JETSON_HOST}:/home/${JETSON_USER}/synra-standalone-dist.tgz"
 ssh -tt "${JETSON_USER}@${JETSON_HOST}" 'set -euo pipefail
 APP_DIR="$HOME/synra-standalone"
