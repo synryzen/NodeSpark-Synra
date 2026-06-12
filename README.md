@@ -1,8 +1,21 @@
 # NodeSpark Synra
 
+[![GitHub Pages](https://img.shields.io/badge/site-NodeSpark%20Synra-f33d32?style=for-the-badge)](https://synryzen.github.io/NodeSpark-Synra/)
+[![Contribute](https://img.shields.io/badge/contribute-welcome-4ad7ff?style=for-the-badge)](CONTRIBUTING.md)
+[![Security](https://img.shields.io/badge/security-policy-ffb84d?style=for-the-badge)](SECURITY.md)
+[![License](https://img.shields.io/badge/license-source%20available-ff6b6b?style=for-the-badge)](LICENSE)
+
 ![Synra Classic greeting inside the Orbit Lounge](docs/assets/screenshots/synra-greeting-wave.png)
 
 Synra Standalone is the dedicated companion path for Synra: a real-time anime AI assistant with voice, motion, memory, smart-home awareness, and optional NodeSparkHub Command Center pairing. It keeps the Synra experience from NodeSpark and NodeSparkHub, then packages it as a Jetson-first appliance-style runtime.
+
+Star the repo if you want to follow Synra's Jetson companion roadmap. Contributions are welcome for avatar motion, lip-sync, Home Assistant safety, local model routing, UI polish, performance, privacy, and setup docs.
+
+Synra is source-available, not open-source for resale. You may study it, run it
+privately, and contribute to the original project, but you may not copy,
+repackage, resell, rebrand, upload, host, or redistribute Synra or her character
+assets without written permission. See [LICENSE](LICENSE),
+[TRADEMARKS.md](TRADEMARKS.md), and [ASSET_POLICY.md](ASSET_POLICY.md).
 
 <p>
   <strong>Version:</strong> 4.3.0 &nbsp;|&nbsp;
@@ -133,6 +146,14 @@ Synra welcomes focused contributions that improve reliability, beauty, performan
 - Suggest focused enhancements with the feature request template.
 - Open pull requests with screenshots for visual/avatar changes and verification output for code changes.
 - Report security or privacy issues privately. See [SECURITY.md](SECURITY.md).
+
+## License And Brand Protection
+
+Synra, Synra Classic, NodeSpark, NodeSparkHub, logos, avatar assets, VRM/VRMA
+files, screenshots, prompts, character identity, and related trade dress are
+protected. The public repository is for transparency, evaluation, and
+contribution to the original project. It is not permission to create a competing
+assistant, resell the app, redistribute the assets, or publish a clone.
 
 ## Development
 

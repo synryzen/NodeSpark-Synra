@@ -249,7 +249,7 @@ const aiConnectionsAreConfigurable =
   serverScript.includes("handle_external_chat") &&
   serverScript.includes("normalize_chat_endpoint");
 const externalModelProxyMatchesHubConnectionStyle =
-  serverScript.includes("NodeSparkHub/4.3 SynraStandalone") &&
+  serverScript.includes("NodeSparkHub/4.4 SynraStandalone") &&
   serverScript.includes('request.add_header("Accept", "application/json")') &&
   serverScript.includes('request.add_header("HTTP-Referer"') &&
   serverScript.includes("describe_http_error");

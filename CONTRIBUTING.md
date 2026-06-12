@@ -2,6 +2,11 @@
 
 Thank you for wanting to help improve Synra. This repo is the standalone Synra companion runtime: Jetson kiosk, Three.js/VRM avatar, local bridge APIs, Home Assistant support, optional NodeSparkHub pairing, and release-quality tooling.
 
+Synra is source-available for evaluation and contribution, not open-source for
+resale, rebranding, app-store uploads, or redistribution. Read
+[LICENSE](LICENSE), [TRADEMARKS.md](TRADEMARKS.md), and
+[ASSET_POLICY.md](ASSET_POLICY.md) before submitting work.
+
 ## Good First Contributions
 
 - Jetson setup documentation improvements.
@@ -17,6 +22,9 @@ Thank you for wanting to help improve Synra. This repo is the standalone Synra c
 2. Keep Synra Classic as the first/default avatar. Do not delete `.vrm` or `.vrma` assets.
 3. Keep secrets out of screenshots, logs, commits, diagnostics, and issue text.
 4. Preserve the Jetson path unless your change is explicitly platform-specific.
+5. Do not submit copied character assets, third-party art, cloned voices,
+   proprietary prompts, datasets, or media unless you have written permission to
+   contribute them under this repository's terms.
 
 ## Local Setup
 
@@ -42,6 +50,8 @@ npm run station:test
 - Mention Jetson impact when touching rendering, kiosk, deployment, services, or Python bridge code.
 - Run the verification commands above and paste the results into the PR.
 - Do not include API keys, Home Assistant tokens, ElevenLabs keys, NodeSpark tokens, face samples, or private device logs.
+- Do not include assets, prompts, model files, voice files, screenshots, or
+  generated media that you do not have permission to contribute.
 
 ## Design Rules
 

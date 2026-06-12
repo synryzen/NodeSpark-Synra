@@ -81,6 +81,12 @@ export interface ProductSettings {
   nodeSparkTokenExpiresAt: string;
 }
 
+export interface AgentSettings {
+  enabled: boolean;
+  defaultAgentId: string;
+  showAgentStatus: boolean;
+}
+
 export interface HomeAssistantSettings {
   enabled: boolean;
   url: string;

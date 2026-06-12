@@ -1,4 +1,4 @@
-import type { CompanionSettings, HomeAssistantSettings, ModelSettings, ProductSettings, SynraMemory, VisualSettings, VoiceSettings } from "./types";
+import type { AgentSettings, CompanionSettings, HomeAssistantSettings, ModelSettings, ProductSettings, SynraMemory, VisualSettings, VoiceSettings } from "./types";
 import { DEFAULT_SYNRA_AVATAR_ID } from "./avatar-catalog";
 
 const modelKey = "synraStandalone.modelSettings.v1";
@@ -8,6 +8,7 @@ const voiceKey = "synraStandalone.voiceSettings.v1";
 const productKey = "synraStandalone.productSettings.v1";
 const homeAssistantKey = "synraStandalone.homeAssistantSettings.v1";
 const companionKey = "synraStandalone.companionSettings.v1";
+const agentKey = "synraStandalone.agentSettings.v1";
 export const SERVER_SECRET_SENTINEL = "__server_secret__";
 const DEFAULT_WAKE_PHRASE = "Hello Synra";
 
@@ -123,6 +124,18 @@ export function loadCompanionSettings(): CompanionSettings {
 
 export function saveCompanionSettings(settings: CompanionSettings): void {
   localStorage.setItem(companionKey, JSON.stringify(settings));
+}
+
+export function loadAgentSettings(): AgentSettings {
+  return readJson<AgentSettings>(agentKey, {
+    enabled: true,
+    defaultAgentId: "synra-companion",
+    showAgentStatus: true
+  });
+}
+
+export function saveAgentSettings(settings: AgentSettings): void {
+  localStorage.setItem(agentKey, JSON.stringify(settings));
 }
 
 export function loadMemory(): SynraMemory {

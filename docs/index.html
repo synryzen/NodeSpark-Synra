@@ -3,11 +3,21 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>NodeSpark Synra</title>
+    <title>NodeSpark Synra - Jetson AI companion runtime</title>
     <meta
       name="description"
-      content="NodeSpark Synra is a standalone companion AI assistant designed for Jetson, Mac, iPhone, browser, local models, smart-home tools, and optional NodeSpark skills."
+      content="NodeSpark Synra is a standalone open-source companion AI assistant for Jetson with avatar presence, voice, local models, smart-home tools, memory, and optional NodeSparkHub skills."
     />
+    <link rel="canonical" href="https://synryzen.github.io/NodeSpark-Synra/">
+    <meta property="og:title" content="NodeSpark Synra - Jetson AI companion runtime" />
+    <meta
+      property="og:description"
+      content="A real-time Synra companion for Jetson: VRM avatar presence, voice, local or cloud models, Home Assistant, memory, and NodeSparkHub integration."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://synryzen.github.io/NodeSpark-Synra/" />
+    <meta property="og:image" content="https://synryzen.github.io/NodeSpark-Synra/assets/screenshots/synra-greeting-wave.png" />
+    <meta name="twitter:card" content="summary_large_image" />
     <style>
       :root {
         color-scheme: dark;
@@ -143,6 +153,11 @@
         background: rgba(255, 255, 255, 0.07);
       }
 
+      .button.github {
+        background: linear-gradient(135deg, rgba(74, 215, 255, 0.95), rgba(255, 184, 77, 0.82));
+        color: #071014;
+      }
+
       .panel {
         border: 1px solid var(--line);
         border-radius: 8px;
@@ -206,6 +221,75 @@
         grid-template-columns: repeat(3, 1fr);
         gap: 16px;
         margin-top: 52px;
+      }
+
+      .star-strip {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+        gap: 14px;
+        align-items: center;
+        margin-top: 34px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(13, 16, 20, 0.72);
+        backdrop-filter: blur(16px);
+      }
+
+      .star-strip div {
+        min-height: 92px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .star-strip strong,
+      .star-strip span {
+        display: block;
+      }
+
+      .star-strip strong {
+        margin-bottom: 6px;
+      }
+
+      .star-strip span {
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      .community {
+        margin-top: 52px;
+        padding: 24px;
+      }
+
+      .community h2 {
+        margin: 0 0 12px;
+        font-size: 30px;
+      }
+
+      .community p {
+        color: var(--muted);
+        line-height: 1.58;
+      }
+
+      .community-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        margin-top: 18px;
+      }
+
+      .community-card {
+        min-height: 210px;
+        padding: 18px;
+      }
+
+      .community-card a {
+        display: inline-flex;
+        margin-top: 8px;
+        color: #9ee8ff;
+        font-weight: 800;
       }
 
       .feature {
@@ -392,6 +476,11 @@
           grid-template-columns: 1fr;
         }
 
+        .star-strip,
+        .community-grid {
+          grid-template-columns: 1fr;
+        }
+
         .showcase-head {
           display: block;
         }
@@ -429,6 +518,7 @@
           <a href="contribute.html">Contribute</a>
           <a href="roadmap.html">Roadmap</a>
           <a href="jetson-findings.html">Jetson</a>
+          <a href="https://github.com/synryzen/NodeSpark-Synra">GitHub</a>
         </div>
       </nav>
 
@@ -442,6 +532,7 @@
           </p>
           <div class="actions">
             <a class="button" href="jetson-install.html">Install on Jetson</a>
+            <a class="button github" href="https://github.com/synryzen/NodeSpark-Synra">Star on GitHub</a>
             <a class="button secondary" href="contribute.html">Contribute</a>
             <a class="button secondary" href="jetson-runbook.html">Runbook</a>
             <a class="button secondary" href="roadmap.html">Roadmap</a>
@@ -452,9 +543,25 @@
           <img src="assets/screenshots/synra-greeting-wave.png" alt="Synra Classic waving in the Orbit Lounge companion runtime" />
           <figcaption>
             <span><strong>Synra Classic</strong> Live VRM companion with control panels, local model status, and NodeSparkHub access.</span>
-            <span>4.3</span>
+            <span>4.4</span>
           </figcaption>
         </figure>
+      </section>
+
+      <section class="star-strip" aria-label="Why star NodeSpark Synra">
+        <div>
+          <strong>Jetson companion AI</strong>
+          <span>VRM presence, voice, motions, local bridge APIs, and kiosk runtime.</span>
+        </div>
+        <div>
+          <strong>Smart-home ready</strong>
+          <span>Home Assistant, NodeSparkHub pairing, model routing, and explicit controls.</span>
+        </div>
+        <div>
+          <strong>Built for contributors</strong>
+          <span>Motion, lip-sync, UI polish, privacy, docs, and performance work welcome.</span>
+        </div>
+        <a class="button github" href="https://github.com/synryzen/NodeSpark-Synra">Give it a star</a>
       </section>
 
       <section class="showcase" aria-label="Synra screenshots">
@@ -512,6 +619,50 @@
             gates for important actions.
           </p>
         </article>
+      </section>
+
+      <section class="panel community" aria-label="Synra community">
+        <div class="signal">Source-available companion AI</div>
+        <h2>Help make Synra feel more alive.</h2>
+        <p>
+          Synra needs contributors who care about beautiful companion UI, Jetson performance,
+          stable smart-home integrations, safer local memory, expressive motion, and better
+          voice timing. The repo is set up for focused issues and pull requests.
+        </p>
+        <div class="community-grid">
+          <article class="panel community-card">
+            <h3>Star And Follow</h3>
+            <p>Watch the roadmap for wake word, screen sleep, animation, vision, and appliance-quality setup work.</p>
+            <a href="https://github.com/synryzen/NodeSpark-Synra">Open repository</a>
+          </article>
+          <article class="panel community-card">
+            <h3>Report A Bug</h3>
+            <p>Share Jetson model, browser or kiosk path, FPS, logs, and screenshots without exposing secrets.</p>
+            <a href="https://github.com/synryzen/NodeSpark-Synra/issues/new/choose">Use issue templates</a>
+          </article>
+          <article class="panel community-card">
+            <h3>Send A Pull Request</h3>
+            <p>Improve UI, docs, motion routing, voice behavior, Home Assistant, tests, and install reliability.</p>
+            <a href="https://github.com/synryzen/NodeSpark-Synra/pulls">View pull requests</a>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel community" aria-label="Synra license boundary">
+        <div class="signal">License boundary</div>
+        <h2>Synra can be studied and improved, not copied and resold.</h2>
+        <p>
+          Synra is source-available for evaluation and contribution to the original
+          project. Synra Classic, avatar assets, motions, screenshots, prompts,
+          logos, character identity, and product trade dress may not be copied,
+          resold, rebranded, redistributed, hosted, app-store uploaded, or used
+          in a competing assistant without written permission.
+        </p>
+        <div class="actions">
+          <a class="button github" href="https://github.com/synryzen/NodeSpark-Synra/blob/main/LICENSE">Read License</a>
+          <a class="button secondary" href="https://github.com/synryzen/NodeSpark-Synra/blob/main/TRADEMARKS.md">Trademarks</a>
+          <a class="button secondary" href="https://github.com/synryzen/NodeSpark-Synra/blob/main/ASSET_POLICY.md">Asset Policy</a>
+        </div>
       </section>
 
       <section class="panel install" aria-label="Jetson install">

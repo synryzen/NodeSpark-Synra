@@ -798,7 +798,7 @@ app.innerHTML = `
           <span>Product</span>
           <strong>Synra Standalone</strong>
           <span>Version</span>
-          <strong id="settingsVersionStatus">4.3</strong>
+          <strong id="settingsVersionStatus">4.4</strong>
           <span>Secrets</span>
           <strong>Server-managed markers</strong>
         </div>
@@ -1665,8 +1665,9 @@ function speechRecognitionConstructor(): SpeechRecognitionConstructor | undefine
 
 function canUseServerTranscription(): boolean {
   return Boolean(
-    navigator.mediaDevices?.getUserMedia &&
-    "MediaRecorder" in window &&
+    navigator.mediaDevices &&
+    typeof navigator.mediaDevices.getUserMedia === "function" &&
+    typeof window.MediaRecorder === "function" &&
     state.voiceSettings.provider === "elevenLabs" &&
     state.voiceSettings.elevenLabsApiKey
   );
@@ -2598,7 +2599,7 @@ async function playMotionRoute(actionOrClipId: string, options: { restart?: bool
       if (!options.returnToIdle) window.clearTimeout(hubMotionReturnTimer);
       const mode = modeFromRoute(actionOrClipId);
       if (mode) {
-        hubAvatarRuntime.setMode(mode, { playAuthoredLoop: mode !== "idle" });
+        hubAvatarRuntime.setMode(mode, { playAuthoredLoop: mode !== "idle" && mode !== "speaking" });
         hubAvatarRuntime.setSpeaking(mode === "speaking");
       } else if (hubMotionClips.some((clip) => clip.id === actionOrClipId)) {
         await hubAvatarRuntime.playGeneratedClip(actionOrClipId);
@@ -2640,12 +2641,18 @@ function scheduleHubLivingIdleReturn(actionOrClipId: string): void {
   window.clearTimeout(hubMotionReturnTimer);
   hubMotionReturnTimer = window.setTimeout(() => {
     if (serial !== hubMotionReturnSerial || !hubAvatarRuntime) return;
-    if (state.synra === "speaking" || state.synra === "listening" || state.synra === "thinking") return;
-    hubAvatarRuntime.stopMotionTest();
-    hubAvatarRuntime.setMode("idle", { playAuthoredLoop: false });
-    hubAvatarRuntime.setSpeaking(false);
-    activeMotionEl.textContent = "procedural idle";
+    resetHubAvatarToStableIdle();
   }, baseDelay);
+}
+
+function resetHubAvatarToStableIdle(force = false): void {
+  if (!hubAvatarRuntime) return;
+  if (!force && (state.synra === "speaking" || state.synra === "listening" || state.synra === "thinking")) return;
+  hubAvatarRuntime.stopMotionTest();
+  hubAvatarRuntime.setMode("idle", { playAuthoredLoop: false });
+  hubAvatarRuntime.setSpeaking(false);
+  hubAvatarRuntime.setVisemes({ aa: 0, ih: 0, ou: 0, ee: 0, oh: 0, open: 0 });
+  activeMotionEl.textContent = "procedural idle";
 }
 
 function filterClipsByCategory(clips: SynraMotionClipSpec[], category: MotionCategory): SynraMotionClipSpec[] {
@@ -2727,6 +2734,7 @@ async function playManualMotion(motionId: string): Promise<void> {
   try {
     await playMotionRoute(motionId, { restart: true, returnToIdle: true });
   } finally {
+    window.setTimeout(() => resetHubAvatarToStableIdle(), 5800);
     window.setTimeout(() => {
       playMotionButton.disabled = false;
       playMotionButton.textContent = "Play Motion";
@@ -3946,9 +3954,9 @@ async function playElevenLabsSpeech(text: string, serial: number): Promise<void>
   clearSpeechFallback();
   const abort = new AbortController();
   activeSpeechAbort = abort;
-  updateVoiceStatus("ElevenLabs loading");
+  updateVoiceStatus("Preparing voice");
   setSynraState("speaking", text);
-  armSpeechFallback(text);
+  armSpeechFallback(text, serial, "fallback");
   try {
     const response = await fetch("/api/tts/elevenlabs", {
       method: "POST",
@@ -4013,7 +4021,7 @@ function fallbackToBrowserSpeech(text: string, serial = speechSerial): void {
     updateVoiceStatus("Text only");
     setSynraState("speaking", text);
     startSpeechLipSync(text, serial);
-    armSpeechFallback(text);
+    armSpeechFallback(text, serial);
     return;
   }
   updateVoiceStatus("Speaking");
@@ -4038,7 +4046,7 @@ function fallbackToBrowserSpeech(text: string, serial = speechSerial): void {
     setConnectionTruth("voice", "permission-needed", "Browser speech was blocked or no output device is available");
     finishSpeech(text);
   };
-  armSpeechFallback(text);
+  armSpeechFallback(text, serial);
   speechSynthesis.speak(utterance);
 }
 
@@ -4082,9 +4090,20 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
   return new Blob([bytes], { type: mimeType });
 }
 
-function armSpeechFallback(text: string): void {
-  const duration = Math.min(7200, Math.max(1200, text.length * 42));
-  state.speechFallbackTimer = window.setTimeout(() => finishSpeech(text), duration);
+function armSpeechFallback(text: string, serial = speechSerial, mode: "finish" | "fallback" = "finish"): void {
+  const duration = mode === "fallback" ? 9500 : Math.min(7200, Math.max(1200, text.length * 42));
+  clearSpeechFallback();
+  state.speechFallbackTimer = window.setTimeout(() => {
+    if (serial !== speechSerial) return;
+    if (mode === "fallback") {
+      activeSpeechAbort?.abort();
+      activeSpeechAbort = null;
+      updateVoiceStatus("ElevenLabs fallback");
+      fallbackToBrowserSpeech(text, serial);
+      return;
+    }
+    finishSpeech(text);
+  }, duration);
 }
 
 function finishSpeech(text: string): void {
@@ -4092,6 +4111,10 @@ function finishSpeech(text: string): void {
   stopSpeechLipSync();
   refreshVoiceStatus();
   if (state.synra === "speaking") setSynraState("idle", text);
+  resetHubAvatarToStableIdle();
+  if (state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening) {
+    window.setTimeout(() => void startWakeWordListening(), 700);
+  }
 }
 
 function clearSpeechFallback(): void {
@@ -4102,6 +4125,7 @@ function clearSpeechFallback(): void {
 
 function startSpeechLipSync(text: string, serial: number, audio?: HTMLAudioElement, alignment?: ElevenLabsSpeechAlignment | null): void {
   stopSpeechLipSync();
+  hubAvatarRuntime?.setMode("speaking", { playAuthoredLoop: false });
   hubAvatarRuntime?.setSpeaking(true);
   const durationMs = estimateSpeechDurationMs(text);
   const startedAt = performance.now();
@@ -4147,6 +4171,7 @@ function stopSpeechLipSync(): void {
     activeLipSyncTimer = 0;
   }
   hubAvatarRuntime?.setVisemes({ aa: 0, ih: 0, ou: 0, ee: 0, oh: 0, open: 0 });
+  hubAvatarRuntime?.setSpeaking(false);
 }
 
 async function startListening(): Promise<void> {
@@ -4707,9 +4732,11 @@ function setSynraState(next: SynraState, caption: string): void {
   const route = routeForSynraState(next);
   if (hubAvatarRuntime) {
     const mode = modeFromState(next);
-    hubAvatarRuntime.setMode(mode, { playAuthoredLoop: mode !== "idle" });
+    hubAvatarRuntime.setMode(mode, { playAuthoredLoop: mode !== "idle" && next !== "speaking" });
     hubAvatarRuntime.setSpeaking(next === "speaking");
-    if (route && !route.startsWith("mode:")) void playMotionRoute(route, { loop: true, restart: next !== "idle" });
+    if (route && !route.startsWith("mode:") && next !== "speaking") {
+      void playMotionRoute(route, { loop: true, restart: next !== "idle" });
+    }
     return;
   }
   if (route && state.motionPlayer.snapshot.ready) void playMotionRoute(route, { loop: true, restart: next !== "idle" });

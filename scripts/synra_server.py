@@ -41,7 +41,7 @@ def env_bool(name: str, default: bool = False) -> bool:
 
 
 class SynraHandler(SimpleHTTPRequestHandler):
-    server_version = "SynraStandalone/4.3"
+    server_version = "SynraStandalone/4.4"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, directory=str(DIST_DIR), **kwargs)
@@ -54,6 +54,7 @@ class SynraHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_GET(self) -> None:
+        request_path = urllib.parse.urlparse(self.path).path
         if self.path.startswith("/api/health"):
             vision = vision_public_status()
             self.send_json(
@@ -100,6 +101,16 @@ class SynraHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/settings/public"):
             self.send_json(200, settings_public_status())
             return
+        if request_path == "/api/agent-templates":
+            self.handle_agent_templates_list()
+            return
+        if request_path == "/api/agents":
+            self.handle_agents_list()
+            return
+        agent_run_match = re.fullmatch(r"/api/agent-runs/([^/]+)", request_path)
+        if agent_run_match:
+            self.handle_agent_run_get(urllib.parse.unquote(agent_run_match.group(1)))
+            return
         super().do_GET()
 
     def do_POST(self) -> None:
@@ -132,6 +143,15 @@ class SynraHandler(SimpleHTTPRequestHandler):
             return
         if self.path.startswith("/api/nodespark/action"):
             self.handle_nodespark_action()
+            return
+        request_path = urllib.parse.urlparse(self.path).path
+        agent_run_start_match = re.fullmatch(r"/api/agents/([^/]+)/runs", request_path)
+        if agent_run_start_match:
+            self.handle_agent_run_start(urllib.parse.unquote(agent_run_start_match.group(1)))
+            return
+        agent_run_cancel_match = re.fullmatch(r"/api/agent-runs/([^/]+)/cancel", request_path)
+        if agent_run_cancel_match:
+            self.handle_agent_run_cancel(urllib.parse.unquote(agent_run_cancel_match.group(1)))
             return
         if self.path.startswith("/api/tools/smart-home/discover"):
             self.handle_smart_home_discover()
@@ -563,6 +583,169 @@ class SynraHandler(SimpleHTTPRequestHandler):
             self.send_json(200, {"ok": False, "configured": True, "error": f"NodeSparkHub is unreachable: {error.reason}."})
         except Exception as error:
             self.send_json(200, {"ok": False, "configured": True, "error": str(error)})
+
+    def handle_agent_templates_list(self) -> None:
+        try:
+            config = nodespark_agent_proxy_config()
+            if not config.get("hubUrl"):
+                self.send_json(200, {"ok": False, "configured": False, "error": "No NodeSparkHub URL is configured."})
+                return
+            if not config.get("deviceToken"):
+                self.send_json(200, {"ok": False, "configured": True, "error": "Synra is not paired with NodeSparkHub yet."})
+                return
+            parsed = request_nodespark_json(
+                config["hubUrl"],
+                "/agent-templates",
+                "GET",
+                None,
+                config["deviceToken"],
+                config.get("deviceId", ""),
+                config.get("deviceName", ""),
+            )
+            response: dict[str, Any] = {"ok": True, "configured": True}
+            if isinstance(parsed, dict):
+                response.update(parsed)
+            elif isinstance(parsed, list):
+                response["templates"] = parsed
+            else:
+                response["templates"] = []
+            self.send_json(200, response)
+        except urllib.error.HTTPError as error:
+            self.send_json(200, nodespark_agent_proxy_error(error))
+        except urllib.error.URLError as error:
+            self.send_json(200, {"ok": False, "configured": True, "error": redact_secret_text(f"NodeSparkHub is unreachable: {error.reason}.")})
+        except Exception as error:
+            self.send_json(200, {"ok": False, "configured": True, "error": sanitize_error(error)})
+
+    def handle_agents_list(self) -> None:
+        try:
+            config = nodespark_agent_proxy_config()
+            if not config.get("hubUrl"):
+                self.send_json(200, {"ok": False, "configured": False, "error": "No NodeSparkHub URL is configured."})
+                return
+            if not config.get("deviceToken"):
+                self.send_json(200, {"ok": False, "configured": True, "error": "Synra is not paired with NodeSparkHub yet."})
+                return
+            parsed = request_nodespark_json(
+                config["hubUrl"],
+                "/agents",
+                "GET",
+                None,
+                config["deviceToken"],
+                config.get("deviceId", ""),
+                config.get("deviceName", ""),
+            )
+            response: dict[str, Any] = {"ok": True, "configured": True}
+            if isinstance(parsed, dict):
+                response.update(parsed)
+            elif isinstance(parsed, list):
+                response["agents"] = parsed
+            else:
+                response["agents"] = []
+            self.send_json(200, response)
+        except urllib.error.HTTPError as error:
+            self.send_json(200, nodespark_agent_proxy_error(error))
+        except urllib.error.URLError as error:
+            self.send_json(200, {"ok": False, "configured": True, "error": redact_secret_text(f"NodeSparkHub is unreachable: {error.reason}.")})
+        except Exception as error:
+            self.send_json(200, {"ok": False, "configured": True, "error": sanitize_error(error)})
+
+    def handle_agent_run_start(self, agent_id: str) -> None:
+        try:
+            agent_id = agent_id.strip()
+            config = nodespark_agent_proxy_config()
+            if not config.get("hubUrl"):
+                self.send_json(200, {"ok": False, "configured": False, "error": "No NodeSparkHub URL is configured."})
+                return
+            if not config.get("deviceToken"):
+                self.send_json(200, {"ok": False, "configured": True, "error": "Synra is not paired with NodeSparkHub yet."})
+                return
+            if not agent_id:
+                self.send_json(400, {"ok": False, "configured": True, "error": "Agent ID is required."})
+                return
+            body = self.read_json_body()
+            payload = agent_run_payload_from_body(body, agent_id)
+            parsed = request_nodespark_json(
+                config["hubUrl"],
+                f"/agents/{urllib.parse.quote(agent_id, safe='')}/runs",
+                "POST",
+                payload,
+                config["deviceToken"],
+                config.get("deviceId", ""),
+                config.get("deviceName", ""),
+            )
+            response: dict[str, Any] = {"ok": True, "configured": True}
+            if isinstance(parsed, dict) and "run" in parsed:
+                response.update(parsed)
+            else:
+                response["run"] = parsed
+            self.send_json(200, response)
+        except urllib.error.HTTPError as error:
+            self.send_json(200, nodespark_agent_proxy_error(error))
+        except urllib.error.URLError as error:
+            self.send_json(200, {"ok": False, "configured": True, "error": redact_secret_text(f"NodeSparkHub is unreachable: {error.reason}.")})
+        except Exception as error:
+            self.send_json(200, {"ok": False, "configured": True, "error": sanitize_error(error)})
+
+    def handle_agent_run_get(self, run_id: str) -> None:
+        try:
+            run_id = run_id.strip()
+            config = nodespark_agent_proxy_config()
+            if not config.get("hubUrl"):
+                self.send_json(200, {"ok": False, "configured": False, "error": "No NodeSparkHub URL is configured."})
+                return
+            if not config.get("deviceToken"):
+                self.send_json(200, {"ok": False, "configured": True, "error": "Synra is not paired with NodeSparkHub yet."})
+                return
+            if not run_id:
+                self.send_json(400, {"ok": False, "configured": True, "error": "Agent run ID is required."})
+                return
+            parsed = request_nodespark_json(
+                config["hubUrl"],
+                f"/agent-runs/{urllib.parse.quote(run_id, safe='')}",
+                "GET",
+                None,
+                config["deviceToken"],
+                config.get("deviceId", ""),
+                config.get("deviceName", ""),
+            )
+            self.send_json(200, {"ok": True, "configured": True, "run": parsed})
+        except urllib.error.HTTPError as error:
+            self.send_json(200, nodespark_agent_proxy_error(error))
+        except urllib.error.URLError as error:
+            self.send_json(200, {"ok": False, "configured": True, "error": redact_secret_text(f"NodeSparkHub is unreachable: {error.reason}.")})
+        except Exception as error:
+            self.send_json(200, {"ok": False, "configured": True, "error": sanitize_error(error)})
+
+    def handle_agent_run_cancel(self, run_id: str) -> None:
+        try:
+            run_id = run_id.strip()
+            config = nodespark_agent_proxy_config()
+            if not config.get("hubUrl"):
+                self.send_json(200, {"ok": False, "configured": False, "error": "No NodeSparkHub URL is configured."})
+                return
+            if not config.get("deviceToken"):
+                self.send_json(200, {"ok": False, "configured": True, "error": "Synra is not paired with NodeSparkHub yet."})
+                return
+            if not run_id:
+                self.send_json(400, {"ok": False, "configured": True, "error": "Agent run ID is required."})
+                return
+            parsed = request_nodespark_json(
+                config["hubUrl"],
+                f"/agent-runs/{urllib.parse.quote(run_id, safe='')}/cancel",
+                "POST",
+                {},
+                config["deviceToken"],
+                config.get("deviceId", ""),
+                config.get("deviceName", ""),
+            )
+            self.send_json(200, {"ok": True, "configured": True, "run": parsed})
+        except urllib.error.HTTPError as error:
+            self.send_json(200, nodespark_agent_proxy_error(error))
+        except urllib.error.URLError as error:
+            self.send_json(200, {"ok": False, "configured": True, "error": redact_secret_text(f"NodeSparkHub is unreachable: {error.reason}.")})
+        except Exception as error:
+            self.send_json(200, {"ok": False, "configured": True, "error": sanitize_error(error)})
 
     def handle_vision_analyze(self) -> None:
         try:
@@ -1358,6 +1541,46 @@ def call_nodespark_action(*, hub_url: str, device_token: str, action: str, workf
     raise RuntimeError("Unsupported NodeSparkHub action.")
 
 
+def nodespark_agent_proxy_config() -> dict[str, str]:
+    local = load_local_secrets()
+    hub_url = normalize_nodespark_hub_url(
+        os.environ.get("SYNRA_NODESPARK_HUB_URL", "").strip()
+        or local.get("nodeSparkHubUrl", "").strip()
+    )
+    return {
+        "hubUrl": hub_url,
+        "deviceToken": secret_or_body("nodeSparkDeviceToken", "", "SYNRA_NODESPARK_DEVICE_TOKEN"),
+        "deviceId": os.environ.get("SYNRA_NODESPARK_DEVICE_ID", "").strip() or local.get("nodeSparkDeviceId", "").strip(),
+        "deviceName": os.environ.get("SYNRA_NODESPARK_DEVICE_NAME", "").strip() or local.get("nodeSparkDeviceName", "").strip() or "Synra Standalone Jetson",
+    }
+
+
+def agent_run_payload_from_body(body: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    raw_context = body.get("context") if isinstance(body.get("context"), dict) else {}
+    context: dict[str, str] = {}
+    for key, value in raw_context.items():
+        safe_key = str(key).strip()[:120]
+        if not safe_key or is_sensitive_secret_key(safe_key):
+            continue
+        context[safe_key] = redact_secret_text(str(value))[:1000]
+
+    requested_by = str(body.get("requestedByDeviceID") or "").strip()
+    dry_run = body.get("dryRun") if isinstance(body.get("dryRun"), bool) else False
+    return {
+        "agentID": agent_id,
+        "input": str(body.get("input") or "").strip()[:12000],
+        "context": context,
+        "requestedByDeviceID": requested_by or None,
+        "dryRun": dry_run,
+    }
+
+
+def nodespark_agent_proxy_error(error: urllib.error.HTTPError) -> dict[str, Any]:
+    message = read_http_error(error) or f"NodeSparkHub returned HTTP {error.code}."
+    hint = " Pair with a fresh Hub PIN if this device token is missing, expired, or revoked." if error.code in {401, 403} else ""
+    return {"ok": False, "configured": True, "error": redact_secret_text(f"{message}{hint}")}
+
+
 def request_nodespark_json(
     hub_url: str,
     path: str,
@@ -1579,7 +1802,7 @@ def post_json(endpoint: str, payload: dict[str, Any], api_key: str) -> dict[str,
     request = urllib.request.Request(endpoint, data=data, method="POST")
     request.add_header("Content-Type", "application/json")
     request.add_header("Accept", "application/json")
-    request.add_header("User-Agent", os.environ.get("SYNRA_MODEL_USER_AGENT", f"NodeSparkHub/4.3 SynraStandalone/{app_version()} OpenAI-Compatible Client"))
+    request.add_header("User-Agent", os.environ.get("SYNRA_MODEL_USER_AGENT", f"NodeSparkHub/4.4 SynraStandalone/{app_version()} OpenAI-Compatible Client"))
     request.add_header("HTTP-Referer", os.environ.get("SYNRA_MODEL_HTTP_REFERER", "https://nodespark.local/synra"))
     request.add_header("X-Title", os.environ.get("SYNRA_MODEL_X_TITLE", "Synra Standalone"))
     if api_key:

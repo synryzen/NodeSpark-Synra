@@ -1,0 +1,101 @@
+Synra Source Available License 1.0
+
+Copyright (c) 2026 Matthew C Elliott. All rights reserved.
+
+This license applies to the NodeSpark Synra / Synra Standalone repository unless
+a file or directory contains a different license notice.
+
+1. Definitions
+
+"Synra" means the Synra companion product, including the Synra name, character
+identity, avatar assets, model assets, motion assets, voice/personality behavior,
+user interface, documentation, installers, scripts, and related software.
+
+"You" means any person or organization accessing, copying, modifying, or using
+the licensed materials.
+
+"Licensed Materials" means the source code, documentation, scripts, assets, and
+other files covered by this license.
+
+2. Permission Granted
+
+You may:
+
+- view and study the Licensed Materials;
+- run Synra for personal evaluation, private testing, or non-commercial
+  development;
+- make private modifications for testing or contribution;
+- submit issues, suggestions, and pull requests to the original repository;
+- reference the public documentation when building compatible integrations.
+
+3. Restrictions
+
+You may not, without prior written permission from Matthew C Elliott:
+
+- sell, rent, sublicense, host, or commercially exploit Synra or a modified
+  version of Synra;
+- redistribute Synra or a modified version of Synra as an app, appliance image,
+  downloadable package, hosted service, companion product, avatar assistant,
+  kiosk runtime, or app-store listing;
+- remove, hide, or alter copyright, trademark, attribution, license, privacy,
+  or security notices;
+- use the Synra name, NodeSpark name, NodeSparkHub name, logos, app icons,
+  character identity, screenshots, avatar appearance, voice/personality profile,
+  or confusingly similar branding in a competing or derivative product;
+- extract, reuse, resell, rebrand, or redistribute Synra avatar assets, VRM
+  files, VRMA motion files, Live2D files, character art, generated cels,
+  screenshots, backgrounds, icons, or voice/personality prompts;
+- use Synra assets, screenshots, code, prompts, or character output to train,
+  fine-tune, clone, imitate, or generate a competing character, voice,
+  assistant, avatar, dataset, or model;
+- bypass subscription, pairing, entitlement, confirmation, update, or safety
+  controls;
+- use Synra to violate privacy, smart-home safety, platform rules, or
+  applicable law.
+
+4. Contributions
+
+By submitting a pull request, patch, issue attachment, or other contribution to
+the original repository, you grant Matthew C Elliott a perpetual, worldwide,
+royalty-free right to use, reproduce, modify, distribute, sublicense, and
+commercialize that contribution as part of Synra, NodeSpark, NodeSparkHub, and
+related products. You retain any rights you already own in your contribution.
+
+Do not contribute code, assets, media, prompts, datasets, or other material that
+you do not have the right to license under these terms.
+
+5. Third-Party Materials
+
+Third-party libraries, tools, models, SDKs, samples, and other dependencies may
+be governed by their own licenses. Those licenses continue to apply to their
+respective materials.
+
+6. No Trademark License
+
+This license does not grant permission to use the Synra, NodeSpark,
+NodeSparkHub, Synryzen, or related marks, logos, trade dress, character identity,
+or product branding except to accurately identify the original project in
+non-misleading references.
+
+7. Termination
+
+Your rights under this license terminate automatically if you violate these
+terms. After termination, you must stop using the Licensed Materials and destroy
+copies in your possession or control, except where retention is required by law.
+
+8. Warranty Disclaimer
+
+THE LICENSED MATERIALS ARE PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT.
+
+9. Limitation Of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE COPYRIGHT HOLDER WILL NOT BE LIABLE
+FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM OR RELATED TO THE
+LICENSED MATERIALS OR THIS LICENSE.
+
+10. Commercial Licensing
+
+For commercial licensing, redistribution, reseller permission, partnership use,
+or app-store permission, contact the repository owner before using Synra.
