@@ -107,6 +107,10 @@ class SynraHandler(SimpleHTTPRequestHandler):
         if request_path == "/api/agents":
             self.handle_agents_list()
             return
+        agent_schedule_status_match = re.fullmatch(r"/api/agents/([^/]+)/schedule-status", request_path)
+        if agent_schedule_status_match:
+            self.handle_agent_schedule_status(urllib.parse.unquote(agent_schedule_status_match.group(1)))
+            return
         agent_run_match = re.fullmatch(r"/api/agent-runs/([^/]+)", request_path)
         if agent_run_match:
             self.handle_agent_run_get(urllib.parse.unquote(agent_run_match.group(1)))
@@ -650,6 +654,36 @@ class SynraHandler(SimpleHTTPRequestHandler):
         except Exception as error:
             self.send_json(200, {"ok": False, "configured": True, "error": sanitize_error(error)})
 
+    def handle_agent_schedule_status(self, agent_id: str) -> None:
+        try:
+            agent_id = agent_id.strip()
+            config = nodespark_agent_proxy_config()
+            if not config.get("hubUrl"):
+                self.send_json(200, {"ok": False, "configured": False, "error": "No NodeSparkHub URL is configured."})
+                return
+            if not config.get("deviceToken"):
+                self.send_json(200, {"ok": False, "configured": True, "error": "Synra is not paired with NodeSparkHub yet."})
+                return
+            if not agent_id:
+                self.send_json(400, {"ok": False, "configured": True, "error": "Agent ID is required."})
+                return
+            parsed = request_nodespark_json(
+                config["hubUrl"],
+                f"/agents/{urllib.parse.quote(agent_id, safe='')}/schedule-status",
+                "GET",
+                None,
+                config["deviceToken"],
+                config.get("deviceId", ""),
+                config.get("deviceName", ""),
+            )
+            self.send_json(200, {"ok": True, "configured": True, "scheduleStatus": parsed})
+        except urllib.error.HTTPError as error:
+            self.send_json(200, nodespark_agent_proxy_error(error))
+        except urllib.error.URLError as error:
+            self.send_json(200, {"ok": False, "configured": True, "error": redact_secret_text(f"NodeSparkHub is unreachable: {error.reason}.")})
+        except Exception as error:
+            self.send_json(200, {"ok": False, "configured": True, "error": sanitize_error(error)})
+
     def handle_agent_run_start(self, agent_id: str) -> None:
         try:
             agent_id = agent_id.strip()
@@ -767,7 +801,7 @@ class SynraHandler(SimpleHTTPRequestHandler):
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are Synra vision. Answer in English. Be concise. Do not claim frames are saved.",
+                        "content": "You are Synra vision. Answer in English. Be concise, specific, and honest. Use the image to answer the user's exact question. Do not claim frames are saved.",
                     },
                     {
                         "role": "user",

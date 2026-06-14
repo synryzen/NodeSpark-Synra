@@ -38,6 +38,7 @@ if (missing.length) {
 const avatarMb = bytesToMb(statSync(join(root, "public/avatars/synra.vrm")).size);
 const avatarCount = readdirSync(join(root, "public/avatars")).filter((file) => file.endsWith(".vrm")).length;
 const backgroundCount = readdirSync(join(root, "public/backgrounds")).filter((file) => file.endsWith(".png")).length;
+const avatarFiles = readdirSync(join(root, "public/avatars")).filter((file) => file.endsWith(".vrm"));
 const motionCount = countFiles(join(root, "public/motions"), ".vrma");
 const kioskScript = readFileSync(join(root, "scripts/start-jetson-kiosk.sh"), "utf8");
 const installerScript = readFileSync(join(root, "scripts/install-jetson.sh"), "utf8");
@@ -438,6 +439,17 @@ const serverAssistedSpeechToTextIsAvailable =
   serverScript.includes("/api/stt/elevenlabs") &&
   serverScript.includes("handle_elevenlabs_stt") &&
   serverScript.includes("elevenlabs_speech_to_text");
+const wakeWordCommandFlowIsAvailable =
+  mainScript.includes("handleWakeWordTranscript") &&
+  mainScript.includes("extractWakeWordCommand") &&
+  mainScript.includes("greetAfterWakeWord") &&
+  mainScript.includes("startCommandListeningAfterWakeWord");
+const holdToTalkMicFlowIsAvailable =
+  mainScript.includes('listenButton.addEventListener("pointerdown"') &&
+  mainScript.includes('listenButton.addEventListener("pointerup"') &&
+  mainScript.includes("beginHoldToTalk") &&
+  mainScript.includes("finishHoldToTalk") &&
+  mainScript.includes("recordAndTranscribeUntilStopped");
 const electronKioskMediaCanBeEnabled =
   electronKioskScript.includes('SYNRA_KIOSK_AUTO_GRANT_MEDIA="${SYNRA_KIOSK_AUTO_GRANT_MEDIA:-true}"') &&
   electronKioskConfig.includes('autoGrantMedia: boolEnv(env, "SYNRA_KIOSK_AUTO_GRANT_MEDIA", true)') &&
@@ -471,7 +483,8 @@ const avatarMotionSmokeScriptCanExerciseLiveJetson =
 const result = {
   ok:
     avatarMb < 40 &&
-    avatarCount === 3 &&
+    avatarCount >= 4 &&
+    avatarFiles.includes("princess-synra.vrm") &&
     backgroundCount >= 6 &&
     motionCount >= 97 &&
     kioskIsLean &&
@@ -539,6 +552,8 @@ const result = {
     elevenLabsVoicePickerIsAvailable &&
     voiceDiagnosticsAreAvailable &&
     serverAssistedSpeechToTextIsAvailable &&
+    wakeWordCommandFlowIsAvailable &&
+    holdToTalkMicFlowIsAvailable &&
     electronKioskMediaCanBeEnabled &&
     synraPersonalityIsUpgraded &&
     repeatedStateChangesDoNotRestartAvatar &&
@@ -553,7 +568,7 @@ const result = {
   motionCount,
   checks: [
     "standalone app does not depend on NodeSparkHub",
-    "runtime includes all three Synra avatars",
+    "runtime includes Synra Classic, Code, Battle, and Princess avatars",
     "Synra Classic is first and default",
     "Jetson kiosk requests Synra Classic by default",
     "Jetson installer can bootstrap app service and Electron kiosk",
@@ -621,6 +636,8 @@ const result = {
     "ElevenLabs voices can be loaded and selected by name",
     "voice diagnostics include audio unlock and playback-blocked feedback",
     "server-assisted ElevenLabs speech-to-text backs up Jetson mic input",
+    "wake word opens a command flow and can run commands after Hello Synra",
+    "mic button uses hold-to-talk and sends after release",
     "Electron kiosk can auto-grant local mic/camera permissions for the dedicated station",
     "Synra personality prompt is upgraded for reliable companion behavior",
     "Synra free companion and premium NodeSpark Command Center access are explicit",

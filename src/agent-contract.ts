@@ -34,6 +34,26 @@ export interface SynraAgentScheduleHint {
   mode: SynraAgentScheduleMode;
   label?: string | null;
   cronExpression?: string | null;
+  timeZoneID?: string | null;
+  runInput?: string | null;
+  skipIfRunning?: boolean | null;
+}
+
+export interface SynraAgentScheduleStatus {
+  agentID: string;
+  enabled: boolean;
+  mode: SynraAgentScheduleMode;
+  label?: string | null;
+  cronExpression?: string | null;
+  timeZoneID?: string | null;
+  runInput?: string | null;
+  skipIfRunning: boolean;
+  nextRunAt?: string | null;
+  lastScheduledRunAt?: string | null;
+  lastScheduledRunID?: string | null;
+  lastScheduledRunStatus?: string | null;
+  lastError?: string | null;
+  loopActive: boolean;
 }
 
 export interface SynraAgentCredentialRequirement {
@@ -160,6 +180,7 @@ export interface SynraAgentCreateFromTemplateRequest {
 export type SynraAgentBridgeOperation =
   | "agent.listTemplates"
   | "agent.list"
+  | "agent.scheduleStatus"
   | "agent.run"
   | "agent.getRun"
   | "agent.cancelRun";
@@ -175,6 +196,7 @@ export interface SynraAgentBridgeResponse {
   ok?: boolean;
   templates?: SynraAgentTemplate[];
   agents?: SynraAgent[];
+  scheduleStatus?: SynraAgentScheduleStatus;
   run?: SynraAgentRun;
   error?: string;
 }

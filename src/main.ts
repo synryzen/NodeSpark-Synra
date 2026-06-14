@@ -134,7 +134,11 @@ const SYNRA_BACKGROUNDS: SynraBackground[] = [
   { id: "neural-library", label: "Neural Library", url: "/backgrounds/synra-neural-library.png" },
   { id: "orbit-lounge", label: "Orbit Lounge", url: "/backgrounds/synra-orbit-lounge.png" },
   { id: "cyber-garden", label: "Cyber Garden", url: "/backgrounds/synra-cyber-garden.png" },
-  { id: "quantum-workshop", label: "Quantum Workshop", url: "/backgrounds/synra-quantum-workshop.png" }
+  { id: "quantum-workshop", label: "Quantum Workshop", url: "/backgrounds/synra-quantum-workshop.png" },
+  { id: "castle-ballroom", label: "Castle Ballroom", url: "/backgrounds/synra-castle-ballroom.jpg" },
+  { id: "castle-library", label: "Castle Library", url: "/backgrounds/synra-castle-library.jpg" },
+  { id: "royal-courtyard", label: "Royal Courtyard", url: "/backgrounds/synra-royal-courtyard.jpg" },
+  { id: "starlight-throne-hall", label: "Starlight Throne Hall", url: "/backgrounds/synra-starlight-throne-hall.jpg" }
 ];
 
 const MOTION_CATEGORIES: MotionCategory[] = [
@@ -150,7 +154,7 @@ const MOTION_CATEGORIES: MotionCategory[] = [
 
 const STATE_MOTION_VARIETY: Record<SynraState, string[]> = {
   idle: ["mode:idle", "local_stand_1", "local_stand_4", "local_stand_5"],
-  listening: ["mode:listening", "attentive", "lean_in", "look_camera"],
+  listening: ["mode:listening"],
   thinking: ["mode:thinking", "ask_question", "compare", "look_screen"],
   speaking: ["mode:speaking"],
   offline: ["error_calm", "concerned"]
@@ -1078,6 +1082,9 @@ const loader = new GLTFLoader();
 loader.register((parser) => new VRMLoaderPlugin(parser));
 let activeRecognition: SpeechRecognition | null = null;
 let wakeWordRecognition: SpeechRecognition | null = null;
+let holdToTalkSession: HoldToTalkSession | null = null;
+let micInteractionActive = false;
+let holdToTalkPressed = false;
 let serverWakeWordActive = false;
 let serverWakeWordTimer = 0;
 let pendingFaceSample = "";
@@ -1227,8 +1234,37 @@ function sendPrompt(): void {
   void handleUserText(text);
 }
 
-listenButton.addEventListener("click", () => {
-  void startListening();
+listenButton.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  holdToTalkPressed = true;
+  listenButton.setPointerCapture?.(event.pointerId);
+  void beginHoldToTalk();
+});
+
+listenButton.addEventListener("pointerup", (event) => {
+  event.preventDefault();
+  holdToTalkPressed = false;
+  listenButton.releasePointerCapture?.(event.pointerId);
+  void finishHoldToTalk();
+});
+
+listenButton.addEventListener("pointercancel", () => {
+  holdToTalkPressed = false;
+  void cancelHoldToTalk("Listening cancelled.");
+});
+
+listenButton.addEventListener("keydown", (event) => {
+  if (event.key !== " " && event.key !== "Enter") return;
+  event.preventDefault();
+  holdToTalkPressed = true;
+  void beginHoldToTalk();
+});
+
+listenButton.addEventListener("keyup", (event) => {
+  if (event.key !== " " && event.key !== "Enter") return;
+  event.preventDefault();
+  holdToTalkPressed = false;
+  void finishHoldToTalk();
 });
 
 stopVoiceButton.addEventListener("click", () => {
@@ -1602,6 +1638,7 @@ function setSettingsTab(tabId: string): void {
 }
 
 function initializeCompanionPresence(): void {
+  ensureKioskWakeWordDefault();
   populateCompanionSettingsInputs();
   refreshCompanionPresence();
   if (!state.companionSettings.setupComplete) {
@@ -1613,6 +1650,19 @@ function initializeCompanionPresence(): void {
       if (!firstRunWizard.open) firstRunWizard.showModal();
     }, 700);
   }
+}
+
+function ensureKioskWakeWordDefault(): void {
+  if (runtimeMode !== "kiosk") return;
+  const wakePhrase = state.companionSettings.wakePhrase?.trim() || DEFAULT_WAKE_PHRASE;
+  if (state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening && wakePhrase === state.companionSettings.wakePhrase) return;
+  state.companionSettings = {
+    ...state.companionSettings,
+    wakeWordMode: "local",
+    wakePhrase,
+    allowAlwaysListening: true
+  };
+  saveCompanionSettings(state.companionSettings);
 }
 
 function populateCompanionSettingsInputs(): void {
@@ -1668,15 +1718,19 @@ function canUseServerTranscription(): boolean {
     navigator.mediaDevices &&
     typeof navigator.mediaDevices.getUserMedia === "function" &&
     typeof window.MediaRecorder === "function" &&
-    state.voiceSettings.provider === "elevenLabs" &&
     state.voiceSettings.elevenLabsApiKey
   );
+}
+
+function shouldPreferServerTranscription(): boolean {
+  return canUseServerTranscription() && (runtimeMode === "kiosk" || state.voiceSettings.provider === "elevenLabs");
 }
 
 function refreshCompanionPresence(): void {
   settingsScreenTimeoutStatusEl.textContent = screenTimeoutLabel(state.companionSettings.screenTimeoutMinutes);
   if (state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening) {
-    void startWakeWordListening();
+    if (micInteractionActive) updateWakeWordStatus("Wake word paused");
+    else void startWakeWordListening();
   } else {
     stopWakeWordListening("Wake word off");
   }
@@ -1694,12 +1748,20 @@ async function syncKioskScreenTimeout(): Promise<void> {
 
 async function startWakeWordListening(): Promise<void> {
   const phrase = (state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE).toLowerCase();
+  if (micInteractionActive) {
+    updateWakeWordStatus("Wake word paused");
+    return;
+  }
   if (activeRecognition) {
     updateWakeWordStatus("Wake word paused");
     return;
   }
   if (wakeWordRecognition) {
     updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
+    return;
+  }
+  if (shouldPreferServerTranscription()) {
+    startServerWakeWordListening(phrase);
     return;
   }
   const SpeechRecognitionCtor = speechRecognitionConstructor();
@@ -1735,15 +1797,67 @@ async function startWakeWordListening(): Promise<void> {
     }
   };
   recognition.onresult = (event: SpeechRecognitionEvent) => {
-    const latest = event.results[event.results.length - 1]?.[0]?.transcript?.trim().toLowerCase() ?? "";
-    if (!latest.includes(phrase)) return;
-    void window.synraKiosk?.wakeDisplay?.();
-    updateWakeWordStatus("Awake");
-    setSynraState("listening", `I heard ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}.`);
-    stopWakeWordListening("Awake");
-    void startListening();
+    const latest = event.results[event.results.length - 1]?.[0]?.transcript?.trim() ?? "";
+    void handleWakeWordTranscript(latest, phrase);
   };
   recognition.start();
+}
+
+function handleWakeWordTranscript(transcript: string, phrase: string): boolean {
+  const command = extractWakeWordCommand(transcript, phrase);
+  if (command === null) return false;
+  void window.synraKiosk?.wakeDisplay?.();
+  updateWakeWordStatus("Awake");
+  stopWakeWordListening("Awake");
+  if (command) {
+    setSynraState("thinking", "Heard wake command.");
+    void handleUserText(command);
+    return true;
+  }
+  greetAfterWakeWord();
+  window.setTimeout(() => void startCommandListeningAfterWakeWord(), Math.max(900, estimateSpeechDurationMs(wakeGreetingText()) + 220));
+  return true;
+}
+
+function extractWakeWordCommand(transcript: string, phrase: string): string | null {
+  const cleanedPhrase = phrase.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  if (!cleanedPhrase) return null;
+  const match = transcript.match(new RegExp(`\\b${cleanedPhrase}\\b`, "i"));
+  if (!match || match.index === undefined) return null;
+  return transcript
+    .slice(match.index + match[0].length)
+    .replace(/^[\s,.:;!?-]+/, "")
+    .trim();
+}
+
+function wakeGreetingText(): string {
+  const preferred = state.companionSettings.ownerName || state.memory.preferredName || state.companionSettings.knownUsers[0]?.name || "";
+  return preferred ? `Hello ${preferred}.` : "Hello. I am listening.";
+}
+
+function greetAfterWakeWord(): void {
+  const greeting = wakeGreetingText();
+  pushMessage("synra", greeting);
+  setSynraState("speaking", greeting);
+  speak(greeting);
+}
+
+async function startCommandListeningAfterWakeWord(): Promise<void> {
+  if (state.synra === "thinking") return;
+  if (state.synra === "speaking") {
+    window.setTimeout(() => void startCommandListeningAfterWakeWord(), 350);
+    return;
+  }
+  if (shouldPreferServerTranscription()) {
+    await startServerTranscriptionListening({
+      durationMs: 12000,
+      minRms: 0.008,
+      prompt: "Listening for your command.",
+      emptyCaption: "I did not catch a command after the wake word."
+    });
+    return;
+  }
+  await startListening();
 }
 
 function stopWakeWordListening(status = "Wake word off"): void {
@@ -1780,19 +1894,14 @@ function startServerWakeWordListening(phrase: string): void {
 
   const listenOnce = async (): Promise<void> => {
     if (!serverWakeWordActive || state.companionSettings.wakeWordMode !== "local" || !state.companionSettings.allowAlwaysListening) return;
-    if (activeRecognition || state.synra === "speaking" || state.synra === "thinking") {
+    if (micInteractionActive || activeRecognition || state.synra === "speaking" || state.synra === "thinking") {
       scheduleServerWakeWordTick(900, listenOnce);
       return;
     }
     try {
       const result = await recordAndTranscribeMicrophone({ durationMs: 3200, minRms: 0.018 });
-      const heard = result.text.trim().toLowerCase();
-      if (heard && heard.includes(phrase)) {
-        void window.synraKiosk?.wakeDisplay?.();
-        updateWakeWordStatus("Awake");
-        setSynraState("listening", `I heard ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}.`);
-        stopWakeWordListening("Awake");
-        void startListening();
+      const heard = result.text.trim();
+      if (heard && handleWakeWordTranscript(heard, phrase)) {
         return;
       }
       updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
@@ -2858,6 +2967,14 @@ async function handleUserText(text: string): Promise<void> {
   }
   const requestRoute = classifySynraRequest(text);
   state.lastRouteLabel = requestRoute.label;
+  if (requestRoute.intent === "vision") {
+    const visionResult = await analyzeVisionView(text);
+    pushMessage("synra", visionResult.text);
+    setSynraState(visionResult.motion === "concerned" ? "offline" : "idle", visionResult.text);
+    if (visionResult.motion) void playMotionRoute(visionResult.motion, { restart: true, returnToIdle: true });
+    speak(visionResult.text);
+    return;
+  }
   setSynraState("thinking", "Thinking.");
   let reply = "";
   try {
@@ -2928,8 +3045,8 @@ async function tryHandleLocalCommand(text: string): Promise<LocalCommandResult |
     return cameraStatusCommand(/\b(enable|turn on|open|allow)\b/.test(normalized));
   }
 
-  if (/\b(what do you see|look at this|analyze view|analyze camera|describe the view|use vision)\b/.test(normalized)) {
-    return analyzeVisionView();
+  if (/\b(what can you see|what do you see|what are you seeing|can you see|look at this|analyze view|analyze camera|describe the view|describe what you see|describe the scene|what am i holding|what is in my hand|what's in my hand|what am i wearing|use vision)\b/.test(normalized)) {
+    return analyzeVisionView(text);
   }
 
   if (/\b(camera|vision|eyes)\b/.test(normalized) && /\b(off|disable|close|stop)\b/.test(normalized)) {
@@ -3172,7 +3289,7 @@ async function setVisionEnabled(enabled: boolean): Promise<LocalCommandResult> {
   }
 }
 
-async function analyzeVisionView(): Promise<LocalCommandResult> {
+async function analyzeVisionView(userQuestion = "Describe what Synra can see. Keep it concise and helpful."): Promise<LocalCommandResult> {
   visionAnalyzeButton.disabled = true;
   const previousText = visionAnalyzeButton.textContent || "Analyze View";
   visionAnalyzeButton.textContent = "Analyzing";
@@ -3188,7 +3305,7 @@ async function analyzeVisionView(): Promise<LocalCommandResult> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         imageBase64,
-        prompt: "Describe what Synra can see. Keep it concise and helpful.",
+        prompt: buildVisionPrompt(userQuestion),
         endpoint: resolveModelProvider(state.settings.provider) === "server" ? "" : state.settings.endpoint,
         model: resolveModelProvider(state.settings.provider) === "server" ? "" : state.settings.model,
         apiKey: resolveModelProvider(state.settings.provider) === "server" ? "" : state.settings.apiKey
@@ -3213,6 +3330,15 @@ async function runVisionAnalyzeButton(): Promise<void> {
   setSynraState(result.motion === "concerned" ? "offline" : "idle", result.text);
   if (result.motion) void playMotionRoute(result.motion, { restart: true, returnToIdle: true });
   speak(result.text);
+}
+
+function buildVisionPrompt(userQuestion: string): string {
+  const cleaned = userQuestion.trim() || "Describe what Synra can see.";
+  return [
+    "Use the transient camera frame to answer the user's exact question.",
+    "Be direct, specific, and honest. If an object is unclear, say what it looks like instead of pretending.",
+    `User question: ${cleaned}`
+  ].join("\n");
 }
 
 async function captureVisionFrame(): Promise<string> {
@@ -4070,7 +4196,7 @@ function stopVoiceActivity(caption = "Voice stopped."): void {
   listenButton.disabled = false;
   updateVoiceStatus("Stopped");
   setSynraState("idle", caption);
-  if (state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening) {
+  if (!micInteractionActive && state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening) {
     window.setTimeout(() => void startWakeWordListening(), 700);
   }
 }
@@ -4174,6 +4300,190 @@ function stopSpeechLipSync(): void {
   hubAvatarRuntime?.setSpeaking(false);
 }
 
+async function beginHoldToTalk(): Promise<void> {
+  if (holdToTalkSession || activeRecognition) return;
+  micInteractionActive = true;
+  stopWakeWordListening("Awake");
+  stopVoiceActivity("Listening.");
+  prepareAvatarForCalmListening();
+  updateVoiceStatus("Mic check");
+  let sessionStarted = false;
+  try {
+    const micReady = await ensureMicrophoneReady();
+    if (!micReady) {
+      setSynraState("idle", "Microphone permission is not available yet.");
+      updateVoiceStatus("Mic unavailable");
+      finalizeMicInteraction(true);
+      return;
+    }
+    if (shouldPreferServerTranscription()) {
+      holdToTalkSession = await recordAndTranscribeUntilStopped({ minRms: 0.008 });
+    } else {
+      const SpeechRecognitionCtor = speechRecognitionConstructor();
+      if (!SpeechRecognitionCtor) {
+        updateVoiceStatus("Listen unavailable");
+        setSynraState("idle", "Speech recognition is not available in this browser yet. ElevenLabs speech-to-text is not configured.");
+        finalizeMicInteraction(true);
+        return;
+      }
+      holdToTalkSession = beginBrowserHoldToTalk(SpeechRecognitionCtor);
+    }
+    sessionStarted = true;
+    listenButton.classList.add("holding");
+    updateVoiceStatus("Hold to talk");
+    setSynraState("listening", "Listening while you hold.");
+    if (!holdToTalkPressed) {
+      await finishHoldToTalk();
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Microphone recording could not start.";
+    updateVoiceStatus("Mic unavailable");
+    setSynraState("idle", message);
+    finalizeMicInteraction(false);
+  } finally {
+    if (!sessionStarted && micInteractionActive) {
+      finalizeMicInteraction(true);
+    }
+  }
+}
+
+async function finishHoldToTalk(): Promise<void> {
+  const session = holdToTalkSession;
+  if (!session) return;
+  holdToTalkSession = null;
+  listenButton.classList.remove("holding");
+  listenButton.disabled = true;
+  updateVoiceStatus("Transcribing");
+  setSynraState("thinking", "Heard you.");
+  try {
+    session.stop();
+    const result = await withMicTranscriptionTimeout(session.finish(), 16000);
+    const text = result.text.trim();
+    if (!text) {
+      updateVoiceStatus("No speech heard");
+      setSynraState("idle", "I did not catch words that time.");
+      return;
+    }
+    updateVoiceStatus("Heard you");
+    await handleUserText(text);
+  } catch (error) {
+    session.cancel();
+    const message = error instanceof Error ? error.message : "Microphone transcription failed.";
+    updateVoiceStatus("Listen stopped");
+    setSynraState("idle", message);
+  } finally {
+    finalizeMicInteraction(true);
+  }
+}
+
+async function cancelHoldToTalk(message: string): Promise<void> {
+  const session = holdToTalkSession;
+  holdToTalkSession = null;
+  listenButton.classList.remove("holding");
+  session?.cancel();
+  updateVoiceStatus("Listen stopped");
+  setSynraState("idle", message);
+  finalizeMicInteraction(true);
+}
+
+function finalizeMicInteraction(restartWakeWord: boolean): void {
+  micInteractionActive = false;
+  holdToTalkPressed = false;
+  listenButton.classList.remove("holding");
+  listenButton.disabled = false;
+  if (!restartWakeWord) return;
+  if (state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening) {
+    window.setTimeout(() => void startWakeWordListening(), 700);
+  }
+}
+
+function prepareAvatarForCalmListening(): void {
+  window.clearTimeout(hubMotionReturnTimer);
+  hubAvatarRuntime?.stopMotionTest();
+  hubAvatarRuntime?.setMode("listening", { playAuthoredLoop: false });
+  hubAvatarRuntime?.setSpeaking(false);
+  hubAvatarRuntime?.setVisemes({ aa: 0, ih: 0, ou: 0, ee: 0, oh: 0, open: 0 });
+  activeMotionEl.textContent = "calm listening";
+}
+
+function withMicTranscriptionTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout = 0;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = window.setTimeout(() => reject(new Error("Microphone transcription timed out. Please try again.")), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeout) window.clearTimeout(timeout);
+  });
+}
+
+function beginBrowserHoldToTalk(SpeechRecognitionCtor: SpeechRecognitionConstructor): HoldToTalkSession {
+  let transcript = "";
+  let finished = false;
+  let resolveFinished: (result: { text: string }) => void = () => {};
+  const finishPromise = new Promise<{ text: string }>((resolve) => {
+    resolveFinished = resolve;
+  });
+  const recognition = new SpeechRecognitionCtor();
+  activeRecognition = recognition;
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = "en-US";
+  recognition.onstart = () => {
+    updateVoiceStatus("Listening");
+    setSynraState("listening", "Listening while you hold.");
+  };
+  recognition.onerror = () => {
+    activeRecognition = null;
+    if (!finished) {
+      finished = true;
+      resolveFinished({ text: transcript });
+    }
+  };
+  recognition.onend = () => {
+    if (activeRecognition === recognition) activeRecognition = null;
+    if (!finished) {
+      finished = true;
+      resolveFinished({ text: transcript });
+    }
+  };
+  recognition.onresult = (event: SpeechRecognitionEvent) => {
+    const heard: string[] = [];
+    for (let index = 0; index < event.results.length; index += 1) {
+      const text = event.results[index]?.[0]?.transcript?.trim();
+      if (text) heard.push(text);
+    }
+    transcript = heard.join(" ").replace(/\s+/g, " ").trim();
+    if (transcript) updateVoiceStatus("Listening");
+  };
+  recognition.start();
+  return {
+    source: "browser",
+    startedAt: performance.now(),
+    stop: () => {
+      try {
+        recognition.stop?.();
+      } catch {
+        if (!finished) {
+          finished = true;
+          resolveFinished({ text: transcript });
+        }
+      }
+    },
+    cancel: () => {
+      try {
+        recognition.abort?.();
+      } catch {
+        // Chromium can throw if recognition already ended.
+      }
+      if (!finished) {
+        finished = true;
+        resolveFinished({ text: "" });
+      }
+    },
+    finish: () => finishPromise
+  };
+}
+
 async function startListening(): Promise<void> {
   stopWakeWordListening("Awake");
   listenButton.disabled = true;
@@ -4188,6 +4498,10 @@ async function startListening(): Promise<void> {
   } finally {
     listenButton.disabled = false;
   }
+  if (shouldPreferServerTranscription()) {
+    await startServerTranscriptionListening();
+    return;
+  }
   const SpeechRecognitionCtor = speechRecognitionConstructor();
   if (!SpeechRecognitionCtor) {
     if (canUseServerTranscription()) {
@@ -4200,19 +4514,44 @@ async function startListening(): Promise<void> {
   }
   const recognition = new SpeechRecognitionCtor();
   activeRecognition = recognition;
-  recognition.continuous = false;
-  recognition.interimResults = false;
+  recognition.continuous = true;
+  recognition.interimResults = true;
   recognition.lang = "en-US";
+  let wakeCommandTranscript = "";
+  let wakeCommandCommitTimer = 0;
+  const commitWakeCommand = () => {
+    if (!wakeCommandTranscript) return;
+    const command = wakeCommandTranscript;
+    wakeCommandTranscript = "";
+    if (wakeCommandCommitTimer) {
+      window.clearTimeout(wakeCommandCommitTimer);
+      wakeCommandCommitTimer = 0;
+    }
+    try {
+      recognition.stop?.();
+    } catch {
+      // Browser speech recognition may already be stopped.
+    }
+    if (activeRecognition === recognition) activeRecognition = null;
+    setSynraState("thinking", "Heard you.");
+    void handleUserText(command);
+  };
   recognition.onstart = () => {
     updateVoiceStatus("Listening");
     setSynraState("listening", "Listening.");
   };
   recognition.onerror = () => {
+    if (wakeCommandCommitTimer) window.clearTimeout(wakeCommandCommitTimer);
     activeRecognition = null;
     updateVoiceStatus("Listen stopped");
     setSynraState("idle", "Listening stopped.");
   };
   recognition.onend = () => {
+    if (wakeCommandCommitTimer) window.clearTimeout(wakeCommandCommitTimer);
+    if (wakeCommandTranscript) {
+      commitWakeCommand();
+      return;
+    }
     if (activeRecognition === recognition) activeRecognition = null;
     refreshVoiceStatus();
     if (state.synra === "listening") setSynraState("idle", "Ready.");
@@ -4221,26 +4560,32 @@ async function startListening(): Promise<void> {
     }
   };
   recognition.onresult = (event: SpeechRecognitionEvent) => {
-    const text = event.results[0]?.[0]?.transcript?.trim();
-    if (text) {
-      setSynraState("thinking", "Heard you.");
-      void handleUserText(text);
+    const heard: string[] = [];
+    for (let index = 0; index < event.results.length; index += 1) {
+      const heardText = event.results[index]?.[0]?.transcript?.trim();
+      if (heardText) heard.push(heardText);
     }
+    wakeCommandTranscript = heard.join(" ").replace(/\s+/g, " ").trim();
+    if (!wakeCommandTranscript) return;
+    updateVoiceStatus("Listening");
+    if (wakeCommandCommitTimer) window.clearTimeout(wakeCommandCommitTimer);
+    wakeCommandCommitTimer = window.setTimeout(commitWakeCommand, 1800);
   };
   setSynraState("listening", "Listening.");
   recognition.start();
 }
 
-async function startServerTranscriptionListening(): Promise<void> {
+async function startServerTranscriptionListening(options: { durationMs?: number; minRms?: number; prompt?: string; emptyCaption?: string } = {}): Promise<void> {
   listenButton.disabled = true;
   updateVoiceStatus("Listening");
-  setSynraState("listening", "Listening.");
+  prepareAvatarForCalmListening();
+  setSynraState("listening", options.prompt ?? "Listening.");
   try {
-    const result = await recordAndTranscribeMicrophone({ durationMs: 5200, minRms: 0.01 });
+    const result = await recordAndTranscribeMicrophone({ durationMs: options.durationMs ?? 5200, minRms: options.minRms ?? 0.01 });
     const text = result.text.trim();
     if (!text) {
       updateVoiceStatus("No speech heard");
-      setSynraState("idle", "I did not catch words that time.");
+      setSynraState("idle", options.emptyCaption ?? "I did not catch words that time.");
       return;
     }
     updateVoiceStatus("Heard you");
@@ -4317,6 +4662,95 @@ async function recordAndTranscribeMicrophone(options: { durationMs: number; minR
     if (sampleTimer) window.clearInterval(sampleTimer);
     for (const track of stream.getTracks()) track.stop();
     if (audioContext) void audioContext.close();
+  }
+}
+
+async function recordAndTranscribeUntilStopped(options: { minRms: number }): Promise<HoldToTalkSession> {
+  if (!navigator.mediaDevices?.getUserMedia || !("MediaRecorder" in window)) {
+    throw new Error("Microphone recording is not available in this kiosk/browser.");
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  let audioContext: AudioContext | null = null;
+  let sampleTimer = 0;
+  let peakRms = 0;
+  let cancelled = false;
+  const cleanup = (): void => {
+    if (sampleTimer) window.clearInterval(sampleTimer);
+    for (const track of stream.getTracks()) track.stop();
+    if (audioContext) void audioContext.close();
+  };
+
+  try {
+    const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (AudioContextCtor) {
+      audioContext = new AudioContextCtor();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 1024;
+      source.connect(analyser);
+      const samples = new Float32Array(analyser.fftSize);
+      sampleTimer = window.setInterval(() => {
+        analyser.getFloatTimeDomainData(samples);
+        let sum = 0;
+        for (const sample of samples) sum += sample * sample;
+        peakRms = Math.max(peakRms, Math.sqrt(sum / samples.length));
+      }, 90);
+    }
+
+    const mimeType = preferredAudioMimeType();
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const chunks: BlobPart[] = [];
+    const finishPromise = new Promise<{ text: string }>((resolve, reject) => {
+      recorder.onerror = () => reject(new Error("Microphone recorder failed."));
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data);
+      };
+      recorder.onstop = async () => {
+        try {
+          if (cancelled || peakRms < options.minRms) {
+            resolve({ text: "" });
+            return;
+          }
+          const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || "audio/webm" });
+          const audioBase64 = await blobToBase64(blob);
+          const response = await fetch("/api/stt/elevenlabs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              audioBase64,
+              mimeType: blob.type || "audio/webm",
+              apiKey: state.voiceSettings.elevenLabsApiKey,
+              languageCode: "en"
+            })
+          });
+          const data = await response.json() as { ok?: boolean; text?: string; error?: string };
+          if (!data.ok && data.error) throw new Error(data.error);
+          resolve({ text: String(data.text || "").trim() });
+        } catch (error) {
+          reject(error);
+        } finally {
+          cleanup();
+        }
+      };
+      recorder.start(250);
+    });
+
+    return {
+      source: "server",
+      startedAt: performance.now(),
+      stop: () => {
+        if (recorder.state !== "inactive") recorder.stop();
+      },
+      cancel: () => {
+        cancelled = true;
+        if (recorder.state !== "inactive") recorder.stop();
+        else cleanup();
+      },
+      finish: () => finishPromise
+    };
+  } catch (error) {
+    cleanup();
+    throw error;
   }
 }
 
@@ -4732,14 +5166,19 @@ function setSynraState(next: SynraState, caption: string): void {
   const route = routeForSynraState(next);
   if (hubAvatarRuntime) {
     const mode = modeFromState(next);
-    hubAvatarRuntime.setMode(mode, { playAuthoredLoop: mode !== "idle" && next !== "speaking" });
+    const useAuthoredLoop = shouldUseAuthoredStateLoop(next);
+    hubAvatarRuntime.setMode(mode, { playAuthoredLoop: useAuthoredLoop });
     hubAvatarRuntime.setSpeaking(next === "speaking");
-    if (route && !route.startsWith("mode:") && next !== "speaking") {
+    if (route && !route.startsWith("mode:") && next !== "speaking" && useAuthoredLoop) {
       void playMotionRoute(route, { loop: true, restart: next !== "idle" });
     }
     return;
   }
   if (route && state.motionPlayer.snapshot.ready) void playMotionRoute(route, { loop: true, restart: next !== "idle" });
+}
+
+function shouldUseAuthoredStateLoop(next: SynraState): boolean {
+  return next !== "idle" && next !== "listening" && next !== "speaking";
 }
 
 function routeForSynraState(next: SynraState): string | null {
@@ -5544,4 +5983,12 @@ interface SpeechRecognition extends EventTarget {
 
 interface SpeechRecognitionEvent {
   results: ArrayLike<ArrayLike<{ transcript: string }>>;
+}
+
+interface HoldToTalkSession {
+  source: "browser" | "server";
+  startedAt: number;
+  stop(): void;
+  cancel(): void;
+  finish(): Promise<{ text: string }>;
 }

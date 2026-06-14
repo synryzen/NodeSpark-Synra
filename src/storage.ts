@@ -93,10 +93,10 @@ export function loadCompanionSettings(): CompanionSettings {
   const settings = readJson<CompanionSettings>(companionKey, {
     setupComplete: false,
     ownerName: "",
-    wakeWordMode: "off",
+    wakeWordMode: "local",
     wakePhrase: DEFAULT_WAKE_PHRASE,
     screenTimeoutMinutes: 10,
-    allowAlwaysListening: false,
+    allowAlwaysListening: true,
     allowCameraRecognition: false,
     allowFaceSampleStorage: false,
     allowMemorySuggestions: true,

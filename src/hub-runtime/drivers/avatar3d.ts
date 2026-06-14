@@ -266,6 +266,15 @@ function isPerformanceLimitedHost(): boolean {
   return params.get("profile") === "jetson" || params.get("mode") === "kiosk" || isPrivateNetworkHost(window.location.hostname);
 }
 
+function isWideKioskStage(width: number, height: number, aspect: number): boolean {
+  if (typeof window === "undefined") return false;
+  if (isIOSMobileHost()) return false;
+  const params = new URLSearchParams(window.location.search);
+  const explicitKiosk = params.get("profile") === "jetson" || params.get("mode") === "kiosk";
+  const localAppliance = isPrivateNetworkHost(window.location.hostname);
+  return (explicitKiosk || localAppliance) && aspect > 1.55 && width >= 1100 && height >= 600;
+}
+
 function readRuntimeTargetFps(performanceLimited: boolean): number {
   if (typeof window !== "undefined") {
     const params = new URLSearchParams(window.location.search);
@@ -1470,6 +1479,13 @@ export class SynraAvatarRuntime {
 
   private applyCameraFraming(aspect: number, width = this.stage.clientWidth, height = this.stage.clientHeight): void {
     if (!this.camera) return;
+    if (this.mobilePerformanceMode && isWideKioskStage(width, height, aspect)) {
+      this.camera.fov = 27;
+      this.camera.position.set(0, 0.88, 5.35);
+      this.camera.lookAt(0, 0.86, 0);
+      return;
+    }
+
     if (!this.mobilePerformanceMode) {
       this.camera.fov = 26;
       this.camera.position.set(0, 0.86, 4.15);

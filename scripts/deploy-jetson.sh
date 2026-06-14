@@ -28,7 +28,6 @@ if [ "${#backup_paths[@]}" -gt 0 ]; then
   chmod 600 "$BACKUP"
   echo "Synra state backup: $BACKUP"
 fi
-rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR"
 tar -xzf "$HOME/synra-standalone-dist.tgz" -C "$APP_DIR"
 find "$APP_DIR" -name "._*" -delete

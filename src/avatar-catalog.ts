@@ -1,4 +1,4 @@
-export type SynraAvatarId = "classic" | "code1" | "battle";
+export type SynraAvatarId = "classic" | "code1" | "battle" | "princess";
 
 export interface SynraAvatarOption {
   id: SynraAvatarId;
@@ -25,6 +25,12 @@ export const SYNRA_AVATARS: SynraAvatarOption[] = [
     label: "Synra Battle",
     detail: "Battle-ready Synra model",
     url: "/avatars/synra-battle.vrm"
+  },
+  {
+    id: "princess",
+    label: "Princess Synra",
+    detail: "Royal alternate Synra avatar model",
+    url: "/avatars/princess-synra.vrm"
   }
 ];
 

@@ -10,7 +10,10 @@ export type SynraRequestRoute = {
 
 export function classifySynraRequest(text: string): SynraRequestRoute {
   const normalized = text.trim().toLowerCase();
-  if (/\b(camera|vision|see|look|image|picture|photo|eyes)\b/.test(normalized)) {
+  if (
+    /\b(camera|vision|see|look|image|picture|photo|eyes)\b/.test(normalized) ||
+    /\b(what can you see|what do you see|what are you seeing|can you see|what am i holding|what am i wearing|what is in my hand|what's in my hand|describe what you see|describe the scene|look through the camera)\b/.test(normalized)
+  ) {
     return { intent: "vision", path: "direct", label: "vision" };
   }
   if (/\b(light|lights|lamp|lamps|smart home|home assistant|hue|matter|mqtt)\b/.test(normalized)) {
@@ -79,11 +82,12 @@ function resolveProvider(settings: ModelSettings): ModelSettings["provider"] {
 
 export function localSynraReply(text: string): string {
   const normalized = text.toLowerCase();
-  if (normalized.includes("hello") || normalized.includes("hi ")) return "I am here. Tell me what you want to build, check, or control.";
-  if (normalized.includes("light")) return "Home Assistant control is included in free Synra. Connect the Home Assistant URL, token, and default entity when you are ready.";
-  if (normalized.includes("camera") || normalized.includes("vision") || normalized.includes("see")) return "I can report camera permission and Jetson device status now. Real visual understanding will turn on only after a vision model and camera stream are configured.";
-  if (normalized.includes("nodespark") || normalized.includes("node spark")) return "NodeSpark Command Center is an optional subscriber skill. Pair Synra with a NodeSparkHub PIN, then I can check status, list workflows and runs, and ask for confirmation before running anything.";
-  if (normalized.includes("remember")) return "I can remember preferences once you approve them. I will keep secrets, tokens, raw audio, and camera frames out of memory.";
+  if (normalized.includes("hello") || normalized.includes("hi ")) return "I am here. Tell me what you want to build, check, or control, and I will stay with the task.";
+  if (normalized.includes("light")) return "Home Assistant control is included in free Synra. Connect the URL, token, default targets, and aliases, then I will stage light or device actions with confirmation.";
+  if (normalized.includes("camera") || normalized.includes("vision") || normalized.includes("see")) return "I can keep working with camera status now, and I will attach the current frame to a vision-capable route when one is configured.";
+  if (normalized.includes("nodespark") || normalized.includes("node spark")) return "NodeSpark Command Center is an optional subscriber skill. After this device is paired with NodeSparkHub, I can work with workflows, agents, Hub status, runs, and safe confirmations.";
+  if (normalized.includes("workflow") || normalized.includes("agent")) return "I can keep working with workflows, agents, Home Assistant, run history, schedules, and confirmations through NodeSparkHub when the Command Center skill is paired.";
+  if (normalized.includes("remember")) return "I can remember approved preferences and keep secrets, tokens, raw audio, and camera frames out of memory.";
   if (normalized.includes("status") || normalized.includes("network") || normalized.includes("time")) return "I can check local system, network, and time status directly without waiting on a model.";
-  return "I can help with that. My direct controls stay instant, and deeper reasoning goes through the configured local or cloud model.";
+  return "I can keep working with direct controls instantly, and deeper reasoning goes through the configured local, Hub, or cloud model route.";
 }
