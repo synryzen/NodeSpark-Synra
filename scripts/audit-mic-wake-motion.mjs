@@ -43,6 +43,10 @@ requireText("wake-command-uses-server-capture", main, "Listening for your comman
 requireText("wake-command-allows-longer-phrase", main, "durationMs: 12000");
 requireText("wake-browser-listen-accumulates-phrase", main, "wakeCommandTranscript");
 requireText("wake-browser-listen-waits-for-pause", main, "window.setTimeout(commitWakeCommand, 1800)");
+requireText("wake-word-fuzzy-aliases", main, "wakePhraseAliases");
+requireText("wake-word-accepts-syna", main, "hello syna");
+requireText("wake-word-accepts-sarah", main, "hello sarah");
+requireText("wake-word-near-token-match", main, "isLikelyWakeToken");
 requireText("tap-listen-prefers-server-stt", main, "await startServerTranscriptionListening();");
 requireText("standalone-vision-route-captures-frame", main, "if (requestRoute.intent === \"vision\")");
 requireText("standalone-vision-uses-user-question", main, "buildVisionPrompt(userQuestion)");

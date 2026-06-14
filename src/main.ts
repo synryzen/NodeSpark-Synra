@@ -1889,14 +1889,81 @@ function handleWakeWordTranscript(transcript: string, phrase: string): boolean {
 }
 
 function extractWakeWordCommand(transcript: string, phrase: string): string | null {
-  const cleanedPhrase = phrase.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-  if (!cleanedPhrase) return null;
-  const match = transcript.match(new RegExp(`\\b${cleanedPhrase}\\b`, "i"));
-  if (!match || match.index === undefined) return null;
-  return transcript
-    .slice(match.index + match[0].length)
-    .replace(/^[\s,.:;!?-]+/, "")
-    .trim();
+  for (const alias of wakePhraseAliases(phrase)) {
+    const cleanedAlias = alias.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\W+");
+    if (!cleanedAlias) continue;
+    const match = transcript.match(new RegExp(`\\b${cleanedAlias}\\b`, "i"));
+    if (!match || match.index === undefined) continue;
+    return transcript
+      .slice(match.index + match[0].length)
+      .replace(/^[\s,.:;!?-]+/, "")
+      .trim();
+  }
+
+  const tokens = normalizedWakeTokens(transcript);
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (!["hello", "hey", "hi"].includes(tokens[index] ?? "")) continue;
+    const nextToken = tokens[index + 1] ?? "";
+    const followingToken = tokens[index + 2] ?? "";
+    if (isLikelyWakeToken(nextToken) || (nextToken.length <= 2 && isLikelyWakeToken(followingToken))) {
+      return tokens.slice(isLikelyWakeToken(nextToken) ? index + 2 : index + 3).join(" ").trim();
+    }
+  }
+  return null;
+}
+
+function wakePhraseAliases(phrase: string): string[] {
+  const base = phrase.trim() || DEFAULT_WAKE_PHRASE;
+  const aliases = [
+    base,
+    "hello synra",
+    "hello syna",
+    "hello sinra",
+    "hello syra",
+    "hello cynra",
+    "hello cindra",
+    "hello senra",
+    "hello sierra",
+    "hello sarah",
+    "hey synra",
+    "hi synra"
+  ];
+  return [...new Set(aliases.map((alias) => alias.toLowerCase().replace(/\s+/g, " ").trim()).filter(Boolean))];
+}
+
+function normalizedWakeTokens(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function isLikelyWakeToken(token: string): boolean {
+  if (!token) return false;
+  const normalized = token.toLowerCase();
+  const known = new Set(["synra", "syna", "sinra", "syra", "cynra", "cindra", "senra", "sierra", "sarah", "synrah", "synara"]);
+  if (known.has(normalized)) return true;
+  return levenshteinDistance(normalized, "synra") <= 1;
+}
+
+function levenshteinDistance(left: string, right: string): number {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    let diagonal = previous[0] ?? 0;
+    previous[0] = leftIndex;
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const above = previous[rightIndex] ?? 0;
+      const cost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      previous[rightIndex] = Math.min(
+        (previous[rightIndex] ?? 0) + 1,
+        (previous[rightIndex - 1] ?? 0) + 1,
+        diagonal + cost
+      );
+      diagonal = above;
+    }
+  }
+  return previous[right.length] ?? Math.max(left.length, right.length);
 }
 
 function wakeGreetingText(): string {
