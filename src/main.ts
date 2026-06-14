@@ -585,6 +585,18 @@ app.innerHTML = `
           </select>
         </label>
         <label>
+          Microphone
+          <select id="microphoneDeviceInput">
+            <option value="">System default microphone</option>
+          </select>
+        </label>
+        <label>
+          Camera
+          <select id="cameraDeviceInput">
+            <option value="">System default camera</option>
+          </select>
+        </label>
+        <label>
           Wake phrase
           <input id="wakePhraseInput" placeholder="Hello Synra" />
         </label>
@@ -614,6 +626,8 @@ app.innerHTML = `
           <strong>No raw audio or camera frames are saved to memory</strong>
         </div>
         <button type="button" id="startWakeWordButton">Start Wake Word</button>
+        <button type="button" id="refreshMediaDevicesButton">Refresh Mic / Camera</button>
+        <p id="mediaDeviceStatus" class="settings-note">Choose the mic and camera Synra should use for wake word, hold-to-talk, face setup, and vision.</p>
         <p class="settings-note">Wake word listening is local-first and only listens for the configured phrase before sending a real request to Synra.</p>
       </section>
       <section class="settings-panel" data-settings-panel="voice" role="tabpanel" hidden>
@@ -1006,12 +1020,16 @@ const systemPromptInput = must<HTMLElement, HTMLTextAreaElement>("systemPromptIn
 const companionOwnerNameInput = must<HTMLElement, HTMLInputElement>("companionOwnerNameInput");
 const wakeWordModeInput = must<HTMLElement, HTMLSelectElement>("wakeWordModeInput");
 const micAlwaysListeningInput = must<HTMLElement, HTMLSelectElement>("micAlwaysListeningInput");
+const microphoneDeviceInput = must<HTMLElement, HTMLSelectElement>("microphoneDeviceInput");
+const cameraDeviceInput = must<HTMLElement, HTMLSelectElement>("cameraDeviceInput");
 const wakePhraseInput = must<HTMLElement, HTMLInputElement>("wakePhraseInput");
 const screenTimeoutInput = must<HTMLElement, HTMLSelectElement>("screenTimeoutInput");
 const memorySuggestionsInput = must<HTMLElement, HTMLSelectElement>("memorySuggestionsInput");
 const wakeWordStatusEl = must<HTMLElement, HTMLElement>("wakeWordStatus");
 const micAlwaysListeningStatusEl = must<HTMLElement, HTMLElement>("micAlwaysListeningStatus");
 const startWakeWordButton = must<HTMLElement, HTMLButtonElement>("startWakeWordButton");
+const refreshMediaDevicesButton = must<HTMLElement, HTMLButtonElement>("refreshMediaDevicesButton");
+const mediaDeviceStatusEl = must<HTMLElement, HTMLElement>("mediaDeviceStatus");
 const knownUserNameInput = must<HTMLElement, HTMLInputElement>("knownUserNameInput");
 const knownUserRelationshipInput = must<HTMLElement, HTMLInputElement>("knownUserRelationshipInput");
 const faceRecognitionInput = must<HTMLElement, HTMLSelectElement>("faceRecognitionInput");
@@ -1600,6 +1618,11 @@ startWakeWordButton.addEventListener("click", () => {
   refreshCompanionPresence();
 });
 
+refreshMediaDevicesButton.addEventListener("click", () => {
+  state.companionSettings = readCompanionSettingsFromInputs();
+  void refreshMediaDeviceInputs({ requestPermission: true });
+});
+
 captureUserFaceButton.addEventListener("click", () => {
   void captureKnownUserFaceSample();
 });
@@ -1649,6 +1672,7 @@ function openSettingsDialog(initialTab = "ai"): void {
   populateMemorySettingsInputs();
   populateVoiceSettingsInputs();
   populateCompanionSettingsInputs();
+  void refreshMediaDeviceInputs();
   refreshSettingsDisplayStatus();
   refreshKioskWindowControls().catch(() => {});
   setSettingsTab(initialTab);
@@ -1701,6 +1725,8 @@ function populateCompanionSettingsInputs(): void {
   companionOwnerNameInput.value = state.companionSettings.ownerName || state.memory.preferredName || "";
   wakeWordModeInput.value = state.companionSettings.wakeWordMode;
   micAlwaysListeningInput.value = state.companionSettings.allowAlwaysListening ? "on" : "off";
+  microphoneDeviceInput.value = state.companionSettings.preferredMicrophoneId || "";
+  cameraDeviceInput.value = state.companionSettings.preferredCameraId || "";
   wakePhraseInput.value = state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE;
   screenTimeoutInput.value = String(state.companionSettings.screenTimeoutMinutes);
   memorySuggestionsInput.value = state.companionSettings.allowMemorySuggestions ? "on" : "off";
@@ -1716,6 +1742,8 @@ function readCompanionSettingsFromInputs(): CompanionSettings {
     ownerName: companionOwnerNameInput.value.trim(),
     wakeWordMode,
     wakePhrase: wakePhraseInput.value.trim() || DEFAULT_WAKE_PHRASE,
+    preferredMicrophoneId: microphoneDeviceInput.value.trim(),
+    preferredCameraId: cameraDeviceInput.value.trim(),
     screenTimeoutMinutes: normalizeScreenTimeout(screenTimeoutInput.value),
     allowAlwaysListening: wakeWordMode === "local" && micAlwaysListeningInput.value === "on",
     allowCameraRecognition: faceRecognitionInput.value === "on",
@@ -1928,6 +1956,95 @@ function updateWakeWordStatus(status: string): void {
   startWakeWordButton.textContent = state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening ? "Restart Wake Word" : "Start Wake Word";
 }
 
+function selectedAudioConstraints(): boolean | MediaTrackConstraints {
+  const deviceId = state.companionSettings.preferredMicrophoneId?.trim();
+  const base: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true
+  };
+  return deviceId ? { ...base, deviceId: { exact: deviceId } } : base;
+}
+
+function selectedVideoConstraints(): boolean | MediaTrackConstraints {
+  const deviceId = state.companionSettings.preferredCameraId?.trim();
+  return deviceId ? { deviceId: { exact: deviceId } } : true;
+}
+
+async function openSelectedMicrophoneStream(): Promise<MediaStream> {
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: selectedAudioConstraints(), video: false });
+  } catch (error) {
+    if (!state.companionSettings.preferredMicrophoneId) throw error;
+    mediaDeviceStatusEl.textContent = "Selected microphone was unavailable. Falling back to system default.";
+    return navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  }
+}
+
+async function openSelectedCameraStream(): Promise<MediaStream> {
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: false, video: selectedVideoConstraints() });
+  } catch (error) {
+    if (!state.companionSettings.preferredCameraId) throw error;
+    mediaDeviceStatusEl.textContent = "Selected camera was unavailable. Falling back to system default.";
+    return navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+  }
+}
+
+async function refreshMediaDeviceInputs(options: { requestPermission?: boolean } = {}): Promise<void> {
+  if (!navigator.mediaDevices?.enumerateDevices) {
+    mediaDeviceStatusEl.textContent = "This browser cannot list microphones or cameras.";
+    return;
+  }
+
+  const temporaryStreams: MediaStream[] = [];
+  refreshMediaDevicesButton.disabled = true;
+  try {
+    if (options.requestPermission && navigator.mediaDevices.getUserMedia) {
+      for (const constraints of [{ audio: true, video: false }, { audio: false, video: true }] as MediaStreamConstraints[]) {
+        try {
+          temporaryStreams.push(await navigator.mediaDevices.getUserMedia(constraints));
+        } catch {
+          // One missing device should not prevent the other device list from loading.
+        }
+      }
+    }
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const audioInputs = devices.filter((device) => device.kind === "audioinput");
+    const videoInputs = devices.filter((device) => device.kind === "videoinput");
+    populateMediaDeviceSelect(microphoneDeviceInput, audioInputs, "System default microphone", state.companionSettings.preferredMicrophoneId);
+    populateMediaDeviceSelect(cameraDeviceInput, videoInputs, "System default camera", state.companionSettings.preferredCameraId);
+    const micLabel = selectedDeviceLabel(microphoneDeviceInput, "system default mic");
+    const cameraLabel = selectedDeviceLabel(cameraDeviceInput, "system default camera");
+    mediaDeviceStatusEl.textContent = `Using ${micLabel} and ${cameraLabel}.`;
+  } catch {
+    mediaDeviceStatusEl.textContent = "Microphone and camera list is blocked. Click Refresh Mic / Camera to grant access.";
+  } finally {
+    for (const stream of temporaryStreams) {
+      for (const track of stream.getTracks()) track.stop();
+    }
+    refreshMediaDevicesButton.disabled = false;
+  }
+}
+
+function populateMediaDeviceSelect(select: HTMLSelectElement, devices: MediaDeviceInfo[], defaultLabel: string, selectedId: string): void {
+  const saved = selectedId.trim();
+  select.innerHTML = "";
+  select.append(new Option(defaultLabel, ""));
+  devices.forEach((device, index) => {
+    const fallbackLabel = device.kind === "audioinput" ? `Microphone ${index + 1}` : `Camera ${index + 1}`;
+    select.append(new Option(device.label || fallbackLabel, device.deviceId));
+  });
+  if (saved && !devices.some((device) => device.deviceId === saved)) {
+    select.append(new Option("Saved device unavailable", saved));
+  }
+  select.value = saved;
+}
+
+function selectedDeviceLabel(select: HTMLSelectElement, fallback: string): string {
+  return select.selectedOptions[0]?.textContent?.trim() || fallback;
+}
+
 function startServerWakeWordListening(phrase: string): void {
   if (serverWakeWordActive) {
     updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
@@ -1949,8 +2066,9 @@ function startServerWakeWordListening(phrase: string): void {
         return;
       }
       updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
-    } catch {
-      updateWakeWordStatus("Wake word paused");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "microphone capture failed";
+      updateWakeWordStatus(`Wake word mic error: ${message}`);
     }
     if (serverWakeWordActive) scheduleServerWakeWordTick(850, listenOnce);
   };
@@ -1976,7 +2094,7 @@ async function captureKnownUserFaceSample(): Promise<void> {
   captureUserFaceButton.textContent = "Capturing";
   let stream: MediaStream | null = null;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    stream = await openSelectedCameraStream();
     const video = document.createElement("video");
     video.muted = true;
     video.playsInline = true;
@@ -2474,6 +2592,8 @@ function importSanitizedBackupFromSettings(): void {
         ownerName: String(companion.ownerName || state.companionSettings.ownerName).slice(0, 80),
         wakeWordMode: normalizeWakeWordMode(String(companion.wakeWordMode || state.companionSettings.wakeWordMode)),
         wakePhrase: String(companion.wakePhrase || DEFAULT_WAKE_PHRASE).slice(0, 40),
+        preferredMicrophoneId: String(companion.preferredMicrophoneId ?? state.companionSettings.preferredMicrophoneId).slice(0, 160),
+        preferredCameraId: String(companion.preferredCameraId ?? state.companionSettings.preferredCameraId).slice(0, 160),
         screenTimeoutMinutes: normalizeScreenTimeout(Number(companion.screenTimeoutMinutes ?? state.companionSettings.screenTimeoutMinutes)),
         allowAlwaysListening: companion.allowAlwaysListening === true,
         allowCameraRecognition: companion.allowCameraRecognition === true,
@@ -2663,6 +2783,8 @@ function applyDurableServerSettings(savedSettings: DurableServerSettings | undef
       ownerName: String(companion.ownerName ?? state.companionSettings.ownerName).slice(0, 80),
       wakeWordMode: normalizeWakeWordMode(String(companion.wakeWordMode ?? state.companionSettings.wakeWordMode)),
       wakePhrase: String(companion.wakePhrase ?? state.companionSettings.wakePhrase).slice(0, 40) || DEFAULT_WAKE_PHRASE,
+      preferredMicrophoneId: String(companion.preferredMicrophoneId ?? state.companionSettings.preferredMicrophoneId).slice(0, 160),
+      preferredCameraId: String(companion.preferredCameraId ?? state.companionSettings.preferredCameraId).slice(0, 160),
       screenTimeoutMinutes: normalizeScreenTimeout(Number(companion.screenTimeoutMinutes ?? state.companionSettings.screenTimeoutMinutes)),
       allowAlwaysListening: companion.allowAlwaysListening !== false,
       allowCameraRecognition: companion.allowCameraRecognition === true,
@@ -3481,7 +3603,7 @@ async function setVisionEnabled(enabled: boolean): Promise<LocalCommandResult> {
 
   try {
     stopVisionStream();
-    activeVisionStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+    activeVisionStream = await openSelectedCameraStream();
     updateVisionStatus("Camera on");
     visionToggleButton.textContent = "Vision On";
     visionToggleButton.dataset.active = "true";
@@ -3596,7 +3718,7 @@ async function ensureCameraReady(): Promise<boolean> {
     return false;
   }
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+    const stream = await openSelectedCameraStream();
     for (const track of stream.getTracks()) track.stop();
     updateVisionStatus("Camera allowed");
     return true;
@@ -4830,7 +4952,7 @@ async function recordAndTranscribeMicrophone(options: { durationMs: number; minR
   if (!navigator.mediaDevices?.getUserMedia || !("MediaRecorder" in window)) {
     throw new Error("Microphone recording is not available in this kiosk/browser.");
   }
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  const stream = await openSelectedMicrophoneStream();
   let audioContext: AudioContext | null = null;
   let sampleTimer = 0;
   let peakRms = 0;
@@ -4892,7 +5014,7 @@ async function recordAndTranscribeUntilStopped(options: { minRms: number }): Pro
   if (!navigator.mediaDevices?.getUserMedia || !("MediaRecorder" in window)) {
     throw new Error("Microphone recording is not available in this kiosk/browser.");
   }
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  const stream = await openSelectedMicrophoneStream();
   let audioContext: AudioContext | null = null;
   let sampleTimer = 0;
   let peakRms = 0;
@@ -5001,7 +5123,7 @@ function blobToBase64(blob: Blob): Promise<string> {
 async function ensureMicrophoneReady(): Promise<boolean> {
   if (!navigator.mediaDevices?.getUserMedia) return true;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const stream = await openSelectedMicrophoneStream();
     for (const track of stream.getTracks()) track.stop();
     return true;
   } catch {
@@ -5044,7 +5166,10 @@ async function audioDeviceDiagnostics(): Promise<string> {
     const outputs = devices.filter((device) => device.kind === "audiooutput");
     const inputLabel = inputs.length === 1 ? "1 input" : `${inputs.length} inputs`;
     const outputLabel = outputs.length === 1 ? "1 output" : `${outputs.length} outputs`;
-    return `Audio devices: ${inputLabel}, ${outputLabel}.`;
+    const selectedInput = state.companionSettings.preferredMicrophoneId
+      ? inputs.find((device) => device.deviceId === state.companionSettings.preferredMicrophoneId)?.label || "saved mic unavailable"
+      : "system default mic";
+    return `Audio devices: ${inputLabel}, ${outputLabel}. Selected: ${selectedInput}.`;
   } catch {
     return "Audio devices: permission or browser policy blocked device diagnostics.";
   }

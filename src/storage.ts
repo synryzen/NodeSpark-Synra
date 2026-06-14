@@ -96,6 +96,8 @@ export function loadCompanionSettings(): CompanionSettings {
     ownerName: "",
     wakeWordMode: "local",
     wakePhrase: DEFAULT_WAKE_PHRASE,
+    preferredMicrophoneId: "",
+    preferredCameraId: "",
     screenTimeoutMinutes: 10,
     allowAlwaysListening: true,
     allowCameraRecognition: false,
@@ -118,6 +120,8 @@ export function loadCompanionSettings(): CompanionSettings {
     ...settings,
     wakeWordMode,
     wakePhrase,
+    preferredMicrophoneId: String(settings.preferredMicrophoneId ?? ""),
+    preferredCameraId: String(settings.preferredCameraId ?? ""),
     screenTimeoutMinutes,
     allowAlwaysListening: wakeWordMode === "local" ? settings.allowAlwaysListening !== false : false
   };

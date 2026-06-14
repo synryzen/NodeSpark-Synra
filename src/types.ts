@@ -50,6 +50,8 @@ export interface CompanionSettings {
   ownerName: string;
   wakeWordMode: WakeWordMode;
   wakePhrase: string;
+  preferredMicrophoneId: string;
+  preferredCameraId: string;
   screenTimeoutMinutes: ScreenTimeoutMinutes;
   allowAlwaysListening: boolean;
   allowCameraRecognition: boolean;
