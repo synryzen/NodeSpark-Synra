@@ -585,7 +585,7 @@ const result = {
     "adaptive pixel ratio is capped",
     "kiosk launcher uses lean Jetson mode",
     "smart-home bridge fails safely unless configured",
-    "smart-home actions require confirmation when configured",
+    "smart-home actions honor the configured confirmation policy",
     "Home Assistant free skill can be configured, tested, discovered, summarized, and targeted by name",
     "camera path is permission-only until vision skill is configured",
     "Jetson camera diagnostics report device paths only",

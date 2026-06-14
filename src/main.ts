@@ -8,7 +8,7 @@ import type { SynraActionName, SynraMode } from "./hub-runtime/types/avatar";
 import { askModel, classifySynraRequest, localSynraReply } from "./model-client";
 import { SynraMotionPlayer, type SynraMotionClipSpec } from "./motion-player";
 import { SERVER_SECRET_SENTINEL, loadCompanionSettings, loadHomeAssistantSettings, loadMemory, loadModelSettings, loadProductSettings, loadVisualSettings, loadVoiceSettings, saveCompanionSettings, saveHomeAssistantSettings, saveMemory, saveModelSettings, saveProductSettings, saveVisualSettings, saveVoiceSettings } from "./storage";
-import type { CompanionSettings, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraMessage, SynraSkillMode, SynraState, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
+import type { CompanionSettings, HomeAssistantConfirmationPolicy, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraMessage, SynraSkillMode, SynraState, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
 import { estimateSpeechDurationMs, visemesForSpeechPosition } from "./hub-runtime/services/speech-output";
 import packageInfo from "../package.json";
 
@@ -567,6 +567,13 @@ app.innerHTML = `
           </select>
         </label>
         <label>
+          Mic always listening
+          <select id="micAlwaysListeningInput">
+            <option value="on">On - listen for Hello Synra</option>
+            <option value="off">Off - manual wake only</option>
+          </select>
+        </label>
+        <label>
           Wake phrase
           <input id="wakePhraseInput" placeholder="Hello Synra" />
         </label>
@@ -590,6 +597,8 @@ app.innerHTML = `
         <div class="settings-status-grid compact">
           <span>Wake</span>
           <strong id="wakeWordStatus">Wake word off</strong>
+          <span>Mic</span>
+          <strong id="micAlwaysListeningStatus">Mic always listening off</strong>
           <span>Privacy</span>
           <strong>No raw audio or camera frames are saved to memory</strong>
         </div>
@@ -723,6 +732,14 @@ app.innerHTML = `
         <label>
           Default light entity
           <input id="homeAssistantLightEntityInput" placeholder="light.office" />
+        </label>
+        <label>
+          Confirmation policy
+          <select id="homeAssistantConfirmationPolicyInput">
+            <option value="trustedLights">Run trusted light actions immediately</option>
+            <option value="alwaysConfirm">Ask before every action</option>
+            <option value="highRiskOnly">Ask only for high-risk actions</option>
+          </select>
         </label>
         <label>
           Discovered target
@@ -864,7 +881,7 @@ app.innerHTML = `
       </section>
       <div class="wizard-trust">
         <strong>Privacy defaults</strong>
-        <p>No raw audio or camera frames are saved to memory. Wake word processing starts local-first, face setup is opt-in, backups exclude face images and credentials, and Home Assistant actions require confirmation.</p>
+        <p>No raw audio or camera frames are saved to memory. Wake word processing starts local-first, face setup is opt-in, backups exclude face images and credentials, and Home Assistant actions follow your confirmation policy.</p>
       </div>
       <menu>
         <button type="button" id="wizardSkipButton">Later</button>
@@ -977,10 +994,12 @@ const temperatureInput = must<HTMLElement, HTMLInputElement>("temperatureInput")
 const systemPromptInput = must<HTMLElement, HTMLTextAreaElement>("systemPromptInput");
 const companionOwnerNameInput = must<HTMLElement, HTMLInputElement>("companionOwnerNameInput");
 const wakeWordModeInput = must<HTMLElement, HTMLSelectElement>("wakeWordModeInput");
+const micAlwaysListeningInput = must<HTMLElement, HTMLSelectElement>("micAlwaysListeningInput");
 const wakePhraseInput = must<HTMLElement, HTMLInputElement>("wakePhraseInput");
 const screenTimeoutInput = must<HTMLElement, HTMLSelectElement>("screenTimeoutInput");
 const memorySuggestionsInput = must<HTMLElement, HTMLSelectElement>("memorySuggestionsInput");
 const wakeWordStatusEl = must<HTMLElement, HTMLElement>("wakeWordStatus");
+const micAlwaysListeningStatusEl = must<HTMLElement, HTMLElement>("micAlwaysListeningStatus");
 const startWakeWordButton = must<HTMLElement, HTMLButtonElement>("startWakeWordButton");
 const knownUserNameInput = must<HTMLElement, HTMLInputElement>("knownUserNameInput");
 const knownUserRelationshipInput = must<HTMLElement, HTMLInputElement>("knownUserRelationshipInput");
@@ -1009,6 +1028,7 @@ const homeAssistantEnabledInput = must<HTMLElement, HTMLSelectElement>("homeAssi
 const homeAssistantUrlInput = must<HTMLElement, HTMLInputElement>("homeAssistantUrlInput");
 const homeAssistantTokenInput = must<HTMLElement, HTMLInputElement>("homeAssistantTokenInput");
 const homeAssistantLightEntityInput = must<HTMLElement, HTMLInputElement>("homeAssistantLightEntityInput");
+const homeAssistantConfirmationPolicyInput = must<HTMLElement, HTMLSelectElement>("homeAssistantConfirmationPolicyInput");
 const homeAssistantEntitySelect = must<HTMLElement, HTMLSelectElement>("homeAssistantEntitySelect");
 const memoryPreferredNameInput = must<HTMLElement, HTMLInputElement>("memoryPreferredNameInput");
 const memoryStyleInput = must<HTMLElement, HTMLInputElement>("memoryStyleInput");
@@ -1668,6 +1688,7 @@ function ensureKioskWakeWordDefault(): void {
 function populateCompanionSettingsInputs(): void {
   companionOwnerNameInput.value = state.companionSettings.ownerName || state.memory.preferredName || "";
   wakeWordModeInput.value = state.companionSettings.wakeWordMode;
+  micAlwaysListeningInput.value = state.companionSettings.allowAlwaysListening ? "on" : "off";
   wakePhraseInput.value = state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE;
   screenTimeoutInput.value = String(state.companionSettings.screenTimeoutMinutes);
   memorySuggestionsInput.value = state.companionSettings.allowMemorySuggestions ? "on" : "off";
@@ -1684,11 +1705,16 @@ function readCompanionSettingsFromInputs(): CompanionSettings {
     wakeWordMode,
     wakePhrase: wakePhraseInput.value.trim() || DEFAULT_WAKE_PHRASE,
     screenTimeoutMinutes: normalizeScreenTimeout(screenTimeoutInput.value),
-    allowAlwaysListening: wakeWordMode === "local",
+    allowAlwaysListening: wakeWordMode === "local" && micAlwaysListeningInput.value === "on",
     allowCameraRecognition: faceRecognitionInput.value === "on",
     allowFaceSampleStorage: faceSampleStorageInput.value === "on",
     allowMemorySuggestions: memorySuggestionsInput.value === "on"
   };
+}
+
+function normalizeHomeAssistantConfirmationPolicy(value: string | undefined): HomeAssistantConfirmationPolicy {
+  if (value === "alwaysConfirm" || value === "highRiskOnly") return value;
+  return "trustedLights";
 }
 
 function normalizeWakeWordMode(value: string): WakeWordMode {
@@ -1728,6 +1754,9 @@ function shouldPreferServerTranscription(): boolean {
 
 function refreshCompanionPresence(): void {
   settingsScreenTimeoutStatusEl.textContent = screenTimeoutLabel(state.companionSettings.screenTimeoutMinutes);
+  micAlwaysListeningStatusEl.textContent = state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening
+    ? "Mic always listening"
+    : "Mic always listening off";
   if (state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening) {
     if (micInteractionActive) updateWakeWordStatus("Wake word paused");
     else void startWakeWordListening();
@@ -1881,6 +1910,9 @@ function stopWakeWordListening(status = "Wake word off"): void {
 function updateWakeWordStatus(status: string): void {
   state.wakeWordStatus = status;
   wakeWordStatusEl.textContent = status;
+  micAlwaysListeningStatusEl.textContent = state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening
+    ? "Mic always listening"
+    : "Mic always listening off";
   startWakeWordButton.textContent = state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening ? "Restart Wake Word" : "Start Wake Word";
 }
 
@@ -1899,7 +1931,7 @@ function startServerWakeWordListening(phrase: string): void {
       return;
     }
     try {
-      const result = await recordAndTranscribeMicrophone({ durationMs: 3200, minRms: 0.018 });
+      const result = await recordAndTranscribeMicrophone({ durationMs: 5200, minRms: 0.006 });
       const heard = result.text.trim();
       if (heard && handleWakeWordTranscript(heard, phrase)) {
         return;
@@ -2228,6 +2260,7 @@ function populateHomeAssistantSettingsInputs(): void {
   homeAssistantTokenInput.value = displaySecretValue(state.homeAssistantSettings.token);
   homeAssistantTokenInput.placeholder = isServerManagedSecret(state.homeAssistantSettings.token) ? "Server-managed token saved" : "";
   homeAssistantLightEntityInput.value = state.homeAssistantSettings.defaultLightEntity;
+  homeAssistantConfirmationPolicyInput.value = normalizeHomeAssistantConfirmationPolicy(state.homeAssistantSettings.confirmationPolicy);
   populateHomeAssistantEntitySelect();
 }
 
@@ -2237,6 +2270,7 @@ function readHomeAssistantSettingsFromInputs(): HomeAssistantSettings {
     url: homeAssistantUrlInput.value.trim(),
     token: homeAssistantTokenInput.value.trim(),
     defaultLightEntity: homeAssistantLightEntityInput.value.trim(),
+    confirmationPolicy: normalizeHomeAssistantConfirmationPolicy(homeAssistantConfirmationPolicyInput.value),
     knownEntities: state.homeAssistantSettings.knownEntities
   };
 }
@@ -2541,7 +2575,8 @@ async function hydrateServerManagedSettings(): Promise<void> {
         enabled: home.enabled === true || state.homeAssistantSettings.enabled,
         url: home.url?.trim() || state.homeAssistantSettings.url,
         token: home.tokenConfigured ? SERVER_SECRET_SENTINEL : state.homeAssistantSettings.token,
-        defaultLightEntity: home.defaultLightEntity?.trim() || state.homeAssistantSettings.defaultLightEntity
+        defaultLightEntity: home.defaultLightEntity?.trim() || state.homeAssistantSettings.defaultLightEntity,
+        confirmationPolicy: normalizeHomeAssistantConfirmationPolicy(state.homeAssistantSettings.confirmationPolicy)
       };
       saveHomeAssistantSettings(state.homeAssistantSettings);
     }
@@ -2591,6 +2626,7 @@ function publicHomeAssistantSettings(): Omit<HomeAssistantSettings, "token"> & {
     url: endpointDisplayLabel(state.homeAssistantSettings.url),
     tokenConfigured: secretConfigured(state.homeAssistantSettings.token),
     defaultLightEntity: state.homeAssistantSettings.defaultLightEntity,
+    confirmationPolicy: normalizeHomeAssistantConfirmationPolicy(state.homeAssistantSettings.confirmationPolicy),
     knownEntities: state.homeAssistantSettings.knownEntities
   };
 }
@@ -3009,7 +3045,7 @@ async function tryHandleLocalCommand(text: string): Promise<LocalCommandResult |
 
   if (/^(synra[, ]+)?(help|commands|what can you do|what can i say)\??$/.test(normalized)) {
     return {
-      text: "Free Synra can talk, remember approved preferences, report voice and camera status, switch avatars and backgrounds, tune render quality, and control configured Home Assistant lights with confirmation. NodeSpark Command Center is available as a subscriber skill.",
+      text: "Free Synra can talk, remember approved preferences, report voice and camera status, switch avatars and backgrounds, tune render quality, and control configured Home Assistant lights using your confirmation policy. NodeSpark Command Center is available as a subscriber skill.",
       motion: "present"
     };
   }
@@ -3422,6 +3458,9 @@ async function prepareSmartHomeLightCommand(action: "turn_on" | "turn_off" | "to
   const entityId = target?.entityId ?? state.homeAssistantSettings.defaultLightEntity;
   const label = action === "toggle" ? `toggle ${targetLabel}` : `turn ${targetLabel} ${action === "turn_on" ? "on" : "off"}`;
   const risk = smartHomeRiskLevel(action, entityId);
+  if (shouldRunSmartHomeActionImmediately(action, entityId, risk)) {
+    return smartHomeLightCommand(action, entityId);
+  }
   let confirmationToken = "";
   try {
     confirmationToken = await prepareServerConfirmation("smart_home", label, { action, entityId });
@@ -3443,6 +3482,14 @@ async function prepareSmartHomeLightCommand(action: "turn_on" | "turn_off" | "to
     text: `Ready to ${label}. Risk: ${risk}. Say confirm to run it, or cancel to stop.`,
     motion: "ask_question"
   };
+}
+
+function shouldRunSmartHomeActionImmediately(action: "turn_on" | "turn_off" | "toggle", entityId: string, risk = smartHomeRiskLevel(action, entityId)): boolean {
+  const policy = normalizeHomeAssistantConfirmationPolicy(state.homeAssistantSettings.confirmationPolicy);
+  if (policy === "alwaysConfirm") return false;
+  const domain = entityId.split(".", 1)[0]?.toLowerCase() ?? "";
+  if (policy === "trustedLights") return risk === "low" && ["light", "switch", "input_boolean"].includes(domain);
+  return risk !== "high";
 }
 
 function isNodeSparkCommandCenterRequest(normalized: string): boolean {
@@ -3891,7 +3938,7 @@ async function smartHomeLightCommand(action: "turn_on" | "turn_off" | "toggle", 
     const response = await fetch("/api/tools/smart-home", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, entityId, confirmationToken, homeAssistant: homeAssistantToolPayload() })
+      body: JSON.stringify({ action, entityId, confirmationToken, allowImmediate: shouldRunSmartHomeActionImmediately(action, entityId ?? state.homeAssistantSettings.defaultLightEntity), homeAssistant: homeAssistantToolPayload() })
     });
     const result = (await response.json()) as { ok?: boolean; configured?: boolean; entityId?: string; error?: string; risk?: string; confirmationRequired?: boolean };
     if (result.ok) {
@@ -3936,6 +3983,7 @@ function homeAssistantToolPayload(): Partial<HomeAssistantSettings> | null {
     url: state.homeAssistantSettings.url.trim(),
     token: state.homeAssistantSettings.token.trim(),
     defaultLightEntity: state.homeAssistantSettings.defaultLightEntity.trim(),
+    confirmationPolicy: normalizeHomeAssistantConfirmationPolicy(state.homeAssistantSettings.confirmationPolicy),
     knownEntities: state.homeAssistantSettings.knownEntities
   };
 }

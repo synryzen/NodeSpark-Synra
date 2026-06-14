@@ -78,6 +78,7 @@ export function loadHomeAssistantSettings(): HomeAssistantSettings {
     url: "",
     token: "",
     defaultLightEntity: "",
+    confirmationPolicy: "trustedLights",
     knownEntities: []
   });
 }
@@ -118,7 +119,7 @@ export function loadCompanionSettings(): CompanionSettings {
     wakeWordMode,
     wakePhrase,
     screenTimeoutMinutes,
-    allowAlwaysListening: wakeWordMode === "local" ? true : settings.allowAlwaysListening
+    allowAlwaysListening: wakeWordMode === "local" ? settings.allowAlwaysListening !== false : false
   };
 }
 

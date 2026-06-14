@@ -51,6 +51,15 @@ requireText("standalone-vision-server-answers-exact-question", server, "Use the 
 requireText("kiosk-wake-defaults-local", main, "ensureKioskWakeWordDefault");
 requireText("fresh-settings-wake-local", storage, 'wakeWordMode: "local"');
 requireText("fresh-settings-always-listening", storage, "allowAlwaysListening: true");
+requireText("mic-always-listening-visible-toggle", main, 'id="micAlwaysListeningInput"');
+requireText("mic-always-listening-status", main, "Mic always listening");
+requireText("wake-loop-has-command-friendly-window", main, "durationMs: 5200");
+requireText("wake-loop-lower-rms-for-room-phrase", main, "minRms: 0.006");
+requireText("home-assistant-policy-type", storage, "confirmationPolicy");
+requireText("home-assistant-policy-visible-control", main, 'id="homeAssistantConfirmationPolicyInput"');
+requireText("trusted-light-policy-helper", main, "shouldRunSmartHomeActionImmediately");
+requireText("trusted-light-policy-bypasses-preconfirmation", main, "smartHomeLightCommand(action, entityId)");
+requireText("trusted-light-policy-server-allow", server, "allowImmediate");
 
 const failures = checks.filter((check) => !check.pass);
 console.log(JSON.stringify({

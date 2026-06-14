@@ -14,6 +14,7 @@ export type NodeSparkAccess = "locked" | "subscriber";
 export type SynraSkillMode = "hybrid" | "homeAssistant" | "nodeSparkHub";
 export type WakeWordMode = "off" | "local";
 export type ScreenTimeoutMinutes = 10 | 15 | 30 | 60 | 0;
+export type HomeAssistantConfirmationPolicy = "alwaysConfirm" | "trustedLights" | "highRiskOnly";
 
 export interface ModelSettings {
   provider: ModelProvider;
@@ -92,6 +93,7 @@ export interface HomeAssistantSettings {
   url: string;
   token: string;
   defaultLightEntity: string;
+  confirmationPolicy: HomeAssistantConfirmationPolicy;
   knownEntities: HomeAssistantEntity[];
 }
 

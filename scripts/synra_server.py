@@ -404,7 +404,9 @@ class SynraHandler(SimpleHTTPRequestHandler):
                 self.send_json(200, {"ok": False, "configured": True, "error": "No smart-home entity is configured."})
                 return
             risk = smart_home_risk_level(action, entity_id)
-            if not consume_confirmation_token(str(body.get("confirmationToken") or ""), "smart_home", confirmation_fingerprint("smart_home", {"action": action, "entityId": entity_id})):
+            allow_immediate = bool(body.get("allowImmediate"))
+            immediate_allowed = allow_immediate and risk in {"low", "medium"}
+            if not immediate_allowed and not consume_confirmation_token(str(body.get("confirmationToken") or ""), "smart_home", confirmation_fingerprint("smart_home", {"action": action, "entityId": entity_id})):
                 self.send_json(
                     200,
                     {
