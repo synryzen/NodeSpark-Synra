@@ -8,7 +8,7 @@ import type { SynraActionName, SynraMode } from "./hub-runtime/types/avatar";
 import { askModel, classifySynraRequest, localSynraReply } from "./model-client";
 import { SynraMotionPlayer, type SynraMotionClipSpec } from "./motion-player";
 import { SERVER_SECRET_SENTINEL, loadCompanionSettings, loadHomeAssistantSettings, loadMemory, loadModelSettings, loadProductSettings, loadVisualSettings, loadVoiceSettings, saveCompanionSettings, saveHomeAssistantSettings, saveMemory, saveModelSettings, saveProductSettings, saveVisualSettings, saveVoiceSettings } from "./storage";
-import type { CompanionSettings, HomeAssistantConfirmationPolicy, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraMessage, SynraSkillMode, SynraState, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
+import type { CompanionSettings, HomeAssistantConfirmationPolicy, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraMemory, SynraMessage, SynraSkillMode, SynraState, VisualSettings, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
 import { estimateSpeechDurationMs, visemesForSpeechPosition } from "./hub-runtime/services/speech-output";
 import packageInfo from "../package.json";
 
@@ -280,6 +280,17 @@ type PublicServerSettings = {
     nodeSparkDeviceTokenConfigured?: boolean;
     nodeSparkTokenExpiresAt?: string;
   };
+  savedSettings?: DurableServerSettings;
+};
+
+type DurableServerSettings = {
+  model?: Partial<ModelSettings>;
+  voice?: Partial<VoiceSettings>;
+  homeAssistant?: Partial<Omit<HomeAssistantSettings, "token">>;
+  product?: Partial<Omit<ProductSettings, "nodeSparkDeviceToken">>;
+  visual?: Partial<VisualSettings>;
+  companion?: Partial<CompanionSettings>;
+  memory?: Partial<SynraMemory>;
 };
 let hubAvatarRuntime: SynraAvatarRuntime | null = null;
 let hubMotionClips: SynraMotionClipSpec[] = [];
@@ -1302,21 +1313,21 @@ visionAnalyzeButton.addEventListener("click", () => {
 backgroundSelect.addEventListener("change", () => {
   const background = resolveBackground(backgroundSelect.value);
   state.visual = { ...state.visual, backgroundId: background.id };
-  saveVisualSettings(state.visual);
+  saveVisualSettingsEverywhere();
   applyBackground(background);
 });
 
 avatarSelect.addEventListener("change", () => {
   const avatarId = isSynraAvatarId(avatarSelect.value) ? avatarSelect.value : DEFAULT_SYNRA_AVATAR_ID;
   state.visual = { ...state.visual, avatarId };
-  saveVisualSettings(state.visual);
+  saveVisualSettingsEverywhere();
   void loadAvatarById(avatarId);
 });
 
 qualitySelect.addEventListener("change", () => {
   const quality = resolveRenderQuality(qualitySelect.value);
   applyRenderQuality(quality);
-  saveVisualSettings(state.visual);
+  saveVisualSettingsEverywhere();
   setSynraState("idle", `${renderQualityLabel(quality)} render quality is active.`);
 });
 
@@ -1326,14 +1337,14 @@ motionCategorySelect.addEventListener("change", () => {
   if (motionSelect.value) {
     state.visual = { ...state.visual, motionId: motionSelect.value };
   }
-  saveVisualSettings(state.visual);
+  saveVisualSettingsEverywhere();
   setSynraState("idle", `${resolveMotionCategory(state.visual.motionCategoryId).label} motions are selected.`);
 });
 
 motionSelect.addEventListener("change", () => {
   if (!motionSelect.value) return;
   state.visual = { ...state.visual, motionId: motionSelect.value };
-  saveVisualSettings(state.visual);
+  saveVisualSettingsEverywhere();
   const label = motionSelect.selectedOptions[0]?.textContent?.trim() || motionSelect.value;
   activeMotionEl.textContent = `Selected ${label}`;
 });
@@ -1342,14 +1353,14 @@ playMotionButton.addEventListener("click", () => {
   const motionId = motionSelect.value;
   if (!motionId) return;
   state.visual = { ...state.visual, motionId };
-  saveVisualSettings(state.visual);
+  saveVisualSettingsEverywhere();
   void playManualMotion(motionId);
 });
 
 controlModeButton.addEventListener("click", () => {
   const next = resolveControlMode(state.visual.controlMode) === "manual" ? "live" : "manual";
   state.visual = { ...state.visual, controlMode: next };
-  saveVisualSettings(state.visual);
+  saveVisualSettingsEverywhere();
   applyControlMode(next);
 });
 
@@ -1544,7 +1555,7 @@ async function saveSettingsFromDialog(): Promise<void> {
       provider: resolveModelProvider(providerInput.value),
       endpoint: endpointInput.value.trim(),
       model: modelInput.value.trim(),
-      apiKey: apiKeyInput.value,
+      apiKey: keepServerManagedSecret(apiKeyInput.value, state.settings.apiKey),
       temperature: Number.isFinite(temperature) ? Math.min(Math.max(temperature, 0), 2) : 0.2,
       systemPrompt: systemPromptInput.value.trim()
     };
@@ -1564,6 +1575,7 @@ async function saveSettingsFromDialog(): Promise<void> {
     saveHomeAssistantSettings(state.homeAssistantSettings);
     saveMemory(state.memory);
     saveCompanionSettings(state.companionSettings);
+    await saveDurableServerSettings();
     refreshModelLabel();
     refreshAiConnectionPanel();
     refreshSkillPanel();
@@ -1584,7 +1596,7 @@ kioskWindowToggleButton.addEventListener("click", () => {
 
 startWakeWordButton.addEventListener("click", () => {
   state.companionSettings = readCompanionSettingsFromInputs();
-  saveCompanionSettings(state.companionSettings);
+  saveCompanionSettingsEverywhere();
   refreshCompanionPresence();
 });
 
@@ -1598,7 +1610,7 @@ saveKnownUserButton.addEventListener("click", () => {
 
 wizardSkipButton.addEventListener("click", () => {
   state.companionSettings = { ...state.companionSettings, setupComplete: true };
-  saveCompanionSettings(state.companionSettings);
+  saveCompanionSettingsEverywhere();
   firstRunWizard.close();
 });
 
@@ -1616,9 +1628,9 @@ wizardSaveButton.addEventListener("click", () => {
   };
   if (state.companionSettings.ownerName) {
     state.memory = { ...state.memory, preferredName: state.companionSettings.ownerName };
-    saveMemory(state.memory);
+    saveMemoryEverywhere();
   }
-  saveCompanionSettings(state.companionSettings);
+  saveCompanionSettingsEverywhere();
   firstRunWizard.close();
   populateCompanionSettingsInputs();
   refreshCompanionPresence();
@@ -1682,7 +1694,7 @@ function ensureKioskWakeWordDefault(): void {
     wakePhrase,
     allowAlwaysListening: true
   };
-  saveCompanionSettings(state.companionSettings);
+  saveCompanionSettingsEverywhere();
 }
 
 function populateCompanionSettingsInputs(): void {
@@ -2007,7 +2019,7 @@ function saveKnownUserFromInputs(): void {
     ...readCompanionSettingsFromInputs(),
     knownUsers: [nextUser, ...state.companionSettings.knownUsers.filter((user) => user.id !== nextUser.id)].slice(0, 12)
   };
-  saveCompanionSettings(state.companionSettings);
+  saveCompanionSettingsEverywhere();
   pendingFaceSample = "";
   knownUserNameInput.value = "";
   knownUserRelationshipInput.value = "";
@@ -2035,7 +2047,7 @@ function renderKnownUsers(): void {
     button.addEventListener("click", () => {
       const id = button.dataset.deleteUser;
       state.companionSettings = { ...state.companionSettings, knownUsers: state.companionSettings.knownUsers.filter((user) => user.id !== id) };
-      saveCompanionSettings(state.companionSettings);
+      saveCompanionSettingsEverywhere();
       renderKnownUsers();
     });
   });
@@ -2080,7 +2092,7 @@ function readVoiceSettingsFromInputs(): VoiceSettings {
     provider: resolveVoiceProvider(voiceProviderInput.value),
     browserVoiceURI: browserVoice?.voiceURI ?? state.voiceSettings.browserVoiceURI ?? "",
     browserVoiceName: browserVoice?.name ?? state.voiceSettings.browserVoiceName ?? "",
-    elevenLabsApiKey: elevenLabsApiKeyInput.value.trim(),
+    elevenLabsApiKey: keepServerManagedSecret(elevenLabsApiKeyInput.value, state.voiceSettings.elevenLabsApiKey),
     elevenLabsVoiceId: elevenLabsVoiceIdInput.value.trim(),
     elevenLabsVoiceName: selected?.name ?? state.voiceSettings.elevenLabsVoiceName ?? "",
     elevenLabsModelId: elevenLabsModelIdInput.value.trim() || "eleven_multilingual_v2",
@@ -2212,7 +2224,7 @@ function readProductSettingsFromInputs(): ProductSettings {
     nodeSparkDeviceId: previous.nodeSparkDeviceId,
     nodeSparkDeviceName: nodeSparkDeviceNameInput.value.trim() || "Synra Standalone Jetson",
     nodeSparkHubId: sameHub ? previous.nodeSparkHubId : "",
-    nodeSparkDeviceToken: sameHub ? previous.nodeSparkDeviceToken : "",
+    nodeSparkDeviceToken: sameHub ? keepServerManagedSecret("", previous.nodeSparkDeviceToken) : "",
     nodeSparkTokenExpiresAt: sameHub ? previous.nodeSparkTokenExpiresAt : ""
   };
 }
@@ -2268,7 +2280,7 @@ function readHomeAssistantSettingsFromInputs(): HomeAssistantSettings {
   return {
     enabled: homeAssistantEnabledInput.value === "on",
     url: homeAssistantUrlInput.value.trim(),
-    token: homeAssistantTokenInput.value.trim(),
+    token: keepServerManagedSecret(homeAssistantTokenInput.value, state.homeAssistantSettings.token),
     defaultLightEntity: homeAssistantLightEntityInput.value.trim(),
     confirmationPolicy: normalizeHomeAssistantConfirmationPolicy(homeAssistantConfirmationPolicyInput.value),
     knownEntities: state.homeAssistantSettings.knownEntities
@@ -2329,7 +2341,7 @@ function forgetAllMemoryFromSettings(): void {
     rooms: [],
     preferences: []
   };
-  saveMemory(state.memory);
+  saveMemoryEverywhere();
   populateMemorySettingsInputs();
   setSynraState("idle", "Local memory has been cleared.");
   void playMotionRoute("confirm", { restart: true, returnToIdle: true });
@@ -2337,7 +2349,7 @@ function forgetAllMemoryFromSettings(): void {
 
 function exportMemoryFromSettings(): void {
   state.memory = readMemorySettingsFromInputs();
-  saveMemory(state.memory);
+  saveMemoryEverywhere();
   const exported = JSON.stringify(state.memory, null, 2);
   navigator.clipboard?.writeText(exported).then(
     () => setSynraState("idle", "Memory export copied to clipboard."),
@@ -2360,7 +2372,7 @@ function importMemoryFromSettings(): void {
       rooms: Array.isArray(parsed.rooms) ? parsed.rooms.map((item) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : [],
       preferences: Array.isArray(parsed.preferences) ? parsed.preferences.map((item) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : []
     };
-    saveMemory(state.memory);
+    saveMemoryEverywhere();
     populateMemorySettingsInputs();
     setSynraState("idle", "Memory import completed.");
   } catch {
@@ -2378,8 +2390,8 @@ function exportSanitizedBackupFromSettings(): void {
     renderQuality: resolveRenderQuality(state.visual.renderQuality),
     controlMode: resolveInitialControlMode()
   };
-  saveMemory(state.memory);
-  saveCompanionSettings(state.companionSettings);
+  saveMemoryEverywhere();
+  saveCompanionSettingsEverywhere();
   const backup = {
     kind: "synra-standalone-sanitized-backup",
     version: 1,
@@ -2440,7 +2452,7 @@ function importSanitizedBackupFromSettings(): void {
         rooms: Array.isArray(memory.rooms) ? memory.rooms.map((item) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : [],
         preferences: Array.isArray(memory.preferences) ? memory.preferences.map((item) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : []
       };
-      saveMemory(state.memory);
+      saveMemoryEverywhere();
       populateMemorySettingsInputs();
     }
     if (parsed.settings.companion) {
@@ -2469,7 +2481,7 @@ function importSanitizedBackupFromSettings(): void {
         allowMemorySuggestions: companion.allowMemorySuggestions !== false,
         knownUsers
       };
-      saveCompanionSettings(state.companionSettings);
+      saveCompanionSettingsEverywhere();
       populateCompanionSettingsInputs();
       renderKnownUsers();
     }
@@ -2481,7 +2493,7 @@ function importSanitizedBackupFromSettings(): void {
         renderQuality: resolveRenderQuality(parsed.settings.visual.renderQuality),
         controlMode: parsed.settings.visual.controlMode === "live" ? "live" : "manual"
       };
-      saveVisualSettings(state.visual);
+      saveVisualSettingsEverywhere();
       applyRenderQuality(state.visual.renderQuality);
       applyBackground(resolveBackground(state.visual.backgroundId));
       applyControlMode(state.visual.controlMode);
@@ -2527,6 +2539,154 @@ async function saveServerManagedSecrets(settings: ModelSettings, voice: VoiceSet
   }
 }
 
+async function saveDurableServerSettings(): Promise<void> {
+  const response = await fetch("/api/settings/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ settings: durableServerSettingsPayload() })
+  });
+  const result = (await response.json()) as { ok?: boolean; error?: string };
+  if (!response.ok || !result.ok) {
+    throw new Error(result.error ?? "Synra could not hard-save settings on the Jetson.");
+  }
+}
+
+function saveVisualSettingsEverywhere(): void {
+  saveVisualSettings(state.visual);
+  void saveDurableServerSettings().catch(() => {
+    setConnectionTruth("ai", "configured", "Server route; durable visual save pending");
+  });
+}
+
+function saveCompanionSettingsEverywhere(): void {
+  saveCompanionSettings(state.companionSettings);
+  void saveDurableServerSettings().catch(() => {
+    setConnectionTruth("ai", "configured", "Server route; durable companion save pending");
+  });
+}
+
+function saveMemoryEverywhere(): void {
+  saveMemory(state.memory);
+  void saveDurableServerSettings().catch(() => {
+    setConnectionTruth("ai", "configured", "Server route; durable memory save pending");
+  });
+}
+
+function durableServerSettingsPayload(): DurableServerSettings {
+  const { apiKey: _modelApiKey, ...model } = state.settings;
+  const { elevenLabsApiKey: _elevenLabsApiKey, ...voice } = state.voiceSettings;
+  const { token: _homeAssistantToken, ...homeAssistant } = state.homeAssistantSettings;
+  const { nodeSparkDeviceToken: _nodeSparkDeviceToken, ...product } = ensureNodeSparkDeviceId(state.productSettings);
+  return {
+    model,
+    voice,
+    homeAssistant,
+    product,
+    visual: state.visual,
+    companion: {
+      ...state.companionSettings,
+      knownUsers: state.companionSettings.knownUsers.map((user) => ({ ...user, faceSamples: [] }))
+    },
+    memory: state.memory
+  };
+}
+
+function applyDurableServerSettings(savedSettings: DurableServerSettings | undefined): void {
+  if (!savedSettings) return;
+  if (savedSettings.model) {
+    state.settings = {
+      ...state.settings,
+      provider: resolveModelProvider(String(savedSettings.model.provider ?? state.settings.provider)),
+      endpoint: String(savedSettings.model.endpoint ?? state.settings.endpoint),
+      model: String(savedSettings.model.model ?? state.settings.model),
+      temperature: Number.isFinite(Number(savedSettings.model.temperature)) ? Math.min(Math.max(Number(savedSettings.model.temperature), 0), 2) : state.settings.temperature,
+      systemPrompt: String(savedSettings.model.systemPrompt ?? state.settings.systemPrompt)
+    };
+    saveModelSettings(state.settings);
+  }
+  if (savedSettings.voice) {
+    state.voiceSettings = {
+      ...state.voiceSettings,
+      provider: resolveVoiceProvider(String(savedSettings.voice.provider ?? state.voiceSettings.provider)),
+      browserVoiceURI: String(savedSettings.voice.browserVoiceURI ?? state.voiceSettings.browserVoiceURI),
+      browserVoiceName: String(savedSettings.voice.browserVoiceName ?? state.voiceSettings.browserVoiceName),
+      elevenLabsVoiceId: String(savedSettings.voice.elevenLabsVoiceId ?? state.voiceSettings.elevenLabsVoiceId),
+      elevenLabsVoiceName: String(savedSettings.voice.elevenLabsVoiceName ?? state.voiceSettings.elevenLabsVoiceName),
+      elevenLabsModelId: String(savedSettings.voice.elevenLabsModelId ?? state.voiceSettings.elevenLabsModelId),
+      elevenLabsOutputFormat: String(savedSettings.voice.elevenLabsOutputFormat ?? state.voiceSettings.elevenLabsOutputFormat),
+      elevenLabsStability: clampUnit(Number(savedSettings.voice.elevenLabsStability), state.voiceSettings.elevenLabsStability),
+      elevenLabsSimilarityBoost: clampUnit(Number(savedSettings.voice.elevenLabsSimilarityBoost), state.voiceSettings.elevenLabsSimilarityBoost)
+    };
+    saveVoiceSettings(state.voiceSettings);
+  }
+  if (savedSettings.product) {
+    state.productSettings = ensureNodeSparkDeviceId({
+      ...state.productSettings,
+      synraSkillMode: resolveSynraSkillMode(String(savedSettings.product.synraSkillMode ?? state.productSettings.synraSkillMode)),
+      nodeSparkAccess: resolveNodeSparkAccess(String(savedSettings.product.nodeSparkAccess ?? state.productSettings.nodeSparkAccess)),
+      nodeSparkHubUrl: String(savedSettings.product.nodeSparkHubUrl ?? state.productSettings.nodeSparkHubUrl),
+      nodeSparkDeviceId: String(savedSettings.product.nodeSparkDeviceId ?? state.productSettings.nodeSparkDeviceId),
+      nodeSparkDeviceName: String(savedSettings.product.nodeSparkDeviceName ?? state.productSettings.nodeSparkDeviceName),
+      nodeSparkHubId: String(savedSettings.product.nodeSparkHubId ?? state.productSettings.nodeSparkHubId),
+      nodeSparkTokenExpiresAt: String(savedSettings.product.nodeSparkTokenExpiresAt ?? state.productSettings.nodeSparkTokenExpiresAt)
+    });
+    saveProductSettings(state.productSettings);
+  }
+  if (savedSettings.homeAssistant) {
+    state.homeAssistantSettings = {
+      ...state.homeAssistantSettings,
+      enabled: savedSettings.homeAssistant.enabled === true || state.homeAssistantSettings.enabled,
+      url: String(savedSettings.homeAssistant.url ?? state.homeAssistantSettings.url),
+      defaultLightEntity: String(savedSettings.homeAssistant.defaultLightEntity ?? state.homeAssistantSettings.defaultLightEntity),
+      confirmationPolicy: normalizeHomeAssistantConfirmationPolicy(String(savedSettings.homeAssistant.confirmationPolicy ?? state.homeAssistantSettings.confirmationPolicy)),
+      knownEntities: normalizeHomeAssistantEntities(Array.isArray(savedSettings.homeAssistant.knownEntities) ? savedSettings.homeAssistant.knownEntities as HomeAssistantEntity[] : state.homeAssistantSettings.knownEntities)
+    };
+    saveHomeAssistantSettings(state.homeAssistantSettings);
+  }
+  if (savedSettings.visual) {
+    state.visual = {
+      ...state.visual,
+      avatarId: isSynraAvatarId(String(savedSettings.visual.avatarId ?? "")) ? String(savedSettings.visual.avatarId) : state.visual.avatarId,
+      motionId: String(savedSettings.visual.motionId ?? state.visual.motionId),
+      motionCategoryId: resolveMotionCategory(String(savedSettings.visual.motionCategoryId ?? state.visual.motionCategoryId)).id,
+      backgroundId: resolveBackground(String(savedSettings.visual.backgroundId ?? state.visual.backgroundId)).id,
+      controlMode: savedSettings.visual.controlMode === "live" ? "live" : savedSettings.visual.controlMode === "manual" ? "manual" : state.visual.controlMode,
+      renderQuality: resolveRenderQuality(savedSettings.visual.renderQuality)
+    };
+    saveVisualSettings(state.visual);
+  }
+  if (savedSettings.companion) {
+    const companion = savedSettings.companion;
+    state.companionSettings = {
+      ...state.companionSettings,
+      setupComplete: companion.setupComplete === true || state.companionSettings.setupComplete,
+      ownerName: String(companion.ownerName ?? state.companionSettings.ownerName).slice(0, 80),
+      wakeWordMode: normalizeWakeWordMode(String(companion.wakeWordMode ?? state.companionSettings.wakeWordMode)),
+      wakePhrase: String(companion.wakePhrase ?? state.companionSettings.wakePhrase).slice(0, 40) || DEFAULT_WAKE_PHRASE,
+      screenTimeoutMinutes: normalizeScreenTimeout(Number(companion.screenTimeoutMinutes ?? state.companionSettings.screenTimeoutMinutes)),
+      allowAlwaysListening: companion.allowAlwaysListening !== false,
+      allowCameraRecognition: companion.allowCameraRecognition === true,
+      allowFaceSampleStorage: companion.allowFaceSampleStorage === true,
+      allowMemorySuggestions: companion.allowMemorySuggestions !== false,
+      knownUsers: Array.isArray(companion.knownUsers) ? companion.knownUsers as KnownUserProfile[] : state.companionSettings.knownUsers
+    };
+    saveCompanionSettings(state.companionSettings);
+  }
+  if (savedSettings.memory) {
+    state.memory = {
+      ...state.memory,
+      preferredName: redactMemoryFact(String(savedSettings.memory.preferredName ?? state.memory.preferredName)).slice(0, 60),
+      style: redactMemoryFact(String(savedSettings.memory.style ?? state.memory.style)).slice(0, 140) || "warm, direct, and useful",
+      savedFacts: Array.isArray(savedSettings.memory.savedFacts) ? savedSettings.memory.savedFacts.map((item: unknown) => redactMemoryFact(String(item))).filter(Boolean).slice(-40) : state.memory.savedFacts,
+      routines: Array.isArray(savedSettings.memory.routines) ? savedSettings.memory.routines.map((item: unknown) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : state.memory.routines,
+      devices: Array.isArray(savedSettings.memory.devices) ? savedSettings.memory.devices.map((item: unknown) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : state.memory.devices,
+      rooms: Array.isArray(savedSettings.memory.rooms) ? savedSettings.memory.rooms.map((item: unknown) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : state.memory.rooms,
+      preferences: Array.isArray(savedSettings.memory.preferences) ? savedSettings.memory.preferences.map((item: unknown) => redactMemoryFact(String(item))).filter(Boolean).slice(-24) : state.memory.preferences
+    };
+    saveMemory(state.memory);
+  }
+}
+
 async function hydrateServerManagedSettings(): Promise<void> {
   await migrateBrowserSecretsToServer();
   try {
@@ -2534,6 +2694,7 @@ async function hydrateServerManagedSettings(): Promise<void> {
     if (!response.ok) return;
     const result = (await response.json()) as PublicServerSettings;
     if (!result.ok) return;
+    applyDurableServerSettings(result.savedSettings);
 
     const voice = result.voice;
     if (voice) {
@@ -2586,6 +2747,7 @@ async function hydrateServerManagedSettings(): Promise<void> {
     refreshVoiceStatus();
     refreshSystemHealthPanel();
     refreshAiConnectionPanel();
+    void saveDurableServerSettings();
   } catch {
     setConnectionTruth("ai", "configured", "Server route; settings hydration unavailable");
   }
@@ -2610,6 +2772,12 @@ async function migrateBrowserSecretsToServer(): Promise<void> {
 
 function isServerManagedSecret(value: string | undefined): boolean {
   return value === SERVER_SECRET_SENTINEL;
+}
+
+function keepServerManagedSecret(inputValue: string | undefined, previousValue: string | undefined): string {
+  const next = inputValue?.trim() ?? "";
+  if (next) return next;
+  return isServerManagedSecret(previousValue) ? SERVER_SECRET_SENTINEL : "";
 }
 
 function displaySecretValue(value: string | undefined): string {
@@ -2894,7 +3062,7 @@ async function loadAvatarById(avatarId: SynraAvatarId): Promise<void> {
   if (hubAvatarRuntime) {
     await hubAvatarRuntime.setAvatar(avatar.url, avatar.label);
     state.visual = { ...state.visual, avatarId: avatar.id };
-    saveVisualSettings(state.visual);
+    saveVisualSettingsEverywhere();
     setSynraState("idle", `${avatar.label} is ready.`);
     if (runtimeMode === "kiosk") {
       void playMotionRoute(KIOSK_IDLE_ROUTE, { loop: true, restart: true });
@@ -2905,7 +3073,7 @@ async function loadAvatarById(avatarId: SynraAvatarId): Promise<void> {
   }
   await loadAvatar(avatar.url);
   state.visual = { ...state.visual, avatarId: avatar.id };
-  saveVisualSettings(state.visual);
+  saveVisualSettingsEverywhere();
   setSynraState("idle", `${avatar.label} is ready.`);
   if (runtimeMode === "kiosk") {
     void playMotionRoute(KIOSK_IDLE_ROUTE, { loop: true, restart: true });
@@ -3095,7 +3263,7 @@ async function tryHandleLocalCommand(text: string): Promise<LocalCommandResult |
 
   if (/\b(clear|forget|delete)\b.*\b(memories|memory|remembered facts)\b/.test(normalized)) {
     state.memory = { ...state.memory, savedFacts: [], routines: [], devices: [], rooms: [], preferences: [] };
-    saveMemory(state.memory);
+    saveMemoryEverywhere();
     return { text: "I cleared the remembered facts I was storing locally.", motion: "confirm" };
   }
 
@@ -3103,7 +3271,7 @@ async function tryHandleLocalCommand(text: string): Promise<LocalCommandResult |
   if (nameMatch?.[1]) {
     const preferredName = nameMatch[1].trim().replace(/[.?!]+$/, "");
     state.memory = { ...state.memory, preferredName };
-    saveMemory(state.memory);
+    saveMemoryEverywhere();
     return { text: `Got it. I will call you ${preferredName}.`, motion: "confirm" };
   }
 
@@ -3111,7 +3279,7 @@ async function tryHandleLocalCommand(text: string): Promise<LocalCommandResult |
   if (styleMatch?.[1] && /\b(style|tone|direct|short|detailed|casual|professional|friendly|technical|simple)\b/i.test(text)) {
     const style = styleMatch[1].trim().replace(/[.?!]+$/, "").slice(0, 120);
     state.memory = { ...state.memory, style };
-    saveMemory(state.memory);
+    saveMemoryEverywhere();
     return { text: `I will use a ${style} style.`, motion: "confirm" };
   }
 
@@ -3121,14 +3289,14 @@ async function tryHandleLocalCommand(text: string): Promise<LocalCommandResult |
     if (fact.length < 3) return { text: "Tell me the full thing you want me to remember.", motion: "ask_question" };
     const savedFacts = [...state.memory.savedFacts.filter((saved) => saved.toLowerCase() !== fact.toLowerCase()), fact].slice(-24);
     state.memory = { ...state.memory, savedFacts };
-    saveMemory(state.memory);
+    saveMemoryEverywhere();
     return { text: `I will remember: ${fact}.`, motion: "confirm" };
   }
 
   const background = matchBackground(normalized);
   if (background) {
     state.visual = { ...state.visual, backgroundId: background.id };
-    saveVisualSettings(state.visual);
+    saveVisualSettingsEverywhere();
     applyBackground(background);
     return { text: `Switched the stage to ${background.label}.`, motion: "present" };
   }
@@ -3142,35 +3310,39 @@ async function tryHandleLocalCommand(text: string): Promise<LocalCommandResult |
 
   if (/\b(show|open)\b.*\b(controls|panel)\b/.test(normalized)) {
     applyControlMode("manual");
-    saveVisualSettings(state.visual);
+    saveVisualSettingsEverywhere();
     return { text: "Controls are open.", motion: "present" };
   }
 
   if (/\b(hide|close)\b.*\b(controls|panel)\b/.test(normalized) || /\b(live mode|clean mode)\b/.test(normalized)) {
     applyControlMode("live");
-    saveVisualSettings(state.visual);
+    saveVisualSettingsEverywhere();
     return { text: "Live mode is on.", motion: "confirm" };
   }
 
   if (/\b(make her sharper|make synra sharper|sharper|less blurry|fix blur|high quality|quality sharp|sharp quality|render sharp)\b/.test(normalized)) {
     applyRenderQuality("sharp");
+    saveVisualSettingsEverywhere();
     return { text: "Sharp render quality is on.", motion: "confirm" };
   }
 
   if (/\b(balanced quality|quality balanced|normal quality|render balanced)\b/.test(normalized)) {
     applyRenderQuality("balanced");
+    saveVisualSettingsEverywhere();
     return { text: "Balanced render quality is on.", motion: "confirm" };
   }
 
   if (/\b(low power|low performance|quality low|performance low|performance quality|render performance)\b/.test(normalized)) {
     applyRenderQuality("performance");
     applyPerformanceTier("forced-low");
+    saveVisualSettingsEverywhere();
     return { text: "Performance render quality is on.", motion: "confirm" };
   }
 
   if (/\b(normal performance|quality normal|restore performance|performance normal)\b/.test(normalized)) {
     applyRenderQuality("balanced");
     applyPerformanceTier("normal");
+    saveVisualSettingsEverywhere();
     return { text: "Balanced visual mode is back on.", motion: "confirm" };
   }
 
@@ -3800,6 +3972,7 @@ async function pairNodeSparkHub(): Promise<void> {
     nodeSparkAccessInput.value = "subscriber";
     nodeSparkPairingPinInput.value = "";
     saveProductSettings(state.productSettings);
+    void saveDurableServerSettings();
     refreshNodeSparkPairingStatus();
     refreshSkillPanel();
     setConnectionTruth("nodeSpark", "reachable", nodeSparkPairingLabel());
@@ -3823,6 +3996,7 @@ function forgetNodeSparkPairing(): void {
   };
   nodeSparkPairingPinInput.value = "";
   saveProductSettings(state.productSettings);
+  void saveDurableServerSettings();
   refreshNodeSparkPairingStatus();
   refreshSkillPanel();
   setConnectionTruth("nodeSpark", state.productSettings.nodeSparkHubUrl ? "configured" : "not-configured", state.productSettings.nodeSparkHubUrl ? "Hub URL saved; pairing cleared" : "Optional subscriber skill");
@@ -4047,6 +4221,7 @@ function setHomeAssistantDefaultCommand(entity: HomeAssistantEntity): LocalComma
   };
   homeAssistantLightEntityInput.value = entity.entityId;
   saveHomeAssistantSettings(state.homeAssistantSettings);
+  void saveDurableServerSettings();
   populateHomeAssistantEntitySelect();
   refreshSkillPanel();
   return {
@@ -5580,6 +5755,7 @@ async function discoverHomeAssistantEntities(): Promise<void> {
   discoverHomeAssistantButton.textContent = "Discovering";
   state.homeAssistantSettings = readHomeAssistantSettingsFromInputs();
   saveHomeAssistantSettings(state.homeAssistantSettings);
+  void saveDurableServerSettings();
   refreshSkillPanel();
   setSynraState("thinking", "Discovering Home Assistant targets.");
   try {
@@ -5603,6 +5779,7 @@ async function discoverHomeAssistantEntities(): Promise<void> {
     };
     homeAssistantLightEntityInput.value = defaultEntity;
     saveHomeAssistantSettings(state.homeAssistantSettings);
+    void saveDurableServerSettings();
     populateHomeAssistantEntitySelect();
     refreshSkillPanel();
     setSynraState("idle", entities.length === 1 ? "Found 1 Home Assistant target." : `Found ${entities.length} Home Assistant targets.`);
@@ -5623,6 +5800,7 @@ async function testHomeAssistantConnection(): Promise<void> {
   const previousSettings = state.homeAssistantSettings;
   state.homeAssistantSettings = readHomeAssistantSettingsFromInputs();
   saveHomeAssistantSettings(state.homeAssistantSettings);
+  void saveDurableServerSettings();
   refreshSkillPanel();
   setConnectionTruth("homeAssistant", homeAssistantSettingsReady(state.homeAssistantSettings) ? "checking" : "not-configured", homeAssistantSettingsReady(state.homeAssistantSettings) ? endpointDisplayLabel(state.homeAssistantSettings.url) : "Add Home Assistant URL and token");
   setSynraState("thinking", "Testing Home Assistant.");

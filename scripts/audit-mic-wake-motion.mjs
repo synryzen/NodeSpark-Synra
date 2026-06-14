@@ -60,6 +60,14 @@ requireText("home-assistant-policy-visible-control", main, 'id="homeAssistantCon
 requireText("trusted-light-policy-helper", main, "shouldRunSmartHomeActionImmediately");
 requireText("trusted-light-policy-bypasses-preconfirmation", main, "smartHomeLightCommand(action, entityId)");
 requireText("trusted-light-policy-server-allow", server, "allowImmediate");
+requireText("server-durable-settings-path", server, "SETTINGS_PATH");
+requireText("server-durable-settings-save-route", server, "/api/settings/save");
+requireText("server-durable-settings-public-payload", server, "\"savedSettings\"");
+requireText("client-durable-settings-save", main, "saveDurableServerSettings");
+requireText("client-durable-settings-hydrate", main, "applyDurableServerSettings");
+requireText("client-blank-elevenlabs-keeps-server-secret", main, "keepServerManagedSecret(elevenLabsApiKeyInput.value");
+requireText("client-blank-homeassistant-keeps-server-secret", main, "keepServerManagedSecret(homeAssistantTokenInput.value");
+requireText("client-visual-change-hard-saves", main, "saveVisualSettingsEverywhere");
 
 const failures = checks.filter((check) => !check.pass);
 console.log(JSON.stringify({

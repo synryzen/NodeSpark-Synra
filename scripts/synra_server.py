@@ -24,6 +24,7 @@ APP_DIR = Path(__file__).resolve().parents[1]
 DIST_DIR = APP_DIR / "dist"
 CONFIG_DIR = Path(os.environ.get("SYNRA_CONFIG_DIR", Path.home() / ".config" / "synra-standalone")).expanduser()
 SECRETS_PATH = CONFIG_DIR / "secrets.json"
+SETTINGS_PATH = CONFIG_DIR / "settings.json"
 SERVER_SECRET_SENTINEL = "__server_secret__"
 APP_VERSION = os.environ.get("SYNRA_APP_VERSION", "").strip()
 STATION_VERSION = os.environ.get("SYNRA_STATION_VERSION", "").strip()
@@ -171,6 +172,9 @@ class SynraHandler(SimpleHTTPRequestHandler):
             return
         if self.path.startswith("/api/confirmations/prepare"):
             self.handle_prepare_confirmation()
+            return
+        if self.path.startswith("/api/settings/save"):
+            self.handle_save_settings()
             return
         if self.path.startswith("/api/secrets/save"):
             self.handle_save_secrets()
@@ -865,6 +869,14 @@ class SynraHandler(SimpleHTTPRequestHandler):
         except Exception as error:
             self.send_json(200, {"ok": False, "error": sanitize_error(error)})
 
+    def handle_save_settings(self) -> None:
+        try:
+            body = self.read_json_body()
+            saved = save_browser_supplied_settings(body)
+            self.send_json(200, {"ok": True, "savedSettings": saved})
+        except Exception as error:
+            self.send_json(200, {"ok": False, "error": sanitize_error(error)})
+
     def read_json_body(self) -> dict[str, Any]:
         length = int(self.headers.get("content-length", "0"))
         if length <= 0:
@@ -915,6 +927,37 @@ def load_local_secrets() -> dict[str, str]:
         return {}
 
 
+def load_local_settings() -> dict[str, Any]:
+    try:
+        if not SETTINGS_PATH.exists():
+            return {}
+        parsed = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+        if not isinstance(parsed, dict):
+            return {}
+        settings = parsed.get("settings")
+        return settings if isinstance(settings, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_local_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    current = load_local_settings()
+    current.update(sanitize_settings_snapshot(settings))
+    payload = {
+        "kind": "synra-standalone-durable-settings",
+        "version": 1,
+        "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "settings": current,
+    }
+    SETTINGS_PATH.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    try:
+        SETTINGS_PATH.chmod(0o600)
+    except Exception:
+        pass
+    return current
+
+
 def save_local_secrets(values: dict[str, str]) -> dict[str, str]:
     secrets_dir = SECRETS_PATH.parent
     secrets_dir.mkdir(parents=True, exist_ok=True)
@@ -930,6 +973,39 @@ def save_local_secrets(values: dict[str, str]) -> dict[str, str]:
     except Exception:
         pass
     return current
+
+
+def sanitize_settings_snapshot(settings: dict[str, Any]) -> dict[str, Any]:
+    allowed = {"model", "voice", "homeAssistant", "product", "visual", "companion", "memory"}
+    sanitized: dict[str, Any] = {}
+    for key in allowed:
+        value = settings.get(key)
+        if isinstance(value, dict):
+            cleaned = strip_secret_fields(value)
+            if cleaned:
+                sanitized[key] = cleaned
+    return sanitized
+
+
+def strip_secret_fields(value: Any) -> Any:
+    if isinstance(value, dict):
+        cleaned: dict[str, Any] = {}
+        for key, item in value.items():
+            lower = str(key).lower()
+            if lower == "facesamples":
+                cleaned[key] = []
+                continue
+            if any(secret_key in lower for secret_key in ("apikey", "api_key", "token", "secret", "password")):
+                if isinstance(item, bool):
+                    cleaned[key] = item
+                continue
+            cleaned[key] = strip_secret_fields(item)
+        return cleaned
+    if isinstance(value, list):
+        return [strip_secret_fields(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
 
 
 def is_secret_placeholder(value: str) -> bool:
@@ -1013,6 +1089,13 @@ def save_browser_supplied_secrets(body: dict[str, Any]) -> dict[str, bool]:
     return saved
 
 
+def save_browser_supplied_settings(body: dict[str, Any]) -> dict[str, Any]:
+    settings = body.get("settings") if isinstance(body.get("settings"), dict) else body
+    if not isinstance(settings, dict):
+        settings = {}
+    return save_local_settings(settings)
+
+
 def release_public_status() -> dict[str, Any]:
     local = load_local_secrets()
     return {
@@ -1042,6 +1125,7 @@ def release_public_status() -> dict[str, Any]:
 
 def settings_public_status() -> dict[str, Any]:
     local = load_local_secrets()
+    saved_settings = load_local_settings()
     home_url = os.environ.get("SYNRA_HOME_ASSISTANT_URL", "").strip() or local.get("homeAssistantUrl", "").strip()
     home_token_configured = bool(os.environ.get("SYNRA_HOME_ASSISTANT_TOKEN", "").strip() or local.get("homeAssistantToken"))
     voice_id = os.environ.get("SYNRA_ELEVENLABS_VOICE_ID", "").strip() or local.get("elevenLabsVoiceId", "").strip()
@@ -1073,6 +1157,7 @@ def settings_public_status() -> dict[str, Any]:
             "nodeSparkDeviceTokenConfigured": bool(local.get("nodeSparkDeviceToken")),
             "nodeSparkTokenExpiresAt": local.get("nodeSparkTokenExpiresAt", "").strip(),
         },
+        "savedSettings": saved_settings,
     }
 
 
