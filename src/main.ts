@@ -1150,35 +1150,38 @@ if (USE_HUB_AVATAR_RUNTIME) {
 resize();
 window.addEventListener("resize", resize);
 
-setSynraState("idle", "Starting Synra.");
-void hydrateServerManagedSettings();
-document.body.dataset.runtimeMode = runtimeMode;
-populateQualitySelect();
-applyRenderQuality(resolveRenderQuality(state.visual.renderQuality));
-applyPerformanceTier(state.performanceTier);
-populateBackgroundSelect();
-populateAvatarSelect();
-populateMotionCategorySelect();
-applyBackground(resolveBackground(state.visual.backgroundId));
-applyControlMode(resolveInitialControlMode());
-void bootAvatarRuntime();
-refreshServerModelStatus().catch(() => {});
-populateBrowserVoiceSelect();
-refreshVoiceStatus();
-refreshVisionStatus().catch(() => {});
-if ("speechSynthesis" in window) {
-  speechSynthesis.addEventListener("voiceschanged", () => {
-    populateBrowserVoiceSelect();
-    refreshVoiceStatus();
-  });
+void initializeSynraApp();
+
+async function initializeSynraApp(): Promise<void> {
+  setSynraState("idle", "Starting Synra.");
+  await hydrateServerManagedSettings();
+  document.body.dataset.runtimeMode = runtimeMode;
+  populateQualitySelect();
+  applyRenderQuality(resolveRenderQuality(state.visual.renderQuality));
+  applyPerformanceTier(state.performanceTier);
+  populateBackgroundSelect();
+  populateAvatarSelect();
+  populateMotionCategorySelect();
+  applyHydratedVisualState();
+  await bootAvatarRuntime();
+  refreshServerModelStatus().catch(() => {});
+  populateBrowserVoiceSelect();
+  refreshVoiceStatus();
+  refreshVisionStatus().catch(() => {});
+  if ("speechSynthesis" in window) {
+    speechSynthesis.addEventListener("voiceschanged", () => {
+      populateBrowserVoiceSelect();
+      refreshVoiceStatus();
+    });
+  }
+  requestAnimationFrame(render);
+  refreshModelLabel();
+  refreshAiConnectionPanel();
+  refreshSkillPanel();
+  refreshSystemHealthPanel();
+  installQaHarness();
+  initializeCompanionPresence();
 }
-requestAnimationFrame(render);
-refreshModelLabel();
-refreshAiConnectionPanel();
-refreshSkillPanel();
-refreshSystemHealthPanel();
-installQaHarness();
-initializeCompanionPresence();
 
 async function bootAvatarRuntime(): Promise<void> {
   try {
@@ -1187,6 +1190,7 @@ async function bootAvatarRuntime(): Promise<void> {
       await loadHubMotionManifest();
       populateMotionSelect();
       await hubAvatarRuntime.boot();
+      await loadAvatarById(resolveInitialAvatarId(), { persist: false });
       document.body.dataset.webgl = "available";
       setSynraState("idle", `${getSynraAvatar(resolveInitialAvatarId()).label} is ready.`);
       if (runtimeMode === "kiosk") {
@@ -1198,10 +1202,10 @@ async function bootAvatarRuntime(): Promise<void> {
       }
       return;
     }
-    await loadAvatarById(resolveInitialAvatarId());
+    await loadAvatarById(resolveInitialAvatarId(), { persist: false });
   } catch {
     try {
-      await loadAvatarById(DEFAULT_SYNRA_AVATAR_ID);
+      await loadAvatarById(DEFAULT_SYNRA_AVATAR_ID, { persist: false });
     } catch (error) {
       setSynraState("offline", `Avatar failed to load: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -3095,6 +3099,20 @@ function populateMotionSelect(): void {
   activeMotionEl.textContent = `${clips.length} ${category.label.toLowerCase()} ready`;
 }
 
+function applyHydratedVisualState(): void {
+  const quality = resolveRenderQuality(state.visual.renderQuality);
+  const background = resolveBackground(state.visual.backgroundId);
+  const avatarId = resolveInitialAvatarId();
+  const category = resolveMotionCategory(state.visual.motionCategoryId);
+
+  applyRenderQuality(quality);
+  backgroundSelect.value = background.id;
+  avatarSelect.value = avatarId;
+  motionCategorySelect.value = category.id;
+  applyBackground(background);
+  applyControlMode(resolveInitialControlMode());
+}
+
 async function playMotionRoute(actionOrClipId: string, options: { restart?: boolean; loop?: boolean; returnToIdle?: boolean } = {}): Promise<void> {
   if (hubAvatarRuntime) {
     try {
@@ -3244,14 +3262,15 @@ async function playManualMotion(motionId: string): Promise<void> {
   }
 }
 
-async function loadAvatarById(avatarId: SynraAvatarId): Promise<void> {
+async function loadAvatarById(avatarId: SynraAvatarId, options: { persist?: boolean } = {}): Promise<void> {
   const avatar = getSynraAvatar(avatarId);
+  const shouldPersist = options.persist !== false;
   avatarSelect.value = avatar.id;
   setSynraState("idle", `Loading ${avatar.label}.`);
   if (hubAvatarRuntime) {
     await hubAvatarRuntime.setAvatar(avatar.url, avatar.label);
     state.visual = { ...state.visual, avatarId: avatar.id };
-    saveVisualSettingsEverywhere();
+    if (shouldPersist) saveVisualSettingsEverywhere();
     setSynraState("idle", `${avatar.label} is ready.`);
     if (runtimeMode === "kiosk") {
       void playMotionRoute(KIOSK_IDLE_ROUTE, { loop: true, restart: true });
@@ -3262,7 +3281,7 @@ async function loadAvatarById(avatarId: SynraAvatarId): Promise<void> {
   }
   await loadAvatar(avatar.url);
   state.visual = { ...state.visual, avatarId: avatar.id };
-  saveVisualSettingsEverywhere();
+  if (shouldPersist) saveVisualSettingsEverywhere();
   setSynraState("idle", `${avatar.label} is ready.`);
   if (runtimeMode === "kiosk") {
     void playMotionRoute(KIOSK_IDLE_ROUTE, { loop: true, restart: true });
