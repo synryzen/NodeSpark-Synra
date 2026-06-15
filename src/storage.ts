@@ -102,6 +102,8 @@ export function loadCompanionSettings(): CompanionSettings {
     allowAlwaysListening: true,
     allowCameraRecognition: false,
     allowFaceSampleStorage: false,
+    voiceMatchMode: "off",
+    voiceMatchSensitivity: "balanced",
     allowMemorySuggestions: true,
     knownUsers: []
   });
@@ -123,7 +125,16 @@ export function loadCompanionSettings(): CompanionSettings {
     preferredMicrophoneId: String(settings.preferredMicrophoneId ?? ""),
     preferredCameraId: String(settings.preferredCameraId ?? ""),
     screenTimeoutMinutes,
-    allowAlwaysListening: wakeWordMode === "local" ? settings.allowAlwaysListening !== false : false
+    allowAlwaysListening: wakeWordMode === "local" ? settings.allowAlwaysListening !== false : false,
+    voiceMatchMode: settings.voiceMatchMode === "knownUsers" || settings.voiceMatchMode === "ownerOnly" ? settings.voiceMatchMode : "off",
+    voiceMatchSensitivity: settings.voiceMatchSensitivity === "relaxed" || settings.voiceMatchSensitivity === "strict" ? settings.voiceMatchSensitivity : "balanced",
+    knownUsers: Array.isArray(settings.knownUsers)
+      ? settings.knownUsers.map((user) => ({
+        ...user,
+        faceSamples: Array.isArray(user.faceSamples) ? user.faceSamples : [],
+        voicePrints: Array.isArray(user.voicePrints) ? user.voicePrints : []
+      }))
+      : []
   };
 }
 

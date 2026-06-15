@@ -15,6 +15,8 @@ export type SynraSkillMode = "hybrid" | "homeAssistant" | "nodeSparkHub";
 export type WakeWordMode = "off" | "local";
 export type ScreenTimeoutMinutes = 10 | 15 | 30 | 60 | 0;
 export type HomeAssistantConfirmationPolicy = "alwaysConfirm" | "trustedLights" | "highRiskOnly";
+export type VoiceMatchMode = "off" | "knownUsers" | "ownerOnly";
+export type VoiceMatchSensitivity = "relaxed" | "balanced" | "strict";
 
 export interface ModelSettings {
   provider: ModelProvider;
@@ -40,9 +42,17 @@ export interface KnownUserProfile {
   name: string;
   relationship: string;
   faceSamples: string[];
+  voicePrints: VoicePrintSample[];
   recognitionEnabled: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface VoicePrintSample {
+  id: string;
+  features: number[];
+  quality: number;
+  createdAt: string;
 }
 
 export interface CompanionSettings {
@@ -56,6 +66,8 @@ export interface CompanionSettings {
   allowAlwaysListening: boolean;
   allowCameraRecognition: boolean;
   allowFaceSampleStorage: boolean;
+  voiceMatchMode: VoiceMatchMode;
+  voiceMatchSensitivity: VoiceMatchSensitivity;
   allowMemorySuggestions: boolean;
   knownUsers: KnownUserProfile[];
 }

@@ -8,7 +8,7 @@ import type { SynraActionName, SynraMode } from "./hub-runtime/types/avatar";
 import { askModel, classifySynraRequest, localSynraReply } from "./model-client";
 import { SynraMotionPlayer, type SynraMotionClipSpec } from "./motion-player";
 import { SERVER_SECRET_SENTINEL, loadCompanionSettings, loadHomeAssistantSettings, loadMemory, loadModelSettings, loadProductSettings, loadVisualSettings, loadVoiceSettings, saveCompanionSettings, saveHomeAssistantSettings, saveMemory, saveModelSettings, saveProductSettings, saveVisualSettings, saveVoiceSettings } from "./storage";
-import type { CompanionSettings, HomeAssistantConfirmationPolicy, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraMemory, SynraMessage, SynraSkillMode, SynraState, VisualSettings, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
+import type { CompanionSettings, HomeAssistantConfirmationPolicy, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraMemory, SynraMessage, SynraSkillMode, SynraState, VisualSettings, VoiceMatchMode, VoiceMatchSensitivity, VoicePrintSample, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
 import { estimateSpeechDurationMs, visemesForSpeechPosition } from "./hub-runtime/services/speech-output";
 import packageInfo from "../package.json";
 
@@ -179,6 +179,12 @@ const PRESENCE_NUDGES = [
 ];
 const DEFAULT_WAKE_PHRASE = "Hello Synra";
 const DEFAULT_WAKE_LISTENING_LABEL = "Listening for Hello Synra";
+const VOICE_MATCH_THRESHOLDS: Record<VoiceMatchSensitivity, number> = {
+  relaxed: 0.72,
+  balanced: 0.8,
+  strict: 0.88
+};
+const VOICE_PRINT_FRAME_COUNT = 18;
 const PREFERRED_BROWSER_VOICE_HINTS = [
   "samantha",
   "victoria",
@@ -730,12 +736,29 @@ app.innerHTML = `
             <option value="on">Store approved local samples</option>
           </select>
         </label>
+        <label>
+          Voice Match
+          <select id="voiceMatchModeInput">
+            <option value="off">Off - anyone can wake Synra</option>
+            <option value="knownUsers">Known users only</option>
+            <option value="ownerOnly">Owner only</option>
+          </select>
+        </label>
+        <label>
+          Voice Match sensitivity
+          <select id="voiceMatchSensitivityInput">
+            <option value="relaxed">Relaxed</option>
+            <option value="balanced">Balanced</option>
+            <option value="strict">Strict</option>
+          </select>
+        </label>
         <div class="settings-button-row">
           <button type="button" id="captureUserFaceButton">Capture Face Sample</button>
+          <button type="button" id="captureUserVoiceButton">Capture Voice Sample</button>
           <button type="button" id="saveKnownUserButton">Save User</button>
         </div>
         <div id="knownUsersList" class="known-users-list"></div>
-        <p class="settings-note">Face setup is opt-in and local to this device. Raw camera frames are not saved to memory, sanitized backups exclude face images, and you can delete known users anytime.</p>
+        <p class="settings-note">Face and Voice Match are opt-in and local to this device. Voice Match saves compact voiceprints, not raw audio. Sanitized backups exclude face images and voiceprints, and you can delete known users anytime.</p>
       </section>
       <section class="settings-panel" data-settings-panel="home" role="tabpanel" hidden>
         <h3>Home Assistant</h3>
@@ -1034,7 +1057,10 @@ const knownUserNameInput = must<HTMLElement, HTMLInputElement>("knownUserNameInp
 const knownUserRelationshipInput = must<HTMLElement, HTMLInputElement>("knownUserRelationshipInput");
 const faceRecognitionInput = must<HTMLElement, HTMLSelectElement>("faceRecognitionInput");
 const faceSampleStorageInput = must<HTMLElement, HTMLSelectElement>("faceSampleStorageInput");
+const voiceMatchModeInput = must<HTMLElement, HTMLSelectElement>("voiceMatchModeInput");
+const voiceMatchSensitivityInput = must<HTMLElement, HTMLSelectElement>("voiceMatchSensitivityInput");
 const captureUserFaceButton = must<HTMLElement, HTMLButtonElement>("captureUserFaceButton");
+const captureUserVoiceButton = must<HTMLElement, HTMLButtonElement>("captureUserVoiceButton");
 const saveKnownUserButton = must<HTMLElement, HTMLButtonElement>("saveKnownUserButton");
 const knownUsersList = must<HTMLElement, HTMLElement>("knownUsersList");
 const wizardOwnerNameInput = must<HTMLElement, HTMLInputElement>("wizardOwnerNameInput");
@@ -1137,6 +1163,7 @@ let holdToTalkPressed = false;
 let serverWakeWordActive = false;
 let serverWakeWordTimer = 0;
 let pendingFaceSample = "";
+let pendingVoicePrint: VoicePrintSample | null = null;
 let wakeWordMicActive = false;
 let wakeWordLastHeard = "";
 let wakeWordLastError = "";
@@ -1634,6 +1661,10 @@ captureUserFaceButton.addEventListener("click", () => {
   void captureKnownUserFaceSample();
 });
 
+captureUserVoiceButton.addEventListener("click", () => {
+  void captureKnownUserVoiceSample();
+});
+
 saveKnownUserButton.addEventListener("click", () => {
   saveKnownUserFromInputs();
 });
@@ -1739,6 +1770,8 @@ function populateCompanionSettingsInputs(): void {
   memorySuggestionsInput.value = state.companionSettings.allowMemorySuggestions ? "on" : "off";
   faceRecognitionInput.value = state.companionSettings.allowCameraRecognition ? "on" : "off";
   faceSampleStorageInput.value = state.companionSettings.allowFaceSampleStorage ? "on" : "off";
+  voiceMatchModeInput.value = normalizeVoiceMatchMode(state.companionSettings.voiceMatchMode);
+  voiceMatchSensitivityInput.value = normalizeVoiceMatchSensitivity(state.companionSettings.voiceMatchSensitivity);
   renderKnownUsers();
 }
 
@@ -1755,6 +1788,8 @@ function readCompanionSettingsFromInputs(): CompanionSettings {
     allowAlwaysListening: wakeWordMode === "local" && micAlwaysListeningInput.value === "on",
     allowCameraRecognition: faceRecognitionInput.value === "on",
     allowFaceSampleStorage: faceSampleStorageInput.value === "on",
+    voiceMatchMode: normalizeVoiceMatchMode(voiceMatchModeInput.value),
+    voiceMatchSensitivity: normalizeVoiceMatchSensitivity(voiceMatchSensitivityInput.value),
     allowMemorySuggestions: memorySuggestionsInput.value === "on"
   };
 }
@@ -1766,6 +1801,36 @@ function normalizeHomeAssistantConfirmationPolicy(value: string | undefined): Ho
 
 function normalizeWakeWordMode(value: string): WakeWordMode {
   return value === "local" ? "local" : "off";
+}
+
+function normalizeVoiceMatchMode(value: string | undefined): VoiceMatchMode {
+  if (value === "knownUsers" || value === "ownerOnly") return value;
+  return "off";
+}
+
+function normalizeVoiceMatchSensitivity(value: string | undefined): VoiceMatchSensitivity {
+  if (value === "relaxed" || value === "strict") return value;
+  return "balanced";
+}
+
+function normalizeKnownUserProfiles(users: KnownUserProfile[]): KnownUserProfile[] {
+  return users.map((user) => ({
+    id: String(user.id || `user-${Date.now().toString(36)}`),
+    name: String(user.name || "").slice(0, 80),
+    relationship: String(user.relationship || "").slice(0, 80),
+    faceSamples: Array.isArray(user.faceSamples) ? user.faceSamples.map(String).slice(-5) : [],
+    voicePrints: Array.isArray(user.voicePrints)
+      ? user.voicePrints.map((sample) => ({
+        id: String(sample.id || `voice-${Date.now().toString(36)}`),
+        features: Array.isArray(sample.features) ? sample.features.map(Number).filter(Number.isFinite).slice(0, 96) : [],
+        quality: clampUnit(Number(sample.quality), 0),
+        createdAt: String(sample.createdAt || new Date().toISOString())
+      })).filter((sample) => sample.features.length > 0).slice(-8)
+      : [],
+    recognitionEnabled: user.recognitionEnabled === true,
+    createdAt: String(user.createdAt || new Date().toISOString()),
+    updatedAt: String(user.updatedAt || new Date().toISOString())
+  })).filter((user) => user.name).slice(0, 12);
 }
 
 function normalizeScreenTimeout(value: string | number): ScreenTimeoutMinutes {
@@ -1836,6 +1901,14 @@ async function startWakeWordListening(): Promise<void> {
     updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
     return;
   }
+  if (state.companionSettings.voiceMatchMode !== "off") {
+    if (canUseServerTranscription()) {
+      startServerWakeWordListening(phrase);
+      return;
+    }
+    updateWakeWordStatus("Voice Match needs ElevenLabs STT");
+    return;
+  }
   if (shouldPreferServerTranscription()) {
     startServerWakeWordListening(phrase);
     return;
@@ -1879,7 +1952,7 @@ async function startWakeWordListening(): Promise<void> {
   recognition.start();
 }
 
-function handleWakeWordTranscript(transcript: string, phrase: string): boolean {
+function handleWakeWordTranscript(transcript: string, phrase: string, matchedUser?: KnownUserProfile): boolean {
   const command = extractWakeWordCommand(transcript, phrase);
   if (command === null) return false;
   void window.synraKiosk?.wakeDisplay?.();
@@ -1890,8 +1963,8 @@ function handleWakeWordTranscript(transcript: string, phrase: string): boolean {
     void handleUserText(command);
     return true;
   }
-  greetAfterWakeWord();
-  window.setTimeout(() => void startCommandListeningAfterWakeWord(), Math.max(900, estimateSpeechDurationMs(wakeGreetingText()) + 220));
+  greetAfterWakeWord(matchedUser?.name);
+  window.setTimeout(() => void startCommandListeningAfterWakeWord(), Math.max(900, estimateSpeechDurationMs(wakeGreetingText(matchedUser?.name)) + 220));
   return true;
 }
 
@@ -1917,6 +1990,47 @@ function extractWakeWordCommand(transcript: string, phrase: string): string | nu
     }
   }
   return null;
+}
+
+function verifyWakeSpeaker(voicePrint: VoicePrintSample | undefined): VoiceMatchResult {
+  const mode = normalizeVoiceMatchMode(state.companionSettings.voiceMatchMode);
+  if (mode === "off") return { allowed: true, reason: "Voice Match off" };
+  const enrolledUsers = voiceMatchEligibleUsers(mode);
+  const enrolledPrintCount = enrolledUsers.reduce((count, user) => count + (user.voicePrints?.length ?? 0), 0);
+  if (enrolledPrintCount === 0) {
+    wakeWordLastError = "Voice Match needs enrollment";
+    return { allowed: true, reason: "Voice Match needs enrollment" };
+  }
+  if (!voicePrint) {
+    return { allowed: false, reason: "Voice Match could not read the speaker" };
+  }
+  const threshold = VOICE_MATCH_THRESHOLDS[normalizeVoiceMatchSensitivity(state.companionSettings.voiceMatchSensitivity)];
+  let bestUser: KnownUserProfile | undefined;
+  let bestScore = -1;
+  for (const user of enrolledUsers) {
+    for (const savedPrint of user.voicePrints ?? []) {
+      const score = cosineSimilarity(voicePrint.features, savedPrint.features);
+      if (score > bestScore) {
+        bestScore = score;
+        bestUser = user;
+      }
+    }
+  }
+  if (bestUser && bestScore >= threshold) {
+    return { allowed: true, user: bestUser, score: bestScore, reason: `Voice matched ${bestUser.name}` };
+  }
+  return { allowed: false, score: bestScore, reason: "Ignored unknown voice" };
+}
+
+function voiceMatchEligibleUsers(mode: VoiceMatchMode): KnownUserProfile[] {
+  const users = state.companionSettings.knownUsers.filter((user) => user.recognitionEnabled && (user.voicePrints?.length ?? 0) > 0);
+  if (mode !== "ownerOnly") return users;
+  const ownerName = (state.companionSettings.ownerName || state.memory.preferredName || "").trim().toLowerCase();
+  return users.filter((user, index) => {
+    const name = user.name.trim().toLowerCase();
+    const relationship = user.relationship.trim().toLowerCase();
+    return relationship.includes("owner") || (ownerName ? name === ownerName : index === 0);
+  });
 }
 
 function wakePhraseAliases(phrase: string): string[] {
@@ -1980,13 +2094,13 @@ function levenshteinDistance(left: string, right: string): number {
   return previous[right.length] ?? Math.max(left.length, right.length);
 }
 
-function wakeGreetingText(): string {
-  const preferred = state.companionSettings.ownerName || state.memory.preferredName || state.companionSettings.knownUsers[0]?.name || "";
+function wakeGreetingText(preferredUserName = ""): string {
+  const preferred = preferredUserName || state.companionSettings.ownerName || state.memory.preferredName || state.companionSettings.knownUsers[0]?.name || "";
   return preferred ? `Hello ${preferred}. I am listening.` : "Hello. I am listening.";
 }
 
-function greetAfterWakeWord(): void {
-  const greeting = wakeGreetingText();
+function greetAfterWakeWord(preferredUserName = ""): void {
+  const greeting = wakeGreetingText(preferredUserName);
   pushMessage("synra", greeting);
   setSynraState("speaking", greeting);
   speak(greeting);
@@ -2154,6 +2268,19 @@ function startServerWakeWordListening(phrase: string): void {
         wakeWordLastHeard = heard.slice(0, 80);
         wakeWordLastError = "";
       }
+      const wakeCommand = heard ? extractWakeWordCommand(heard, phrase) : null;
+      if (wakeCommand !== null) {
+        const matchedSpeaker = verifyWakeSpeaker(result.voicePrint);
+        if (!matchedSpeaker.allowed) {
+          wakeWordLastError = matchedSpeaker.reason;
+          updateWakeWordStatus(matchedSpeaker.reason);
+          scheduleServerWakeWordTick(1100, listenOnce);
+          return;
+        }
+        if (handleWakeWordTranscript(heard, phrase, matchedSpeaker.user)) {
+          return;
+        }
+      }
       if (heard && handleWakeWordTranscript(heard, phrase)) {
         return;
       }
@@ -2210,6 +2337,31 @@ async function captureKnownUserFaceSample(): Promise<void> {
   }
 }
 
+async function captureKnownUserVoiceSample(): Promise<void> {
+  if (!navigator.mediaDevices?.getUserMedia || !("MediaRecorder" in window)) {
+    setSynraState("idle", "Voice Match capture is not available in this browser.");
+    return;
+  }
+  captureUserVoiceButton.disabled = true;
+  captureUserVoiceButton.textContent = "Listening";
+  setSynraState("listening", "Say: Hello Synra, this is my voice.");
+  try {
+    const capture = await recordMicrophoneBlob({ durationMs: 4200, minRms: 0.003 });
+    if (capture.peakRms < 0.003) {
+      setSynraState("idle", "That voice sample was too quiet. Try again closer to the mic.");
+      return;
+    }
+    pendingVoicePrint = await createVoicePrintFromBlob(capture.blob);
+    setSynraState("idle", "Voice sample captured locally. Save the user when ready.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Voice Match capture needs microphone permission.";
+    setSynraState("idle", message);
+  } finally {
+    captureUserVoiceButton.disabled = false;
+    captureUserVoiceButton.textContent = pendingVoicePrint ? "Capture Another Voice Sample" : "Capture Voice Sample";
+  }
+}
+
 function saveKnownUserFromInputs(): void {
   const name = knownUserNameInput.value.trim();
   if (!name) {
@@ -2223,6 +2375,7 @@ function saveKnownUserFromInputs(): void {
     name,
     relationship: knownUserRelationshipInput.value.trim(),
     faceSamples: [...(existing?.faceSamples ?? []), ...(pendingFaceSample ? [pendingFaceSample] : [])].slice(-5),
+    voicePrints: [...(existing?.voicePrints ?? []), ...(pendingVoicePrint ? [pendingVoicePrint] : [])].slice(-8),
     recognitionEnabled: faceRecognitionInput.value === "on",
     createdAt: existing?.createdAt ?? now,
     updatedAt: now
@@ -2233,9 +2386,11 @@ function saveKnownUserFromInputs(): void {
   };
   saveCompanionSettingsEverywhere();
   pendingFaceSample = "";
+  pendingVoicePrint = null;
   knownUserNameInput.value = "";
   knownUserRelationshipInput.value = "";
   captureUserFaceButton.textContent = "Capture Face Sample";
+  captureUserVoiceButton.textContent = "Capture Voice Sample";
   renderKnownUsers();
   setSynraState("idle", `${name} is saved as a known user.`);
 }
@@ -2250,7 +2405,7 @@ function renderKnownUsers(): void {
       ${user.faceSamples[0] ? `<img src="${user.faceSamples[0]}" alt="${escapeHtml(user.name)} face sample" />` : `<div class="known-user-avatar">${escapeHtml(user.name.slice(0, 1).toUpperCase())}</div>`}
       <div>
         <strong>${escapeHtml(user.name)}</strong>
-        <span>${escapeHtml(user.relationship || "Known user")} · ${user.recognitionEnabled ? "Recognition on" : "Recognition off"} · ${user.faceSamples.length} local sample${user.faceSamples.length === 1 ? "" : "s"}</span>
+        <span>${escapeHtml(user.relationship || "Known user")} · ${user.recognitionEnabled ? "Recognition on" : "Recognition off"} · ${user.faceSamples.length} face sample${user.faceSamples.length === 1 ? "" : "s"} · ${(user.voicePrints ?? []).length} voice sample${(user.voicePrints ?? []).length === 1 ? "" : "s"}</span>
       </div>
       <button type="button" data-delete-user="${escapeHtml(user.id)}">Delete</button>
     </article>
@@ -2630,7 +2785,9 @@ function exportSanitizedBackupFromSettings(): void {
         knownUsers: state.companionSettings.knownUsers.map((user) => ({
           ...user,
           faceSamples: [],
-          faceSampleCount: user.faceSamples.length
+          voicePrints: [],
+          faceSampleCount: user.faceSamples.length,
+          voicePrintCount: user.voicePrints?.length ?? 0
         }))
       },
       memory: state.memory
@@ -2675,6 +2832,7 @@ function importSanitizedBackupFromSettings(): void {
           name: String(user.name || "").slice(0, 80),
           relationship: String(user.relationship || "").slice(0, 80),
           faceSamples: [],
+          voicePrints: [],
           recognitionEnabled: user.recognitionEnabled === true,
           createdAt: String(user.createdAt || new Date().toISOString()),
           updatedAt: new Date().toISOString()
@@ -2692,6 +2850,8 @@ function importSanitizedBackupFromSettings(): void {
         allowAlwaysListening: companion.allowAlwaysListening === true,
         allowCameraRecognition: companion.allowCameraRecognition === true,
         allowFaceSampleStorage: companion.allowFaceSampleStorage === true,
+        voiceMatchMode: normalizeVoiceMatchMode(String(companion.voiceMatchMode ?? state.companionSettings.voiceMatchMode)),
+        voiceMatchSensitivity: normalizeVoiceMatchSensitivity(String(companion.voiceMatchSensitivity ?? state.companionSettings.voiceMatchSensitivity)),
         allowMemorySuggestions: companion.allowMemorySuggestions !== false,
         knownUsers
       };
@@ -2883,8 +3043,10 @@ function applyDurableServerSettings(savedSettings: DurableServerSettings | undef
       allowAlwaysListening: companion.allowAlwaysListening !== false,
       allowCameraRecognition: companion.allowCameraRecognition === true,
       allowFaceSampleStorage: companion.allowFaceSampleStorage === true,
+      voiceMatchMode: normalizeVoiceMatchMode(String(companion.voiceMatchMode ?? state.companionSettings.voiceMatchMode)),
+      voiceMatchSensitivity: normalizeVoiceMatchSensitivity(String(companion.voiceMatchSensitivity ?? state.companionSettings.voiceMatchSensitivity)),
       allowMemorySuggestions: companion.allowMemorySuggestions !== false,
-      knownUsers: Array.isArray(companion.knownUsers) ? companion.knownUsers as KnownUserProfile[] : state.companionSettings.knownUsers
+      knownUsers: normalizeKnownUserProfiles(Array.isArray(companion.knownUsers) ? companion.knownUsers as KnownUserProfile[] : state.companionSettings.knownUsers)
     };
     saveCompanionSettings(state.companionSettings);
   }
@@ -5057,7 +5219,27 @@ async function startServerTranscriptionListening(options: { durationMs?: number;
   }
 }
 
-async function recordAndTranscribeMicrophone(options: { durationMs: number; minRms: number }): Promise<{ text: string }> {
+async function recordAndTranscribeMicrophone(options: { durationMs: number; minRms: number }): Promise<TranscriptionResult> {
+  const capture = await recordMicrophoneBlob(options);
+  if (capture.peakRms < options.minRms) return { text: "" };
+  const voicePrint = await createVoicePrintFromBlob(capture.blob).catch(() => undefined);
+  const audioBase64 = await blobToBase64(capture.blob);
+  const response = await fetch("/api/stt/elevenlabs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      audioBase64,
+      mimeType: capture.blob.type || "audio/webm",
+      apiKey: state.voiceSettings.elevenLabsApiKey,
+      languageCode: "en"
+    })
+  });
+  const data = await response.json() as { ok?: boolean; text?: string; error?: string };
+  if (!data.ok && data.error) throw new Error(data.error);
+  return { text: String(data.text || "").trim(), voicePrint };
+}
+
+async function recordMicrophoneBlob(options: { durationMs: number; minRms: number }): Promise<MicrophoneCapture> {
   if (!navigator.mediaDevices?.getUserMedia || !("MediaRecorder" in window)) {
     throw new Error("Microphone recording is not available in this kiosk/browser.");
   }
@@ -5096,27 +5278,88 @@ async function recordAndTranscribeMicrophone(options: { durationMs: number; minR
         if (recorder.state !== "inactive") recorder.stop();
       }, options.durationMs);
     });
-    if (peakRms < options.minRms) return { text: "" };
     const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || "audio/webm" });
-    const audioBase64 = await blobToBase64(blob);
-    const response = await fetch("/api/stt/elevenlabs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        audioBase64,
-        mimeType: blob.type || "audio/webm",
-        apiKey: state.voiceSettings.elevenLabsApiKey,
-        languageCode: "en"
-      })
-    });
-    const data = await response.json() as { ok?: boolean; text?: string; error?: string };
-    if (!data.ok && data.error) throw new Error(data.error);
-    return { text: String(data.text || "").trim() };
+    return { blob, peakRms };
   } finally {
     if (sampleTimer) window.clearInterval(sampleTimer);
     for (const track of stream.getTracks()) track.stop();
     if (audioContext) void audioContext.close();
   }
+}
+
+async function createVoicePrintFromBlob(blob: Blob): Promise<VoicePrintSample> {
+  const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextCtor) throw new Error("Voice Match needs Web Audio support.");
+  const audioContext = new AudioContextCtor();
+  try {
+    const audioBuffer = await audioContext.decodeAudioData(await blob.arrayBuffer());
+    const channel = audioBuffer.getChannelData(0);
+    if (channel.length < 1600) throw new Error("Voice sample was too short.");
+    const features: number[] = [];
+    const frameLength = Math.max(512, Math.floor(channel.length / VOICE_PRINT_FRAME_COUNT));
+    let voicedFrames = 0;
+    let totalRms = 0;
+    for (let frame = 0; frame < VOICE_PRINT_FRAME_COUNT; frame += 1) {
+      const start = Math.min(channel.length - 1, frame * frameLength);
+      const end = Math.min(channel.length, start + frameLength);
+      let sumSquares = 0;
+      let sumAbs = 0;
+      let zeroCrossings = 0;
+      let peak = 0;
+      let previous = channel[start] ?? 0;
+      for (let index = start; index < end; index += 1) {
+        const sample = channel[index] ?? 0;
+        sumSquares += sample * sample;
+        sumAbs += Math.abs(sample);
+        peak = Math.max(peak, Math.abs(sample));
+        if ((previous < 0 && sample >= 0) || (previous >= 0 && sample < 0)) zeroCrossings += 1;
+        previous = sample;
+      }
+      const count = Math.max(1, end - start);
+      const rms = Math.sqrt(sumSquares / count);
+      const meanAbs = sumAbs / count;
+      const zcr = zeroCrossings / count;
+      totalRms += rms;
+      if (rms > 0.004) voicedFrames += 1;
+      features.push(Math.log1p(rms * 80), Math.log1p(meanAbs * 90), Math.log1p(peak * 16), zcr * 24);
+    }
+    const duration = audioBuffer.duration || blob.size / 16000;
+    features.push(Math.log1p(duration), voicedFrames / VOICE_PRINT_FRAME_COUNT, Math.log1p((totalRms / VOICE_PRINT_FRAME_COUNT) * 80));
+    const normalized = normalizeVoiceFeatures(features);
+    const quality = Math.min(1, Math.max(0, (voicedFrames / VOICE_PRINT_FRAME_COUNT) * 0.7 + Math.min(0.3, totalRms * 8)));
+    if (quality < 0.12) throw new Error("Voice sample was too quiet.");
+    return {
+      id: `voice-${Date.now().toString(36)}`,
+      features: normalized,
+      quality,
+      createdAt: new Date().toISOString()
+    };
+  } finally {
+    void audioContext.close();
+  }
+}
+
+function normalizeVoiceFeatures(features: number[]): number[] {
+  const mean = features.reduce((sum, value) => sum + value, 0) / Math.max(1, features.length);
+  const centered = features.map((value) => value - mean);
+  const magnitude = Math.sqrt(centered.reduce((sum, value) => sum + value * value, 0)) || 1;
+  return centered.map((value) => Number((value / magnitude).toFixed(6)));
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  const length = Math.min(a.length, b.length);
+  if (length === 0) return 0;
+  let dot = 0;
+  let magA = 0;
+  let magB = 0;
+  for (let index = 0; index < length; index += 1) {
+    const left = a[index] ?? 0;
+    const right = b[index] ?? 0;
+    dot += left * right;
+    magA += left * left;
+    magB += right * right;
+  }
+  return dot / ((Math.sqrt(magA) * Math.sqrt(magB)) || 1);
 }
 
 async function recordAndTranscribeUntilStopped(options: { minRms: number }): Promise<HoldToTalkSession> {
@@ -6456,4 +6699,21 @@ interface HoldToTalkSession {
   stop(): void;
   cancel(): void;
   finish(): Promise<{ text: string }>;
+}
+
+interface MicrophoneCapture {
+  blob: Blob;
+  peakRms: number;
+}
+
+interface TranscriptionResult {
+  text: string;
+  voicePrint?: VoicePrintSample;
+}
+
+interface VoiceMatchResult {
+  allowed: boolean;
+  user?: KnownUserProfile;
+  score?: number;
+  reason: string;
 }
