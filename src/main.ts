@@ -1137,6 +1137,9 @@ let holdToTalkPressed = false;
 let serverWakeWordActive = false;
 let serverWakeWordTimer = 0;
 let pendingFaceSample = "";
+let wakeWordMicActive = false;
+let wakeWordLastHeard = "";
+let wakeWordLastError = "";
 
 if (USE_HUB_AVATAR_RUNTIME) {
   hubAvatarRuntime = new SynraAvatarRuntime({
@@ -1929,6 +1932,13 @@ function wakePhraseAliases(phrase: string): string[] {
     "hello senra",
     "hello sierra",
     "hello sarah",
+    "hello sandra",
+    "hello synara",
+    "hello senora",
+    "hello sinner",
+    "hello zena",
+    "hello zina",
+    "hello center",
     "hey synra",
     "hi synra"
   ];
@@ -1946,7 +1956,7 @@ function normalizedWakeTokens(text: string): string[] {
 function isLikelyWakeToken(token: string): boolean {
   if (!token) return false;
   const normalized = token.toLowerCase();
-  const known = new Set(["synra", "syna", "sinra", "syra", "cynra", "cindra", "senra", "sierra", "sarah", "synrah", "synara"]);
+  const known = new Set(["synra", "syna", "sinra", "syra", "cynra", "cindra", "senra", "sierra", "sarah", "synrah", "synara", "sandra", "senora", "sinner", "zena", "zina", "center"]);
   if (known.has(normalized)) return true;
   return levenshteinDistance(normalized, "synra") <= 1;
 }
@@ -1972,7 +1982,7 @@ function levenshteinDistance(left: string, right: string): number {
 
 function wakeGreetingText(): string {
   const preferred = state.companionSettings.ownerName || state.memory.preferredName || state.companionSettings.knownUsers[0]?.name || "";
-  return preferred ? `Hello ${preferred}.` : "Hello. I am listening.";
+  return preferred ? `Hello ${preferred}. I am listening.` : "Hello. I am listening.";
 }
 
 function greetAfterWakeWord(): void {
@@ -2002,6 +2012,7 @@ async function startCommandListeningAfterWakeWord(): Promise<void> {
 
 function stopWakeWordListening(status = "Wake word off"): void {
   serverWakeWordActive = false;
+  wakeWordMicActive = false;
   if (serverWakeWordTimer) {
     window.clearTimeout(serverWakeWordTimer);
     serverWakeWordTimer = 0;
@@ -2022,7 +2033,7 @@ function updateWakeWordStatus(status: string): void {
   state.wakeWordStatus = status;
   wakeWordStatusEl.textContent = status;
   micAlwaysListeningStatusEl.textContent = state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening
-    ? "Mic always listening"
+    ? wakeWordMicActive ? "Wake mic active" : "Wake mic armed"
     : "Mic always listening off";
   startWakeWordButton.textContent = state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening ? "Restart Wake Word" : "Start Wake Word";
 }
@@ -2118,27 +2129,39 @@ function selectedDeviceLabel(select: HTMLSelectElement, fallback: string): strin
 
 function startServerWakeWordListening(phrase: string): void {
   if (serverWakeWordActive) {
-    updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
+    updateWakeWordStatus("Wake mic armed");
     return;
   }
   serverWakeWordActive = true;
-  updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
+  wakeWordLastError = "";
+  updateWakeWordStatus("Wake mic armed");
 
   const listenOnce = async (): Promise<void> => {
     if (!serverWakeWordActive || state.companionSettings.wakeWordMode !== "local" || !state.companionSettings.allowAlwaysListening) return;
     if (micInteractionActive || activeRecognition || state.synra === "speaking" || state.synra === "thinking") {
+      wakeWordMicActive = false;
+      updateWakeWordStatus("Wake word paused");
       scheduleServerWakeWordTick(900, listenOnce);
       return;
     }
     try {
-      const result = await recordAndTranscribeMicrophone({ durationMs: 5200, minRms: 0.006 });
+      wakeWordMicActive = true;
+      updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
+      const result = await recordAndTranscribeMicrophone({ durationMs: 5200, minRms: 0.002 });
+      wakeWordMicActive = false;
       const heard = result.text.trim();
+      if (heard) {
+        wakeWordLastHeard = heard.slice(0, 80);
+        wakeWordLastError = "";
+      }
       if (heard && handleWakeWordTranscript(heard, phrase)) {
         return;
       }
-      updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
+      updateWakeWordStatus("Wake mic armed");
     } catch (error) {
+      wakeWordMicActive = false;
       const message = error instanceof Error ? error.message : "microphone capture failed";
+      wakeWordLastError = message.slice(0, 120);
       updateWakeWordStatus(`Wake word mic error: ${message}`);
     }
     if (serverWakeWordActive) scheduleServerWakeWordTick(850, listenOnce);
@@ -5554,9 +5577,14 @@ function updateTelemetry(now: number): void {
     synraState: state.synra,
     avatarId: state.visual.avatarId,
     activeMotion: currentHubMotionId() ?? state.motionPlayer.snapshot.activeClipId,
+    wakeWordStatus: state.wakeWordStatus,
+    wakeWordLastHeard,
+    wakeWordLastError,
     webgl: renderer || hubHealth?.webglReady ? "available" : "unavailable",
     runtimeMode,
     route: state.lastRouteLabel,
+    wakeWordMicActive,
+    serverWakeWordActive,
     messageCount: state.messages.length
   };
   fetch("/api/telemetry", {

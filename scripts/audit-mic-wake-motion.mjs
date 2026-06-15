@@ -46,6 +46,8 @@ requireText("wake-browser-listen-waits-for-pause", main, "window.setTimeout(comm
 requireText("wake-word-fuzzy-aliases", main, "wakePhraseAliases");
 requireText("wake-word-accepts-syna", main, "hello syna");
 requireText("wake-word-accepts-sarah", main, "hello sarah");
+requireText("wake-word-accepts-sandra", main, "hello sandra");
+requireText("wake-word-accepts-center", main, "hello center");
 requireText("wake-word-near-token-match", main, "isLikelyWakeToken");
 requireText("tap-listen-prefers-server-stt", main, "await startServerTranscriptionListening();");
 requireText("standalone-vision-route-captures-frame", main, "if (requestRoute.intent === \"vision\")");
@@ -68,7 +70,12 @@ requireText("wake-recording-uses-selected-mic", main, "getUserMedia({ audio: sel
 requireText("vision-uses-selected-camera", main, "getUserMedia({ audio: false, video: selectedVideoConstraints()");
 requireText("wake-loop-reports-mic-errors", main, "Wake word mic error");
 requireText("wake-loop-has-command-friendly-window", main, "durationMs: 5200");
-requireText("wake-loop-lower-rms-for-room-phrase", main, "minRms: 0.006");
+requireText("wake-loop-lower-rms-for-room-phrase", main, "minRms: 0.002");
+requireText("wake-loop-visible-mic-active-state", main, "Wake mic active");
+requireText("wake-loop-visible-mic-armed-state", main, "Wake mic armed");
+requireText("wake-loop-telemetry-mic-active", main, "wakeWordMicActive");
+requireText("wake-loop-telemetry-last-heard", main, "wakeWordLastHeard");
+requireText("wake-loop-spoken-listening-confirmation", main, "I am listening.");
 requireText("home-assistant-policy-type", storage, "confirmationPolicy");
 requireText("home-assistant-policy-visible-control", main, 'id="homeAssistantConfirmationPolicyInput"');
 requireText("trusted-light-policy-helper", main, "shouldRunSmartHomeActionImmediately");

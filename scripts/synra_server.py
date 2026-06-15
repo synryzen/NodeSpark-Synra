@@ -1361,7 +1361,19 @@ def vision_public_status() -> dict[str, Any]:
 
 
 def sanitize_telemetry(body: dict[str, Any]) -> dict[str, Any]:
-    allowed_strings = {"runtimeMode", "performanceTier", "renderQuality", "synraState", "avatarId", "activeMotion", "route", "webgl"}
+    allowed_strings = {
+        "runtimeMode",
+        "performanceTier",
+        "renderQuality",
+        "synraState",
+        "avatarId",
+        "activeMotion",
+        "route",
+        "webgl",
+        "wakeWordStatus",
+        "wakeWordLastHeard",
+        "wakeWordLastError",
+    }
     telemetry: dict[str, Any] = {"receivedAt": time.time()}
     for key in allowed_strings:
         value = body.get(key)
@@ -1371,6 +1383,10 @@ def sanitize_telemetry(body: dict[str, Any]) -> dict[str, Any]:
         value = body.get(key)
         if isinstance(value, (int, float)):
             telemetry[key] = round(float(value), 2)
+    for key in {"wakeWordMicActive", "serverWakeWordActive"}:
+        value = body.get(key)
+        if isinstance(value, bool):
+            telemetry[key] = value
     return telemetry
 
 
@@ -1507,6 +1523,11 @@ def kiosk_health_status() -> dict[str, Any]:
         "fps": fps if isinstance(fps, (int, float)) else None,
         "avatarId": telemetry.get("avatarId", "unknown"),
         "webgl": telemetry.get("webgl", "unknown"),
+        "wakeWordStatus": telemetry.get("wakeWordStatus", "unknown"),
+        "wakeWordMicActive": telemetry.get("wakeWordMicActive", False),
+        "serverWakeWordActive": telemetry.get("serverWakeWordActive", False),
+        "wakeWordLastHeard": telemetry.get("wakeWordLastHeard", ""),
+        "wakeWordLastError": telemetry.get("wakeWordLastError", ""),
         "uptimeSeconds": round(time.time() - STARTED_AT, 1),
         "healthy": service_state in {"active", "unknown", "unavailable"} and (not isinstance(fps, (int, float)) or fps >= 24),
     }
