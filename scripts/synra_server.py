@@ -2030,7 +2030,7 @@ def chatterbox_model_class(model: str) -> Any:
     try:
         if model == "turbo":
             try:
-                from chatterbox.tts import ChatterboxTurboTTS
+                from chatterbox.tts_turbo import ChatterboxTurboTTS
 
                 return ChatterboxTurboTTS
             except ImportError:

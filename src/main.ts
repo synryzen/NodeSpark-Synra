@@ -4854,10 +4854,15 @@ async function playElevenLabsSpeech(text: string, serial: number): Promise<void>
 async function playChatterboxSpeech(text: string, serial: number): Promise<void> {
   clearSpeechFallback();
   const abort = new AbortController();
+  let didTimeout = false;
   activeSpeechAbort = abort;
   updateVoiceStatus("Preparing Chatterbox");
   setSynraState("speaking", text);
   armSpeechFallback(text, serial, "fallback");
+  const timeoutId = window.setTimeout(() => {
+    didTimeout = true;
+    abort.abort();
+  }, 25000);
   try {
     const response = await fetch("/api/tts/chatterbox", {
       method: "POST",
@@ -4907,12 +4912,20 @@ async function playChatterboxSpeech(text: string, serial: number): Promise<void>
     });
     setConnectionTruth("voice", "ready", `Chatterbox ${data.model || state.voiceSettings.chatterboxModel} voice playing locally`);
   } catch (error) {
-    if (abort.signal.aborted || serial !== speechSerial) return;
+    if (abort.signal.aborted && !didTimeout) return;
+    if (serial !== speechSerial) return;
     const message = error instanceof Error ? error.message : "Chatterbox speech failed.";
+    if (didTimeout) {
+      updateVoiceStatus("Chatterbox timeout");
+      setConnectionTruth("voice", "configured", "Chatterbox local voice took too long; using browser fallback for this reply");
+      fallbackToBrowserSpeech(text, serial);
+      return;
+    }
     updateVoiceStatus(state.voiceStatus === "Playback blocked" ? "Playback blocked" : "Chatterbox fallback");
     setConnectionTruth("voice", "unreachable", message.slice(0, 140));
     fallbackToBrowserSpeech(text, serial);
   } finally {
+    window.clearTimeout(timeoutId);
     if (activeSpeechAbort === abort) activeSpeechAbort = null;
   }
 }
