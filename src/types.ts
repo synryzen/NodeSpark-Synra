@@ -9,7 +9,7 @@ export interface SynraMessage {
 
 export type ModelProvider = "server" | "openAICompatible" | "localHTTP";
 export type RenderQuality = "performance" | "balanced" | "sharp";
-export type VoiceProvider = "browser" | "elevenLabs";
+export type VoiceProvider = "browser" | "elevenLabs" | "chatterbox";
 export type NodeSparkAccess = "locked" | "subscriber";
 export type SynraSkillMode = "hybrid" | "homeAssistant" | "nodeSparkHub";
 export type WakeWordMode = "off" | "local";
@@ -83,6 +83,10 @@ export interface VoiceSettings {
   elevenLabsOutputFormat: string;
   elevenLabsStability: number;
   elevenLabsSimilarityBoost: number;
+  chatterboxModel: "turbo" | "english" | "multilingual";
+  chatterboxDevice: "auto" | "cuda" | "cpu";
+  chatterboxVoicePromptPath: string;
+  chatterboxLanguageId: string;
 }
 
 export interface ProductSettings {

@@ -12,6 +12,7 @@ import urllib.error
 import base64
 import hashlib
 import secrets
+import tempfile
 import urllib.parse
 import urllib.request
 from glob import glob
@@ -32,6 +33,7 @@ STARTED_AT = time.time()
 LAST_TELEMETRY: dict[str, Any] = {}
 PENDING_CONFIRMATIONS: dict[str, dict[str, Any]] = {}
 CONFIRMATION_TTL_SECONDS = int(os.environ.get("SYNRA_CONFIRMATION_TTL_SECONDS", "45"))
+CHATTERBOX_MODELS: dict[tuple[str, str], Any] = {}
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -133,6 +135,9 @@ class SynraHandler(SimpleHTTPRequestHandler):
             return
         if self.path.startswith("/api/tts/elevenlabs"):
             self.handle_elevenlabs_tts()
+            return
+        if self.path.startswith("/api/tts/chatterbox"):
+            self.handle_chatterbox_tts()
             return
         if self.path.startswith("/api/vision/analyze"):
             self.handle_vision_analyze()
@@ -336,6 +341,38 @@ class SynraHandler(SimpleHTTPRequestHandler):
             self.send_json(200, {"ok": False, "provider": "ElevenLabs", "error": f"ElevenLabs voices are unreachable: {error.reason}."})
         except Exception as error:
             self.send_json(200, {"ok": False, "provider": "ElevenLabs", "error": str(error)})
+
+    def handle_chatterbox_tts(self) -> None:
+        try:
+            body = self.read_json_body()
+            text = str(body.get("text") or "").strip()
+            model = normalize_chatterbox_model(str(body.get("model") or os.environ.get("SYNRA_CHATTERBOX_MODEL", "turbo")))
+            device = normalize_chatterbox_device(str(body.get("device") or os.environ.get("SYNRA_CHATTERBOX_DEVICE", "auto")))
+            voice_prompt_path = str(body.get("voicePromptPath") or os.environ.get("SYNRA_CHATTERBOX_VOICE_PROMPT", "")).strip()
+            language_id = str(body.get("languageId") or os.environ.get("SYNRA_CHATTERBOX_LANGUAGE_ID", "en")).strip() or "en"
+            if not text:
+                self.send_json(200, {"ok": False, "provider": "Chatterbox", "error": "No text was provided for Chatterbox speech."})
+                return
+            audio = chatterbox_text_to_speech(
+                text=text[:1600],
+                model=model,
+                device=device,
+                voice_prompt_path=voice_prompt_path,
+                language_id=language_id,
+            )
+            self.send_json(
+                200,
+                {
+                    "ok": True,
+                    "provider": "Chatterbox",
+                    "model": model,
+                    "device": device,
+                    "mimeType": "audio/wav",
+                    "audioBase64": base64.b64encode(audio).decode("ascii"),
+                },
+            )
+        except Exception as error:
+            self.send_json(200, {"ok": False, "provider": "Chatterbox", "error": sanitize_error(error)})
 
     def handle_elevenlabs_stt(self) -> None:
         try:
@@ -1034,6 +1071,11 @@ def save_browser_supplied_secrets(body: dict[str, Any]) -> dict[str, bool]:
         saved["modelApiKey"] = True
 
     voice = body.get("voice") if isinstance(body.get("voice"), dict) else {}
+    if str(voice.get("provider") or "").strip():
+        provider = str(voice.get("provider") or "").strip()
+        if provider in {"browser", "elevenLabs", "chatterbox"}:
+            values["voiceProvider"] = provider
+            saved["voiceProvider"] = True
     if str(voice.get("elevenLabsApiKey") or "").strip() and not is_secret_placeholder(str(voice.get("elevenLabsApiKey") or "")):
         values["elevenLabsApiKey"] = str(voice.get("elevenLabsApiKey") or "").strip()
         saved["elevenLabsApiKey"] = True
@@ -1055,6 +1097,18 @@ def save_browser_supplied_secrets(body: dict[str, Any]) -> dict[str, bool]:
     if str(voice.get("elevenLabsSimilarityBoost") or "").strip():
         values["elevenLabsSimilarityBoost"] = str(voice.get("elevenLabsSimilarityBoost") or "").strip()
         saved["elevenLabsSimilarityBoost"] = True
+    if str(voice.get("chatterboxModel") or "").strip():
+        values["chatterboxModel"] = normalize_chatterbox_model(str(voice.get("chatterboxModel") or ""))
+        saved["chatterboxModel"] = True
+    if str(voice.get("chatterboxDevice") or "").strip():
+        values["chatterboxDevice"] = normalize_chatterbox_device(str(voice.get("chatterboxDevice") or ""))
+        saved["chatterboxDevice"] = True
+    if str(voice.get("chatterboxVoicePromptPath") or "").strip():
+        values["chatterboxVoicePromptPath"] = str(voice.get("chatterboxVoicePromptPath") or "").strip()
+        saved["chatterboxVoicePromptPath"] = True
+    if str(voice.get("chatterboxLanguageId") or "").strip():
+        values["chatterboxLanguageId"] = str(voice.get("chatterboxLanguageId") or "").strip()
+        saved["chatterboxLanguageId"] = True
 
     home = body.get("homeAssistant") if isinstance(body.get("homeAssistant"), dict) else {}
     if str(home.get("url") or "").strip():
@@ -1131,10 +1185,11 @@ def settings_public_status() -> dict[str, Any]:
     voice_id = os.environ.get("SYNRA_ELEVENLABS_VOICE_ID", "").strip() or local.get("elevenLabsVoiceId", "").strip()
     model_id = os.environ.get("SYNRA_ELEVENLABS_MODEL_ID", "").strip() or local.get("elevenLabsModelId", "").strip()
     output_format = os.environ.get("SYNRA_ELEVENLABS_OUTPUT_FORMAT", "").strip() or local.get("elevenLabsOutputFormat", "").strip()
+    selected_provider = local.get("voiceProvider", "").strip()
     return {
         "ok": True,
         "voice": {
-            "provider": "elevenLabs" if (voice_id or local.get("elevenLabsApiKey") or os.environ.get("SYNRA_ELEVENLABS_API_KEY", "").strip()) else "",
+            "provider": selected_provider if selected_provider in {"browser", "elevenLabs", "chatterbox"} else "elevenLabs" if (voice_id or local.get("elevenLabsApiKey") or os.environ.get("SYNRA_ELEVENLABS_API_KEY", "").strip()) else "",
             "elevenLabsApiKeyConfigured": bool(os.environ.get("SYNRA_ELEVENLABS_API_KEY", "").strip() or local.get("elevenLabsApiKey")),
             "elevenLabsVoiceId": voice_id,
             "elevenLabsVoiceName": local.get("elevenLabsVoiceName", "").strip(),
@@ -1142,6 +1197,10 @@ def settings_public_status() -> dict[str, Any]:
             "elevenLabsOutputFormat": output_format or "mp3_44100_128",
             "elevenLabsStability": local.get("elevenLabsStability", "").strip(),
             "elevenLabsSimilarityBoost": local.get("elevenLabsSimilarityBoost", "").strip(),
+            "chatterboxModel": normalize_chatterbox_model(local.get("chatterboxModel", "").strip() or os.environ.get("SYNRA_CHATTERBOX_MODEL", "turbo")),
+            "chatterboxDevice": normalize_chatterbox_device(local.get("chatterboxDevice", "").strip() or os.environ.get("SYNRA_CHATTERBOX_DEVICE", "auto")),
+            "chatterboxVoicePromptPath": local.get("chatterboxVoicePromptPath", "").strip() or os.environ.get("SYNRA_CHATTERBOX_VOICE_PROMPT", "").strip(),
+            "chatterboxLanguageId": local.get("chatterboxLanguageId", "").strip() or os.environ.get("SYNRA_CHATTERBOX_LANGUAGE_ID", "en").strip() or "en",
         },
         "homeAssistant": {
             "enabled": bool(home_url and home_token_configured),
@@ -1951,6 +2010,95 @@ def post_json(endpoint: str, payload: dict[str, Any], api_key: str) -> dict[str,
         request.add_header("Authorization", f"Bearer {api_key}")
     with urllib.request.urlopen(request, timeout=float(os.environ.get("SYNRA_MODEL_TIMEOUT_SECONDS", "45"))) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def normalize_chatterbox_model(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized in {"english", "multilingual"}:
+        return normalized
+    return "turbo"
+
+
+def normalize_chatterbox_device(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized in {"cuda", "cpu"}:
+        return normalized
+    return "auto"
+
+
+def chatterbox_model_class(model: str) -> Any:
+    try:
+        if model == "turbo":
+            try:
+                from chatterbox.tts import ChatterboxTurboTTS
+
+                return ChatterboxTurboTTS
+            except ImportError:
+                from chatterbox.tts import ChatterboxTTS
+
+                return ChatterboxTTS
+        if model == "multilingual":
+            from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+
+            return ChatterboxMultilingualTTS
+        from chatterbox.tts import ChatterboxTTS
+
+        return ChatterboxTTS
+    except ModuleNotFoundError as error:
+        raise RuntimeError("Chatterbox is not installed. Install it on the Jetson with: pip install chatterbox-tts") from error
+
+
+def resolve_chatterbox_device(device: str) -> str:
+    if device != "auto":
+        return device
+    try:
+        import torch
+
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except Exception:
+        return "cpu"
+
+
+def load_chatterbox_model(model: str, device: str) -> Any:
+    resolved_device = resolve_chatterbox_device(device)
+    key = (model, resolved_device)
+    if key not in CHATTERBOX_MODELS:
+        model_class = chatterbox_model_class(model)
+        CHATTERBOX_MODELS[key] = model_class.from_pretrained(device=resolved_device)
+    return CHATTERBOX_MODELS[key]
+
+
+def chatterbox_text_to_speech(*, text: str, model: str, device: str, voice_prompt_path: str, language_id: str) -> bytes:
+    tts = load_chatterbox_model(model, device)
+    kwargs: dict[str, Any] = {}
+    if voice_prompt_path:
+        path = Path(voice_prompt_path).expanduser()
+        if not path.exists():
+            raise RuntimeError(f"Chatterbox voice prompt was not found: {path}")
+        kwargs["audio_prompt_path"] = str(path)
+    if model == "multilingual" and language_id:
+        kwargs["language_id"] = language_id
+    wav = tts.generate(text, **kwargs)
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp:
+        temp_path = Path(temp.name)
+    try:
+        try:
+            import torchaudio
+
+            torchaudio.save(str(temp_path), wav, tts.sr)
+        except Exception:
+            import soundfile as sf
+
+            data = wav.detach().cpu().numpy()
+            if data.ndim == 2:
+                data = data[0]
+            sf.write(str(temp_path), data, int(tts.sr), format="WAV")
+        return temp_path.read_bytes()
+    finally:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 def elevenlabs_text_to_speech(

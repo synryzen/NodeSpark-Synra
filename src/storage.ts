@@ -41,7 +41,11 @@ export function loadVoiceSettings(): VoiceSettings {
     elevenLabsModelId: "eleven_multilingual_v2",
     elevenLabsOutputFormat: "mp3_44100_128",
     elevenLabsStability: 0.48,
-    elevenLabsSimilarityBoost: 0.78
+    elevenLabsSimilarityBoost: 0.78,
+    chatterboxModel: "turbo",
+    chatterboxDevice: "auto",
+    chatterboxVoicePromptPath: "",
+    chatterboxLanguageId: "en"
   });
 }
 

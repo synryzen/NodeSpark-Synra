@@ -271,6 +271,10 @@ type PublicServerSettings = {
     elevenLabsOutputFormat?: string;
     elevenLabsStability?: string;
     elevenLabsSimilarityBoost?: string;
+    chatterboxModel?: string;
+    chatterboxDevice?: string;
+    chatterboxVoicePromptPath?: string;
+    chatterboxLanguageId?: string;
   };
   homeAssistant?: {
     enabled?: boolean;
@@ -643,6 +647,7 @@ app.innerHTML = `
           <select id="voiceProviderInput">
             <option value="browser">Browser speech</option>
             <option value="elevenLabs">ElevenLabs</option>
+            <option value="chatterbox">Chatterbox local</option>
           </select>
         </label>
         <label>
@@ -687,6 +692,31 @@ app.innerHTML = `
           Similarity boost
           <input id="elevenLabsSimilarityInput" type="number" min="0" max="1" step="0.01" />
         </label>
+        <label>
+          Chatterbox model
+          <select id="chatterboxModelInput">
+            <option value="turbo">Turbo - fastest local voice</option>
+            <option value="english">English - expressive local voice</option>
+            <option value="multilingual">Multilingual</option>
+          </select>
+        </label>
+        <label>
+          Chatterbox device
+          <select id="chatterboxDeviceInput">
+            <option value="auto">Auto</option>
+            <option value="cuda">CUDA / Jetson GPU</option>
+            <option value="cpu">CPU</option>
+          </select>
+        </label>
+        <label>
+          Chatterbox voice prompt path
+          <input id="chatterboxVoicePromptPathInput" placeholder="/home/matthew/synra-voice.wav" />
+        </label>
+        <label>
+          Chatterbox language
+          <input id="chatterboxLanguageIdInput" placeholder="en" />
+        </label>
+        <p id="chatterboxVoiceStatus" class="settings-note">Chatterbox runs locally on the Jetson. Install the local model once, then select Chatterbox as Synra's voice.</p>
       </section>
       <section class="settings-panel" data-settings-panel="memory" role="tabpanel" hidden>
         <h3>Memory</h3>
@@ -1103,6 +1133,11 @@ const elevenLabsModelIdInput = must<HTMLElement, HTMLInputElement>("elevenLabsMo
 const elevenLabsOutputFormatInput = must<HTMLElement, HTMLInputElement>("elevenLabsOutputFormatInput");
 const elevenLabsStabilityInput = must<HTMLElement, HTMLInputElement>("elevenLabsStabilityInput");
 const elevenLabsSimilarityInput = must<HTMLElement, HTMLInputElement>("elevenLabsSimilarityInput");
+const chatterboxModelInput = must<HTMLElement, HTMLSelectElement>("chatterboxModelInput");
+const chatterboxDeviceInput = must<HTMLElement, HTMLSelectElement>("chatterboxDeviceInput");
+const chatterboxVoicePromptPathInput = must<HTMLElement, HTMLInputElement>("chatterboxVoicePromptPathInput");
+const chatterboxLanguageIdInput = must<HTMLElement, HTMLInputElement>("chatterboxLanguageIdInput");
+const chatterboxVoiceStatusEl = must<HTMLElement, HTMLElement>("chatterboxVoiceStatus");
 const discoverHomeAssistantButton = must<HTMLElement, HTMLButtonElement>("discoverHomeAssistantButton");
 const testHomeAssistantButton = must<HTMLElement, HTMLButtonElement>("testHomeAssistantButton");
 const testVoiceButton = must<HTMLElement, HTMLButtonElement>("testVoiceButton");
@@ -2449,7 +2484,12 @@ function populateVoiceSettingsInputs(): void {
   elevenLabsOutputFormatInput.value = state.voiceSettings.elevenLabsOutputFormat || "mp3_44100_128";
   elevenLabsStabilityInput.value = String(state.voiceSettings.elevenLabsStability ?? 0.48);
   elevenLabsSimilarityInput.value = String(state.voiceSettings.elevenLabsSimilarityBoost ?? 0.78);
+  chatterboxModelInput.value = resolveChatterboxModel(state.voiceSettings.chatterboxModel);
+  chatterboxDeviceInput.value = resolveChatterboxDevice(state.voiceSettings.chatterboxDevice);
+  chatterboxVoicePromptPathInput.value = state.voiceSettings.chatterboxVoicePromptPath || "";
+  chatterboxLanguageIdInput.value = state.voiceSettings.chatterboxLanguageId || "en";
   updateElevenLabsVoiceStatus(elevenLabsVoiceStatusText());
+  updateChatterboxVoiceStatus(chatterboxVoiceStatusText());
 }
 
 function readVoiceSettingsFromInputs(): VoiceSettings {
@@ -2465,7 +2505,11 @@ function readVoiceSettingsFromInputs(): VoiceSettings {
     elevenLabsModelId: elevenLabsModelIdInput.value.trim() || "eleven_multilingual_v2",
     elevenLabsOutputFormat: elevenLabsOutputFormatInput.value.trim() || "mp3_44100_128",
     elevenLabsStability: clampUnit(Number(elevenLabsStabilityInput.value), 0.48),
-    elevenLabsSimilarityBoost: clampUnit(Number(elevenLabsSimilarityInput.value), 0.78)
+    elevenLabsSimilarityBoost: clampUnit(Number(elevenLabsSimilarityInput.value), 0.78),
+    chatterboxModel: resolveChatterboxModel(chatterboxModelInput.value),
+    chatterboxDevice: resolveChatterboxDevice(chatterboxDeviceInput.value),
+    chatterboxVoicePromptPath: chatterboxVoicePromptPathInput.value.trim(),
+    chatterboxLanguageId: chatterboxLanguageIdInput.value.trim() || "en"
   };
 }
 
@@ -2558,7 +2602,9 @@ function populateElevenLabsVoiceSelect(): void {
 }
 
 function elevenLabsVoiceStatusText(): string {
-  if (resolveVoiceProvider(voiceProviderInput.value) !== "elevenLabs") return "Browser speech is selected.";
+  const provider = resolveVoiceProvider(voiceProviderInput.value);
+  if (provider === "chatterbox") return "Chatterbox local voice is selected.";
+  if (provider !== "elevenLabs") return "Browser speech is selected.";
   const keyReady = Boolean(elevenLabsApiKeyInput.value.trim() || state.voiceSettings.elevenLabsApiKey.trim());
   if (!keyReady) return "Paste an ElevenLabs API key, then load voices.";
   if (!elevenLabsVoiceIdInput.value.trim()) return "Load voices and choose one, or paste a voice ID.";
@@ -2568,6 +2614,17 @@ function elevenLabsVoiceStatusText(): string {
 
 function updateElevenLabsVoiceStatus(message: string): void {
   elevenLabsVoiceStatusEl.textContent = message;
+}
+
+function chatterboxVoiceStatusText(): string {
+  if (resolveVoiceProvider(voiceProviderInput.value) !== "chatterbox") return "Chatterbox is installed only when selected as the local voice provider.";
+  const model = resolveChatterboxModel(chatterboxModelInput.value);
+  const device = resolveChatterboxDevice(chatterboxDeviceInput.value);
+  return `Chatterbox ${model} will synthesize locally on ${device === "auto" ? "the best available device" : device.toUpperCase()}.`;
+}
+
+function updateChatterboxVoiceStatus(message: string): void {
+  chatterboxVoiceStatusEl.textContent = message;
 }
 
 function populateProductSettingsInputs(): void {
@@ -2775,7 +2832,11 @@ function exportSanitizedBackupFromSettings(): void {
         provider: resolveVoiceProvider(voiceProviderInput.value),
         browserVoiceName: state.voiceSettings.browserVoiceName,
         elevenLabsVoiceIdConfigured: secretConfigured(elevenLabsVoiceIdInput.value.trim()),
-        elevenLabsApiKeyConfigured: secretConfigured(elevenLabsApiKeyInput.value.trim() || state.voiceSettings.elevenLabsApiKey)
+        elevenLabsApiKeyConfigured: secretConfigured(elevenLabsApiKeyInput.value.trim() || state.voiceSettings.elevenLabsApiKey),
+        chatterboxModel: resolveChatterboxModel(chatterboxModelInput.value),
+        chatterboxDevice: resolveChatterboxDevice(chatterboxDeviceInput.value),
+        chatterboxVoicePromptPathConfigured: Boolean(chatterboxVoicePromptPathInput.value.trim()),
+        chatterboxLanguageId: chatterboxLanguageIdInput.value.trim() || "en"
       },
       homeAssistant: publicHomeAssistantSettings(),
       product: publicProductSettings(),
@@ -2885,13 +2946,18 @@ async function saveServerManagedSecrets(settings: ModelSettings, voice: VoiceSet
     body: JSON.stringify({
       model: { apiKey: settings.apiKey },
       voice: {
+        provider: voice.provider,
         elevenLabsApiKey: voice.elevenLabsApiKey,
         elevenLabsVoiceId: voice.elevenLabsVoiceId,
         elevenLabsVoiceName: voice.elevenLabsVoiceName,
         elevenLabsModelId: voice.elevenLabsModelId,
         elevenLabsOutputFormat: voice.elevenLabsOutputFormat,
         elevenLabsStability: String(voice.elevenLabsStability),
-        elevenLabsSimilarityBoost: String(voice.elevenLabsSimilarityBoost)
+        elevenLabsSimilarityBoost: String(voice.elevenLabsSimilarityBoost),
+        chatterboxModel: voice.chatterboxModel,
+        chatterboxDevice: voice.chatterboxDevice,
+        chatterboxVoicePromptPath: voice.chatterboxVoicePromptPath,
+        chatterboxLanguageId: voice.chatterboxLanguageId
       },
       product: {
         nodeSparkHubUrl: product.nodeSparkHubUrl,
@@ -2989,7 +3055,11 @@ function applyDurableServerSettings(savedSettings: DurableServerSettings | undef
       elevenLabsModelId: String(savedSettings.voice.elevenLabsModelId ?? state.voiceSettings.elevenLabsModelId),
       elevenLabsOutputFormat: String(savedSettings.voice.elevenLabsOutputFormat ?? state.voiceSettings.elevenLabsOutputFormat),
       elevenLabsStability: clampUnit(Number(savedSettings.voice.elevenLabsStability), state.voiceSettings.elevenLabsStability),
-      elevenLabsSimilarityBoost: clampUnit(Number(savedSettings.voice.elevenLabsSimilarityBoost), state.voiceSettings.elevenLabsSimilarityBoost)
+      elevenLabsSimilarityBoost: clampUnit(Number(savedSettings.voice.elevenLabsSimilarityBoost), state.voiceSettings.elevenLabsSimilarityBoost),
+      chatterboxModel: resolveChatterboxModel(String(savedSettings.voice.chatterboxModel ?? state.voiceSettings.chatterboxModel)),
+      chatterboxDevice: resolveChatterboxDevice(String(savedSettings.voice.chatterboxDevice ?? state.voiceSettings.chatterboxDevice)),
+      chatterboxVoicePromptPath: String(savedSettings.voice.chatterboxVoicePromptPath ?? state.voiceSettings.chatterboxVoicePromptPath),
+      chatterboxLanguageId: String(savedSettings.voice.chatterboxLanguageId ?? state.voiceSettings.chatterboxLanguageId) || "en"
     };
     saveVoiceSettings(state.voiceSettings);
   }
@@ -3079,16 +3149,21 @@ async function hydrateServerManagedSettings(): Promise<void> {
       const stability = Number(voice.elevenLabsStability);
       const similarity = Number(voice.elevenLabsSimilarityBoost);
       const hasServerElevenLabs = voice.elevenLabsApiKeyConfigured === true || Boolean(voice.elevenLabsVoiceId?.trim());
+      const serverProvider = resolveVoiceProvider(voice.provider || (hasServerElevenLabs ? "elevenLabs" : state.voiceSettings.provider));
       state.voiceSettings = {
         ...state.voiceSettings,
-        provider: hasServerElevenLabs ? "elevenLabs" : state.voiceSettings.provider,
+        provider: serverProvider,
         elevenLabsApiKey: voice.elevenLabsApiKeyConfigured ? SERVER_SECRET_SENTINEL : state.voiceSettings.elevenLabsApiKey,
         elevenLabsVoiceId: voice.elevenLabsVoiceId?.trim() || state.voiceSettings.elevenLabsVoiceId,
         elevenLabsVoiceName: voice.elevenLabsVoiceName?.trim() || state.voiceSettings.elevenLabsVoiceName,
         elevenLabsModelId: voice.elevenLabsModelId?.trim() || state.voiceSettings.elevenLabsModelId,
         elevenLabsOutputFormat: voice.elevenLabsOutputFormat?.trim() || state.voiceSettings.elevenLabsOutputFormat,
         elevenLabsStability: Number.isFinite(stability) ? stability : state.voiceSettings.elevenLabsStability,
-        elevenLabsSimilarityBoost: Number.isFinite(similarity) ? similarity : state.voiceSettings.elevenLabsSimilarityBoost
+        elevenLabsSimilarityBoost: Number.isFinite(similarity) ? similarity : state.voiceSettings.elevenLabsSimilarityBoost,
+        chatterboxModel: resolveChatterboxModel(voice.chatterboxModel?.trim() || state.voiceSettings.chatterboxModel),
+        chatterboxDevice: resolveChatterboxDevice(voice.chatterboxDevice?.trim() || state.voiceSettings.chatterboxDevice),
+        chatterboxVoicePromptPath: voice.chatterboxVoicePromptPath?.trim() || state.voiceSettings.chatterboxVoicePromptPath,
+        chatterboxLanguageId: voice.chatterboxLanguageId?.trim() || state.voiceSettings.chatterboxLanguageId || "en"
       };
       saveVoiceSettings(state.voiceSettings);
     }
@@ -3217,7 +3292,18 @@ function normalizeHomeAssistantEntities(entities: HomeAssistantEntity[]): HomeAs
 }
 
 function resolveVoiceProvider(provider: string | undefined): VoiceProvider {
-  return provider === "elevenLabs" ? "elevenLabs" : "browser";
+  if (provider === "elevenLabs" || provider === "chatterbox") return provider;
+  return "browser";
+}
+
+function resolveChatterboxModel(value: string | undefined): VoiceSettings["chatterboxModel"] {
+  if (value === "english" || value === "multilingual") return value;
+  return "turbo";
+}
+
+function resolveChatterboxDevice(value: string | undefined): VoiceSettings["chatterboxDevice"] {
+  if (value === "cuda" || value === "cpu") return value;
+  return "auto";
 }
 
 function clampUnit(value: number, fallback: number): number {
@@ -4664,11 +4750,19 @@ function speak(text: string): void {
     void playElevenLabsSpeech(text, serial);
     return;
   }
+  if (canUseChatterboxSpeech()) {
+    void playChatterboxSpeech(text, serial);
+    return;
+  }
   fallbackToBrowserSpeech(text, serial);
 }
 
 function canUseElevenLabsSpeech(settings = state.voiceSettings): boolean {
   return settings.provider === "elevenLabs" && Boolean(settings.elevenLabsVoiceId.trim());
+}
+
+function canUseChatterboxSpeech(settings = state.voiceSettings): boolean {
+  return settings.provider === "chatterbox";
 }
 
 async function unlockAudioPlayback(): Promise<boolean> {
@@ -4751,6 +4845,72 @@ async function playElevenLabsSpeech(text: string, serial: number): Promise<void>
   } catch (error) {
     if (abort.signal.aborted || serial !== speechSerial) return;
     updateVoiceStatus(state.voiceStatus === "Playback blocked" ? "Playback blocked" : "ElevenLabs fallback");
+    fallbackToBrowserSpeech(text, serial);
+  } finally {
+    if (activeSpeechAbort === abort) activeSpeechAbort = null;
+  }
+}
+
+async function playChatterboxSpeech(text: string, serial: number): Promise<void> {
+  clearSpeechFallback();
+  const abort = new AbortController();
+  activeSpeechAbort = abort;
+  updateVoiceStatus("Preparing Chatterbox");
+  setSynraState("speaking", text);
+  armSpeechFallback(text, serial, "fallback");
+  try {
+    const response = await fetch("/api/tts/chatterbox", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: abort.signal,
+      body: JSON.stringify({
+        text,
+        model: state.voiceSettings.chatterboxModel,
+        device: state.voiceSettings.chatterboxDevice,
+        voicePromptPath: state.voiceSettings.chatterboxVoicePromptPath,
+        languageId: state.voiceSettings.chatterboxLanguageId
+      })
+    });
+    const data = await response.json() as {
+      ok?: boolean;
+      error?: string;
+      audioBase64?: string;
+      mimeType?: string;
+      model?: string;
+      device?: string;
+    };
+    if (serial !== speechSerial) return;
+    if (!data.ok || !data.audioBase64) throw new Error(data.error || "Chatterbox returned no audio.");
+    const audioUrl = URL.createObjectURL(base64ToBlob(data.audioBase64, data.mimeType || "audio/wav"));
+    const audio = new Audio(audioUrl);
+    activeSpeechAudio = audio;
+    audio.onplay = () => {
+      if (serial !== speechSerial) return;
+      clearSpeechFallback();
+      updateVoiceStatus("Chatterbox speaking");
+      startSpeechLipSync(text, serial, audio, null);
+    };
+    audio.onended = () => {
+      if (activeSpeechAudio === audio) activeSpeechAudio = null;
+      URL.revokeObjectURL(audioUrl);
+      if (serial === speechSerial) finishSpeech(text);
+    };
+    audio.onerror = () => {
+      if (activeSpeechAudio === audio) activeSpeechAudio = null;
+      URL.revokeObjectURL(audioUrl);
+      if (serial === speechSerial) fallbackToBrowserSpeech(text, serial);
+    };
+    await audio.play().catch((error) => {
+      updateVoiceStatus("Playback blocked");
+      setConnectionTruth("voice", "permission-needed", "Playback blocked by the browser or output device");
+      throw error;
+    });
+    setConnectionTruth("voice", "ready", `Chatterbox ${data.model || state.voiceSettings.chatterboxModel} voice playing locally`);
+  } catch (error) {
+    if (abort.signal.aborted || serial !== speechSerial) return;
+    const message = error instanceof Error ? error.message : "Chatterbox speech failed.";
+    updateVoiceStatus(state.voiceStatus === "Playback blocked" ? "Playback blocked" : "Chatterbox fallback");
+    setConnectionTruth("voice", "unreachable", message.slice(0, 140));
     fallbackToBrowserSpeech(text, serial);
   } finally {
     if (activeSpeechAbort === abort) activeSpeechAbort = null;
@@ -5493,6 +5653,13 @@ function refreshVoiceStatus(): void {
     setConnectionTruth("voice", configured ? "ready" : "not-configured", configured ? `ElevenLabs configured${voiceName ? `: ${voiceName}` : ""}` : "Add ElevenLabs API key and choose a voice");
     return;
   }
+  if (state.voiceSettings.provider === "chatterbox") {
+    updateVoiceStatus("Chatterbox selected");
+    updateElevenLabsVoiceStatus(elevenLabsVoiceStatusText());
+    updateChatterboxVoiceStatus(chatterboxVoiceStatusText());
+    setConnectionTruth("voice", "configured", `Chatterbox ${state.voiceSettings.chatterboxModel} selected for local Jetson speech`);
+    return;
+  }
   const canSpeak = "speechSynthesis" in window;
   const canListen = Boolean(speechRecognitionConstructor() || canUseServerTranscription());
   if (canSpeak && canListen) updateVoiceStatus("Speak + listen");
@@ -5500,6 +5667,7 @@ function refreshVoiceStatus(): void {
   else if (canListen) updateVoiceStatus("Listen ready");
   else updateVoiceStatus("Text ready");
   updateElevenLabsVoiceStatus(elevenLabsVoiceStatusText());
+  updateChatterboxVoiceStatus(chatterboxVoiceStatusText());
   const selected = selectedBrowserVoice();
   const browserDetail = selected ? `Browser voice path available: ${selected.name}` : "Browser voice path available";
   setConnectionTruth("voice", canSpeak || canListen ? "ready" : "configured", canSpeak || canListen ? browserDetail : "Text input is available");
@@ -6455,6 +6623,8 @@ async function runVoiceDiagnostics(): Promise<void> {
     ? canUseElevenLabsSpeech()
       ? `ElevenLabs configured${state.voiceSettings.elevenLabsVoiceName ? ` with ${state.voiceSettings.elevenLabsVoiceName}` : ""}. Server-managed API keys are supported.`
       : "ElevenLabs needs a selected voice."
+    : state.voiceSettings.provider === "chatterbox"
+    ? `Chatterbox local voice selected: ${state.voiceSettings.chatterboxModel} on ${state.voiceSettings.chatterboxDevice}.`
     : "Browser speech is selected.";
   const message = `Voice diagnostics: ${provider}. Audio unlock ${audioReady ? "ready" : "blocked"}. ${devices} ${browserState} ${elevenLabsState}`;
   updateVoiceStatus(audioReady ? "Voice diagnostics" : "Playback blocked");
@@ -6475,20 +6645,32 @@ async function testVoiceConnection(): Promise<void> {
   try {
     await unlockAudioPlayback();
     const elevenReady = canUseElevenLabsSpeech();
-    speak(elevenReady ? "Synra voice test. ElevenLabs voice is connected." : "Synra voice test. Browser speech is ready.");
-    setConnectionTruth("voice", state.voiceSettings.provider === "elevenLabs" && !elevenReady ? "not-configured" : "ready", elevenReady ? "ElevenLabs test started" : state.voiceSettings.provider === "elevenLabs" ? "ElevenLabs fallback needs a selected voice" : "Browser speech test started");
-    pushMessage("synra", elevenReady ? "Voice test started with ElevenLabs." : state.voiceSettings.provider === "elevenLabs" ? "ElevenLabs needs a selected voice. I started browser speech fallback instead." : "Voice test started with browser speech.");
+    const chatterboxReady = canUseChatterboxSpeech();
+    const testText = elevenReady
+      ? "Synra voice test. ElevenLabs voice is connected."
+      : chatterboxReady
+      ? "Synra voice test. Chatterbox local voice is connected."
+      : "Synra voice test. Browser speech is ready.";
+    speak(testText);
+    setConnectionTruth(
+      "voice",
+      state.voiceSettings.provider === "elevenLabs" && !elevenReady ? "not-configured" : "ready",
+      elevenReady ? "ElevenLabs test started" : chatterboxReady ? "Chatterbox test started" : state.voiceSettings.provider === "elevenLabs" ? "ElevenLabs fallback needs a selected voice" : "Browser speech test started"
+    );
+    pushMessage("synra", elevenReady ? "Voice test started with ElevenLabs." : chatterboxReady ? "Voice test started with Chatterbox." : state.voiceSettings.provider === "elevenLabs" ? "ElevenLabs needs a selected voice. I started browser speech fallback instead." : "Voice test started with browser speech.");
   } finally {
     window.setTimeout(() => {
       testVoiceButton.disabled = false;
       testVoiceButton.textContent = previousText;
-    }, state.voiceSettings.provider === "elevenLabs" ? 1800 : 600);
+    }, state.voiceSettings.provider === "browser" ? 600 : 1800);
     if (previousSettings.provider !== state.voiceSettings.provider) refreshVoiceStatus();
   }
 }
 
 function voiceProviderLabel(provider: VoiceProvider): string {
-  return provider === "elevenLabs" ? "ElevenLabs" : "browser speech";
+  if (provider === "elevenLabs") return "ElevenLabs";
+  if (provider === "chatterbox") return "Chatterbox";
+  return "browser speech";
 }
 
 async function refreshServerModelStatus(): Promise<void> {

@@ -377,6 +377,16 @@ const elevenLabsVoiceSettingsAreAvailable =
   serverScript.includes("handle_elevenlabs_tts") &&
   serverScript.includes("xi-api-key") &&
   serverScript.includes("audioBase64");
+const chatterboxVoiceSettingsAreAvailable =
+  mainScript.includes('value="chatterbox"') &&
+  mainScript.includes('id="chatterboxModelInput"') &&
+  mainScript.includes("playChatterboxSpeech") &&
+  mainScript.includes("/api/tts/chatterbox") &&
+  mainScript.includes("canUseChatterboxSpeech") &&
+  serverScript.includes("/api/tts/chatterbox") &&
+  serverScript.includes("handle_chatterbox_tts") &&
+  serverScript.includes("chatterbox_text_to_speech") &&
+  serverScript.includes("chatterbox-tts");
 const standaloneSpeechLipSyncIsDriven =
   mainScript.includes("visemesForSpeechPosition") &&
   mainScript.includes("startSpeechLipSync") &&
@@ -545,6 +555,7 @@ const result = {
     jetsonOpsHelpersAreAvailable &&
     voiceReliabilityControlsAreAvailable &&
     elevenLabsVoiceSettingsAreAvailable &&
+    chatterboxVoiceSettingsAreAvailable &&
     standaloneSpeechLipSyncIsDriven &&
     browserFallbackVoiceIsDeliberate &&
     productAccessSplitIsExplicit &&
@@ -631,7 +642,8 @@ const result = {
     "Jetson operations include health, log export, and Mac dev launch helpers",
     "voice controls include immediate stop and audio diagnostics",
     "ElevenLabs voice settings and server-side TTS proxy are wired with browser fallback",
-    "Standalone drives Hub-style phoneme lip sync while ElevenLabs or browser voice is talking",
+    "Chatterbox local voice settings and server-side TTS proxy are wired with browser fallback",
+    "Standalone drives Hub-style phoneme lip sync while ElevenLabs, Chatterbox, or browser voice is talking",
     "browser speech fallback deliberately chooses and exposes a system voice",
     "ElevenLabs voices can be loaded and selected by name",
     "voice diagnostics include audio unlock and playback-blocked feedback",
