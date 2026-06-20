@@ -1432,20 +1432,24 @@ def sanitize_telemetry(body: dict[str, Any]) -> dict[str, Any]:
         "wakeWordStatus",
         "wakeWordLastHeard",
         "wakeWordLastError",
+        "serverTranscriptionStatus",
     }
     telemetry: dict[str, Any] = {"receivedAt": time.time()}
     for key in allowed_strings:
         value = body.get(key)
         if value is not None:
             telemetry[key] = str(value)[:80]
-    for key in {"fps", "targetFps", "renderScale", "renderWidth", "renderHeight", "messageCount"}:
+    for key in {"fps", "targetFps", "renderScale", "renderWidth", "renderHeight", "messageCount", "serverTranscriptionFailureCount"}:
         value = body.get(key)
         if isinstance(value, (int, float)):
             telemetry[key] = round(float(value), 2)
-    for key in {"wakeWordMicActive", "serverWakeWordActive"}:
+    for key in {"wakeWordMicActive", "serverWakeWordActive", "serverTranscriptionBackoffActive"}:
         value = body.get(key)
         if isinstance(value, bool):
             telemetry[key] = value
+    identity = body.get("identityReadiness")
+    if isinstance(identity, dict):
+        telemetry["identityReadiness"] = strip_secret_fields(identity)
     return telemetry
 
 

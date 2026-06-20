@@ -17,6 +17,7 @@ export type ScreenTimeoutMinutes = 10 | 15 | 30 | 60 | 0;
 export type HomeAssistantConfirmationPolicy = "alwaysConfirm" | "trustedLights" | "highRiskOnly";
 export type VoiceMatchMode = "off" | "knownUsers" | "ownerOnly";
 export type VoiceMatchSensitivity = "relaxed" | "balanced" | "strict";
+export type SynraFacePose = "center" | "turnLeft" | "turnRight" | "lookUp" | "lookDown" | "rollLeft" | "rollRight";
 
 export interface ModelSettings {
   provider: ModelProvider;
@@ -53,6 +54,16 @@ export interface VoicePrintSample {
   features: number[];
   quality: number;
   createdAt: string;
+}
+
+export interface SynraIdentityReadiness {
+  faceSampleCount: number;
+  voiceSampleCount: number;
+  requiredFacePoseCount: number;
+  requiredVoiceSampleCount: number;
+  faceReady: boolean;
+  voiceReady: boolean;
+  overallReady: boolean;
 }
 
 export interface CompanionSettings {

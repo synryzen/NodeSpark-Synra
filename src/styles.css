@@ -1533,6 +1533,10 @@ dialog::backdrop {
   font-weight: 750;
 }
 
+.known-user-card .identity-readiness {
+  color: #7dd3fc;
+}
+
 .about-dialog {
   display: grid;
   gap: 14px;

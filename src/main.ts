@@ -8,7 +8,8 @@ import type { SynraActionName, SynraMode } from "./hub-runtime/types/avatar";
 import { askModel, classifySynraRequest, localSynraReply } from "./model-client";
 import { SynraMotionPlayer, type SynraMotionClipSpec } from "./motion-player";
 import { SERVER_SECRET_SENTINEL, loadCompanionSettings, loadHomeAssistantSettings, loadMemory, loadModelSettings, loadProductSettings, loadVisualSettings, loadVoiceSettings, saveCompanionSettings, saveHomeAssistantSettings, saveMemory, saveModelSettings, saveProductSettings, saveVisualSettings, saveVoiceSettings } from "./storage";
-import type { CompanionSettings, HomeAssistantConfirmationPolicy, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraMemory, SynraMessage, SynraSkillMode, SynraState, VisualSettings, VoiceMatchMode, VoiceMatchSensitivity, VoicePrintSample, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
+import type { CompanionSettings, HomeAssistantConfirmationPolicy, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraIdentityReadiness, SynraMemory, SynraMessage, SynraSkillMode, SynraState, VisualSettings, VoiceMatchMode, VoiceMatchSensitivity, VoicePrintSample, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
+import { identityReadinessForUser } from "./identity";
 import { estimateSpeechDurationMs, visemesForSpeechPosition } from "./hub-runtime/services/speech-output";
 import packageInfo from "../package.json";
 
@@ -299,8 +300,19 @@ type DurableServerSettings = {
   homeAssistant?: Partial<Omit<HomeAssistantSettings, "token">>;
   product?: Partial<Omit<ProductSettings, "nodeSparkDeviceToken">>;
   visual?: Partial<VisualSettings>;
-  companion?: Partial<CompanionSettings>;
+  companion?: Partial<CompanionSettings> & { identityReadiness?: SynraIdentitySummary };
   memory?: Partial<SynraMemory>;
+};
+type SynraIdentitySummary = {
+  readyUserCount: number;
+  enrolledUserCount: number;
+  users: Array<{
+    id: string;
+    name: string;
+    relationship: string;
+    recognitionEnabled: boolean;
+    readiness: SynraIdentityReadiness;
+  }>;
 };
 let hubAvatarRuntime: SynraAvatarRuntime | null = null;
 let hubMotionClips: SynraMotionClipSpec[] = [];
@@ -1202,6 +1214,9 @@ let pendingVoicePrint: VoicePrintSample | null = null;
 let wakeWordMicActive = false;
 let wakeWordLastHeard = "";
 let wakeWordLastError = "";
+let serverTranscriptionFailureCount = 0;
+let serverTranscriptionDisabledUntil = 0;
+let serverTranscriptionStatus: "ready" | "degraded" | "unavailable" = "ready";
 
 if (USE_HUB_AVATAR_RUNTIME) {
   hubAvatarRuntime = new SynraAvatarRuntime({
@@ -1868,6 +1883,32 @@ function normalizeKnownUserProfiles(users: KnownUserProfile[]): KnownUserProfile
   })).filter((user) => user.name).slice(0, 12);
 }
 
+function identityReadinessSummary(): SynraIdentitySummary {
+  const users = state.companionSettings.knownUsers.map((user) => ({
+    id: user.id,
+    name: user.name,
+    relationship: user.relationship,
+    recognitionEnabled: user.recognitionEnabled,
+    readiness: identityReadinessForUser(user)
+  }));
+  return {
+    readyUserCount: users.filter((user) => user.recognitionEnabled && user.readiness.overallReady).length,
+    enrolledUserCount: users.filter((user) => user.recognitionEnabled && (user.readiness.faceSampleCount > 0 || user.readiness.voiceSampleCount > 0)).length,
+    users
+  };
+}
+
+function identityReadinessLabel(readiness: SynraIdentityReadiness): string {
+  if (readiness.overallReady) return "Face and voice ready";
+  const face = readiness.faceReady
+    ? "face ready"
+    : `face ${readiness.faceSampleCount}/${readiness.requiredFacePoseCount}`;
+  const voice = readiness.voiceReady
+    ? "voice ready"
+    : `voice ${readiness.voiceSampleCount}/${readiness.requiredVoiceSampleCount}`;
+  return `${face} · ${voice}`;
+}
+
 function normalizeScreenTimeout(value: string | number): ScreenTimeoutMinutes {
   const numeric = Number(value);
   return numeric === 10 || numeric === 15 || numeric === 30 || numeric === 60 ? numeric : 0;
@@ -1895,8 +1936,38 @@ function canUseServerTranscription(): boolean {
   );
 }
 
-function shouldPreferServerTranscription(): boolean {
-  return canUseServerTranscription() && (runtimeMode === "kiosk" || state.voiceSettings.provider === "elevenLabs");
+function serverTranscriptionBackoffActive(now = Date.now()): boolean {
+  return serverTranscriptionDisabledUntil > now;
+}
+
+function recordServerTranscriptionSuccess(): void {
+  serverTranscriptionFailureCount = 0;
+  serverTranscriptionDisabledUntil = 0;
+  serverTranscriptionStatus = "ready";
+}
+
+function recordServerTranscriptionFailure(error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error || "Server transcription failed.");
+  serverTranscriptionFailureCount += 1;
+  wakeWordLastError = message.slice(0, 120);
+  if (serverTranscriptionFailureCount >= 2) {
+    serverTranscriptionDisabledUntil = Date.now() + 120_000;
+    serverTranscriptionStatus = "degraded";
+  } else {
+    serverTranscriptionStatus = "unavailable";
+  }
+}
+
+function canUseHealthyServerTranscription(): boolean {
+  return canUseServerTranscription() && !serverTranscriptionBackoffActive();
+}
+
+function shouldUseServerTranscriptionForCommand(): boolean {
+  return canUseHealthyServerTranscription() && state.voiceSettings.provider === "elevenLabs";
+}
+
+function shouldUseServerTranscriptionForWake(): boolean {
+  return canUseHealthyServerTranscription() && (runtimeMode === "kiosk" || state.voiceSettings.provider === "elevenLabs");
 }
 
 function refreshCompanionPresence(): void {
@@ -1937,20 +2008,20 @@ async function startWakeWordListening(): Promise<void> {
     return;
   }
   if (state.companionSettings.voiceMatchMode !== "off") {
-    if (canUseServerTranscription()) {
+    if (canUseHealthyServerTranscription()) {
       startServerWakeWordListening(phrase);
       return;
     }
-    updateWakeWordStatus("Voice Match needs ElevenLabs STT");
+    updateWakeWordStatus("Voice Match needs healthy speech-to-text");
     return;
   }
-  if (shouldPreferServerTranscription()) {
+  if (shouldUseServerTranscriptionForWake()) {
     startServerWakeWordListening(phrase);
     return;
   }
   const SpeechRecognitionCtor = speechRecognitionConstructor();
   if (!SpeechRecognitionCtor) {
-    if (canUseServerTranscription()) {
+    if (canUseHealthyServerTranscription()) {
       startServerWakeWordListening(phrase);
       return;
     }
@@ -2147,7 +2218,7 @@ async function startCommandListeningAfterWakeWord(): Promise<void> {
     window.setTimeout(() => void startCommandListeningAfterWakeWord(), 350);
     return;
   }
-  if (shouldPreferServerTranscription()) {
+  if (shouldUseServerTranscriptionForCommand()) {
     await startServerTranscriptionListening({
       durationMs: 12000,
       minRms: 0.008,
@@ -2298,6 +2369,7 @@ function startServerWakeWordListening(phrase: string): void {
       updateWakeWordStatus(`Listening for ${state.companionSettings.wakePhrase || DEFAULT_WAKE_PHRASE}`);
       const result = await recordAndTranscribeMicrophone({ durationMs: 5200, minRms: 0.002 });
       wakeWordMicActive = false;
+      recordServerTranscriptionSuccess();
       const heard = result.text.trim();
       if (heard) {
         wakeWordLastHeard = heard.slice(0, 80);
@@ -2322,9 +2394,15 @@ function startServerWakeWordListening(phrase: string): void {
       updateWakeWordStatus("Wake mic armed");
     } catch (error) {
       wakeWordMicActive = false;
+      recordServerTranscriptionFailure(error);
       const message = error instanceof Error ? error.message : "microphone capture failed";
-      wakeWordLastError = message.slice(0, 120);
       updateWakeWordStatus(`Wake word mic error: ${message}`);
+      if (serverTranscriptionBackoffActive() && speechRecognitionConstructor()) {
+        serverWakeWordActive = false;
+        updateWakeWordStatus("Wake word using browser speech");
+        window.setTimeout(() => void startWakeWordListening(), 350);
+        return;
+      }
     }
     if (serverWakeWordActive) scheduleServerWakeWordTick(850, listenOnce);
   };
@@ -2435,16 +2513,20 @@ function renderKnownUsers(): void {
     knownUsersList.innerHTML = `<div class="known-user-empty">No known users saved yet.</div>`;
     return;
   }
-  knownUsersList.innerHTML = state.companionSettings.knownUsers.map((user) => `
-    <article class="known-user-card">
-      ${user.faceSamples[0] ? `<img src="${user.faceSamples[0]}" alt="${escapeHtml(user.name)} face sample" />` : `<div class="known-user-avatar">${escapeHtml(user.name.slice(0, 1).toUpperCase())}</div>`}
-      <div>
-        <strong>${escapeHtml(user.name)}</strong>
-        <span>${escapeHtml(user.relationship || "Known user")} · ${user.recognitionEnabled ? "Recognition on" : "Recognition off"} · ${user.faceSamples.length} face sample${user.faceSamples.length === 1 ? "" : "s"} · ${(user.voicePrints ?? []).length} voice sample${(user.voicePrints ?? []).length === 1 ? "" : "s"}</span>
-      </div>
-      <button type="button" data-delete-user="${escapeHtml(user.id)}">Delete</button>
-    </article>
-  `).join("");
+  knownUsersList.innerHTML = state.companionSettings.knownUsers.map((user) => {
+    const readiness = identityReadinessForUser(user);
+    return `
+      <article class="known-user-card">
+        ${user.faceSamples[0] ? `<img src="${user.faceSamples[0]}" alt="${escapeHtml(user.name)} face sample" />` : `<div class="known-user-avatar">${escapeHtml(user.name.slice(0, 1).toUpperCase())}</div>`}
+        <div>
+          <strong>${escapeHtml(user.name)}</strong>
+          <span>${escapeHtml(user.relationship || "Known user")} · ${user.recognitionEnabled ? "Recognition on" : "Recognition off"} · ${user.faceSamples.length} face sample${user.faceSamples.length === 1 ? "" : "s"} · ${(user.voicePrints ?? []).length} voice sample${(user.voicePrints ?? []).length === 1 ? "" : "s"}</span>
+          <span class="identity-readiness">${escapeHtml(identityReadinessLabel(readiness))}</span>
+        </div>
+        <button type="button" data-delete-user="${escapeHtml(user.id)}">Delete</button>
+      </article>
+    `;
+  }).join("");
   knownUsersList.querySelectorAll<HTMLButtonElement>("[data-delete-user]").forEach((button) => {
     button.addEventListener("click", () => {
       const id = button.dataset.deleteUser;
@@ -3025,6 +3107,7 @@ function durableServerSettingsPayload(): DurableServerSettings {
     visual: state.visual,
     companion: {
       ...state.companionSettings,
+      identityReadiness: identityReadinessSummary(),
       knownUsers: state.companionSettings.knownUsers.map((user) => ({ ...user, faceSamples: [] }))
     },
     memory: state.memory
@@ -5105,7 +5188,7 @@ async function beginHoldToTalk(): Promise<void> {
       finalizeMicInteraction(true);
       return;
     }
-    if (shouldPreferServerTranscription()) {
+    if (shouldUseServerTranscriptionForCommand()) {
       holdToTalkSession = await recordAndTranscribeUntilStopped({ minRms: 0.008 });
     } else {
       const SpeechRecognitionCtor = speechRecognitionConstructor();
@@ -5273,7 +5356,7 @@ function beginBrowserHoldToTalk(SpeechRecognitionCtor: SpeechRecognitionConstruc
   };
 }
 
-async function startListening(): Promise<void> {
+async function startListening(options: { forceBrowser?: boolean } = {}): Promise<void> {
   stopWakeWordListening("Awake");
   listenButton.disabled = true;
   updateVoiceStatus("Mic check");
@@ -5287,13 +5370,13 @@ async function startListening(): Promise<void> {
   } finally {
     listenButton.disabled = false;
   }
-  if (shouldPreferServerTranscription()) {
+  if (!options.forceBrowser && shouldUseServerTranscriptionForCommand()) {
     await startServerTranscriptionListening();
     return;
   }
   const SpeechRecognitionCtor = speechRecognitionConstructor();
   if (!SpeechRecognitionCtor) {
-    if (canUseServerTranscription()) {
+    if (!options.forceBrowser && canUseHealthyServerTranscription()) {
       await startServerTranscriptionListening();
       return;
     }
@@ -5364,6 +5447,17 @@ async function startListening(): Promise<void> {
   recognition.start();
 }
 
+async function startBrowserCommandListeningAfterServerFailure(message: string): Promise<void> {
+  const SpeechRecognitionCtor = speechRecognitionConstructor();
+  if (!SpeechRecognitionCtor) {
+    updateVoiceStatus("Listen degraded");
+    setSynraState("idle", message);
+    return;
+  }
+  updateVoiceStatus("Using browser speech");
+  await startListening({ forceBrowser: true });
+}
+
 async function startServerTranscriptionListening(options: { durationMs?: number; minRms?: number; prompt?: string; emptyCaption?: string } = {}): Promise<void> {
   listenButton.disabled = true;
   updateVoiceStatus("Listening");
@@ -5377,13 +5471,15 @@ async function startServerTranscriptionListening(options: { durationMs?: number;
       setSynraState("idle", options.emptyCaption ?? "I did not catch words that time.");
       return;
     }
+    recordServerTranscriptionSuccess();
     updateVoiceStatus("Heard you");
     setSynraState("thinking", "Heard you.");
     await handleUserText(text);
   } catch (error) {
+    recordServerTranscriptionFailure(error);
     const message = error instanceof Error ? error.message : "Microphone transcription failed.";
     updateVoiceStatus("Listen stopped");
-    setSynraState("idle", message);
+    await startBrowserCommandListeningAfterServerFailure(message);
   } finally {
     listenButton.disabled = false;
     if (state.companionSettings.wakeWordMode === "local" && state.companionSettings.allowAlwaysListening) {
@@ -5407,7 +5503,8 @@ async function recordAndTranscribeMicrophone(options: { durationMs: number; minR
       languageCode: "en"
     })
   });
-  const data = await response.json() as { ok?: boolean; text?: string; error?: string };
+  const data = await response.json().catch(() => ({})) as { ok?: boolean; text?: string; error?: string };
+  if (!response.ok) throw new Error(data.error || `ElevenLabs speech-to-text returned HTTP ${response.status}`);
   if (!data.ok && data.error) throw new Error(data.error);
   return { text: String(data.text || "").trim(), voicePrint };
 }
@@ -6009,6 +6106,10 @@ function updateTelemetry(now: number): void {
     route: state.lastRouteLabel,
     wakeWordMicActive,
     serverWakeWordActive,
+    serverTranscriptionStatus,
+    serverTranscriptionFailureCount,
+    serverTranscriptionBackoffActive: serverTranscriptionBackoffActive(),
+    identityReadiness: identityReadinessSummary(),
     messageCount: state.messages.length
   };
   fetch("/api/telemetry", {
