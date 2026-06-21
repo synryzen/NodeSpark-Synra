@@ -756,6 +756,13 @@ app.innerHTML = `
       </section>
       <section class="settings-panel" data-settings-panel="users" role="tabpanel" hidden>
         <h3>Known Users</h3>
+        <div class="identity-wizard-launch-panel">
+          <div>
+            <strong>Guided identity setup</strong>
+            <span>Enroll face and voice with a focused Synra setup flow.</span>
+          </div>
+          <button type="button" id="openIdentityWizardButton">Open Identity Wizard</button>
+        </div>
         <label>
           User name
           <input id="knownUserNameInput" placeholder="Person name" />
@@ -952,6 +959,91 @@ app.innerHTML = `
       </menu>
     </form>
   </dialog>
+  <dialog id="identityEnrollmentWizard">
+    <form method="dialog" class="identity-wizard">
+      <header class="identity-wizard-header">
+        <div>
+          <span>Synra Identity</span>
+          <h2 id="identityWizardTitle">Set up recognition</h2>
+          <p id="identityWizardStatus">Create a local profile that Synra can recognize by face and voice.</p>
+        </div>
+        <button type="button" id="identityWizardCloseButton" aria-label="Close identity wizard">Close</button>
+      </header>
+      <div class="identity-wizard-progress" aria-label="Identity enrollment progress">
+        <span id="identityWizardOverviewStep" class="active">Profile</span>
+        <span id="identityWizardFaceStep">Face</span>
+        <span id="identityWizardVoiceStep">Voice</span>
+        <span id="identityWizardSummaryStep">Ready</span>
+      </div>
+      <section class="identity-wizard-stage" data-stage="overview">
+        <div class="identity-profile-grid">
+          <label>
+            Person name
+            <input id="identityWizardOwnerNameInput" placeholder="Matthew" />
+          </label>
+          <label>
+            Relationship
+            <input id="identityWizardRelationshipInput" placeholder="Owner" />
+          </label>
+        </div>
+        <div class="identity-wizard-readiness" id="identityWizardReadiness">Face 0/7 · Voice 0/3</div>
+      </section>
+      <section class="identity-wizard-stage" data-stage="face" hidden>
+        <div class="identity-face-frame">
+          <video id="identityFacePreview" autoplay muted playsinline></video>
+          <div id="identityFaceRing" class="identity-face-ring" aria-hidden="true"></div>
+          <div class="identity-face-prompt">
+            <strong id="identityFacePoseTitle">Center</strong>
+            <span id="identityFacePoseInstruction">Face the camera straight on.</span>
+          </div>
+        </div>
+        <div id="identityFacePoseDots" class="identity-pose-dots" aria-label="Face pose progress"></div>
+        <button type="button" id="identityWizardCaptureFaceButton">Capture Face Pose</button>
+      </section>
+      <section class="identity-wizard-stage" data-stage="voice" hidden>
+        <div class="identity-voice-card">
+          <span id="identityVoiceSampleLabel">Voice sample 1 of 3</span>
+          <strong id="identityVoicePhrase">Hello Synra, this is my voice.</strong>
+        </div>
+        <div class="identity-voice-meter-grid">
+          <div>
+            <span>Level</span>
+            <div class="identity-voice-meter"><i id="identityVoiceLevelMeter"></i></div>
+          </div>
+          <div>
+            <span>Isolation</span>
+            <div class="identity-voice-meter"><i id="identityVoiceIsolationMeter"></i></div>
+          </div>
+          <div>
+            <span>Noise</span>
+            <div class="identity-voice-meter"><i id="identityVoiceNoiseMeter"></i></div>
+          </div>
+        </div>
+        <button type="button" id="identityWizardCaptureVoiceButton">Record Voice Sample</button>
+      </section>
+      <section class="identity-wizard-stage" data-stage="summary" hidden>
+        <div class="identity-summary-grid">
+          <div>
+            <span>Face</span>
+            <strong id="identityWizardFaceSummary">0/7 poses</strong>
+          </div>
+          <div>
+            <span>Voice</span>
+            <strong id="identityWizardVoiceSummary">0/3 samples</strong>
+          </div>
+          <div>
+            <span>Status</span>
+            <strong id="identityWizardFinalSummary">Continue enrollment</strong>
+          </div>
+        </div>
+      </section>
+      <menu class="identity-wizard-actions">
+        <button type="button" id="identityWizardBackButton">Back</button>
+        <button type="button" id="identityWizardNextButton">Continue</button>
+        <button type="button" id="identityWizardDoneButton">Save Identity</button>
+      </menu>
+    </form>
+  </dialog>
   <dialog id="firstRunWizard">
     <form method="dialog" class="wizard-panel">
       <div class="wizard-hero">
@@ -1124,6 +1216,7 @@ const faceRecognitionInput = must<HTMLElement, HTMLSelectElement>("faceRecogniti
 const faceSampleStorageInput = must<HTMLElement, HTMLSelectElement>("faceSampleStorageInput");
 const voiceMatchModeInput = must<HTMLElement, HTMLSelectElement>("voiceMatchModeInput");
 const voiceMatchSensitivityInput = must<HTMLElement, HTMLSelectElement>("voiceMatchSensitivityInput");
+const openIdentityWizardButton = must<HTMLElement, HTMLButtonElement>("openIdentityWizardButton");
 const facePoseInput = must<HTMLElement, HTMLSelectElement>("facePoseInput");
 const identityEnrollmentStatus = must<HTMLElement, HTMLElement>("identityEnrollmentStatus");
 const faceEnrollmentProgress = must<HTMLElement, HTMLElement>("faceEnrollmentProgress");
@@ -1133,6 +1226,35 @@ const captureUserFaceButton = must<HTMLElement, HTMLButtonElement>("captureUserF
 const captureUserVoiceButton = must<HTMLElement, HTMLButtonElement>("captureUserVoiceButton");
 const saveKnownUserButton = must<HTMLElement, HTMLButtonElement>("saveKnownUserButton");
 const knownUsersList = must<HTMLElement, HTMLElement>("knownUsersList");
+const identityEnrollmentWizard = must<HTMLElement, HTMLDialogElement>("identityEnrollmentWizard");
+const identityWizardTitle = must<HTMLElement, HTMLElement>("identityWizardTitle");
+const identityWizardStatus = must<HTMLElement, HTMLElement>("identityWizardStatus");
+const identityWizardOverviewStep = must<HTMLElement, HTMLElement>("identityWizardOverviewStep");
+const identityWizardFaceStep = must<HTMLElement, HTMLElement>("identityWizardFaceStep");
+const identityWizardVoiceStep = must<HTMLElement, HTMLElement>("identityWizardVoiceStep");
+const identityWizardSummaryStep = must<HTMLElement, HTMLElement>("identityWizardSummaryStep");
+const identityWizardOwnerNameInput = must<HTMLElement, HTMLInputElement>("identityWizardOwnerNameInput");
+const identityWizardRelationshipInput = must<HTMLElement, HTMLInputElement>("identityWizardRelationshipInput");
+const identityWizardReadiness = must<HTMLElement, HTMLElement>("identityWizardReadiness");
+const identityFacePreview = must<HTMLElement, HTMLVideoElement>("identityFacePreview");
+const identityFaceRing = must<HTMLElement, HTMLElement>("identityFaceRing");
+const identityFacePoseTitle = must<HTMLElement, HTMLElement>("identityFacePoseTitle");
+const identityFacePoseInstruction = must<HTMLElement, HTMLElement>("identityFacePoseInstruction");
+const identityFacePoseDots = must<HTMLElement, HTMLElement>("identityFacePoseDots");
+const identityWizardCaptureFaceButton = must<HTMLElement, HTMLButtonElement>("identityWizardCaptureFaceButton");
+const identityVoiceSampleLabel = must<HTMLElement, HTMLElement>("identityVoiceSampleLabel");
+const identityVoicePhrase = must<HTMLElement, HTMLElement>("identityVoicePhrase");
+const identityVoiceLevelMeter = must<HTMLElement, HTMLElement>("identityVoiceLevelMeter");
+const identityVoiceIsolationMeter = must<HTMLElement, HTMLElement>("identityVoiceIsolationMeter");
+const identityVoiceNoiseMeter = must<HTMLElement, HTMLElement>("identityVoiceNoiseMeter");
+const identityWizardCaptureVoiceButton = must<HTMLElement, HTMLButtonElement>("identityWizardCaptureVoiceButton");
+const identityWizardFaceSummary = must<HTMLElement, HTMLElement>("identityWizardFaceSummary");
+const identityWizardVoiceSummary = must<HTMLElement, HTMLElement>("identityWizardVoiceSummary");
+const identityWizardFinalSummary = must<HTMLElement, HTMLElement>("identityWizardFinalSummary");
+const identityWizardCloseButton = must<HTMLElement, HTMLButtonElement>("identityWizardCloseButton");
+const identityWizardBackButton = must<HTMLElement, HTMLButtonElement>("identityWizardBackButton");
+const identityWizardNextButton = must<HTMLElement, HTMLButtonElement>("identityWizardNextButton");
+const identityWizardDoneButton = must<HTMLElement, HTMLButtonElement>("identityWizardDoneButton");
 const wizardOwnerNameInput = must<HTMLElement, HTMLInputElement>("wizardOwnerNameInput");
 const wizardWakeWordModeInput = must<HTMLElement, HTMLSelectElement>("wizardWakeWordModeInput");
 const wizardScreenTimeoutInput = must<HTMLElement, HTMLSelectElement>("wizardScreenTimeoutInput");
@@ -1239,6 +1361,10 @@ let serverWakeWordActive = false;
 let serverWakeWordTimer = 0;
 let pendingFacePoseSamples: SynraFacePoseSamples = {};
 let pendingVoicePrints: VoicePrintSample[] = [];
+type IdentityWizardStage = "overview" | "face" | "voice" | "summary";
+let identityWizardStage: IdentityWizardStage = "overview";
+let identityWizardPreviewStream: MediaStream | null = null;
+let identityWizardVoiceSignal = { level: 0, isolation: 0, noise: 0 };
 let wakeWordMicActive = false;
 let wakeWordLastHeard = "";
 let wakeWordLastError = "";
@@ -1733,6 +1859,48 @@ startWakeWordButton.addEventListener("click", () => {
 refreshMediaDevicesButton.addEventListener("click", () => {
   state.companionSettings = readCompanionSettingsFromInputs();
   void refreshMediaDeviceInputs({ requestPermission: true });
+});
+
+openIdentityWizardButton.addEventListener("click", () => {
+  void openIdentityWizard();
+});
+
+identityWizardCloseButton.addEventListener("click", () => {
+  identityEnrollmentWizard.close();
+});
+
+identityEnrollmentWizard.addEventListener("close", () => {
+  stopIdentityWizardCameraPreview();
+});
+
+identityWizardOwnerNameInput.addEventListener("input", () => {
+  knownUserNameInput.value = identityWizardOwnerNameInput.value;
+  renderIdentityWizard();
+});
+
+identityWizardRelationshipInput.addEventListener("input", () => {
+  knownUserRelationshipInput.value = identityWizardRelationshipInput.value;
+});
+
+identityWizardBackButton.addEventListener("click", () => {
+  retreatIdentityWizard();
+});
+
+identityWizardNextButton.addEventListener("click", () => {
+  void advanceIdentityWizard();
+});
+
+identityWizardDoneButton.addEventListener("click", () => {
+  saveKnownUserFromInputs();
+  identityEnrollmentWizard.close();
+});
+
+identityWizardCaptureFaceButton.addEventListener("click", () => {
+  void captureIdentityWizardFacePose();
+});
+
+identityWizardCaptureVoiceButton.addEventListener("click", () => {
+  void captureIdentityWizardVoiceSample();
 });
 
 captureUserFaceButton.addEventListener("click", () => {
@@ -2464,6 +2632,242 @@ const voiceEnrollmentPhrases = [
   "Synra, verify my voice for this device.",
   "Hello Synra, I am ready to begin."
 ];
+const identityWizardStages: IdentityWizardStage[] = ["overview", "face", "voice", "summary"];
+
+function wizardEnrollmentCounts(existing = currentEnrollmentUser()): { faceCount: number; voiceCount: number } {
+  const savedFaceSamples = normalizeFacePoseSamples(existing?.facePoseSamples);
+  return {
+    faceCount: FACE_ENROLLMENT_POSES.filter((pose) => savedFaceSamples[pose] || pendingFacePoseSamples[pose]).length,
+    voiceCount: Math.min((existing?.voicePrints?.length ?? 0) + pendingVoicePrints.length, REQUIRED_VOICE_SAMPLE_COUNT)
+  };
+}
+
+function wizardReadinessText(): string {
+  const { faceCount, voiceCount } = wizardEnrollmentCounts();
+  return `Face ${Math.min(faceCount, REQUIRED_FACE_POSE_COUNT)}/${REQUIRED_FACE_POSE_COUNT} · Voice ${voiceCount}/${REQUIRED_VOICE_SAMPLE_COUNT}`;
+}
+
+async function openIdentityWizard(): Promise<void> {
+  const existingName = knownUserNameInput.value.trim() || state.companionSettings.ownerName || state.memory.preferredName || "";
+  const existingUser = state.companionSettings.knownUsers.find((user) => user.name.toLowerCase() === existingName.toLowerCase());
+  identityWizardOwnerNameInput.value = existingName;
+  identityWizardRelationshipInput.value = knownUserRelationshipInput.value.trim() || existingUser?.relationship || (existingName ? "Owner" : "");
+  knownUserNameInput.value = identityWizardOwnerNameInput.value;
+  knownUserRelationshipInput.value = identityWizardRelationshipInput.value;
+  faceRecognitionInput.value = "on";
+  faceSampleStorageInput.value = "on";
+  if (voiceMatchModeInput.value === "off") voiceMatchModeInput.value = "knownUsers";
+  identityWizardVoiceSignal = { level: 0, isolation: 0, noise: 0 };
+  setIdentityWizardStage("overview");
+  if (!identityEnrollmentWizard.open) identityEnrollmentWizard.showModal();
+  refreshIdentityEnrollmentPanel();
+  renderIdentityWizard();
+}
+
+function setIdentityWizardStage(stage: IdentityWizardStage): void {
+  identityWizardStage = stage;
+  if (stage === "face") {
+    void startIdentityWizardCameraPreview();
+  } else {
+    stopIdentityWizardCameraPreview();
+  }
+  renderIdentityWizard();
+}
+
+function renderIdentityWizard(): void {
+  const existing = currentEnrollmentUser();
+  const selectedPose = nextMissingFacePose(existing);
+  const { faceCount, voiceCount } = wizardEnrollmentCounts(existing);
+  const stages = [...identityEnrollmentWizard.querySelectorAll<HTMLElement>(".identity-wizard-stage")];
+  for (const stage of stages) stage.hidden = stage.dataset.stage !== identityWizardStage;
+  const stepMap: Record<IdentityWizardStage, HTMLElement> = {
+    overview: identityWizardOverviewStep,
+    face: identityWizardFaceStep,
+    voice: identityWizardVoiceStep,
+    summary: identityWizardSummaryStep
+  };
+  for (const [stage, element] of Object.entries(stepMap) as Array<[IdentityWizardStage, HTMLElement]>) {
+    const index = identityWizardStages.indexOf(stage);
+    element.classList.toggle("active", stage === identityWizardStage);
+    element.classList.toggle("complete", index < identityWizardStages.indexOf(identityWizardStage));
+  }
+
+  identityWizardReadiness.textContent = wizardReadinessText();
+  identityFacePoseTitle.textContent = FACE_ENROLLMENT_POSE_LABELS[selectedPose];
+  identityFacePoseInstruction.textContent = FACE_ENROLLMENT_POSE_INSTRUCTIONS[selectedPose];
+  facePoseInput.value = selectedPose;
+  identityFacePoseDots.innerHTML = FACE_ENROLLMENT_POSES.map((pose) => {
+    const saved = normalizeFacePoseSamples(existing?.facePoseSamples)[pose];
+    const complete = Boolean(saved || pendingFacePoseSamples[pose]);
+    const active = pose === selectedPose && !complete;
+    return `<span class="${complete ? "complete" : ""} ${active ? "active" : ""}" title="${escapeHtml(FACE_ENROLLMENT_POSE_LABELS[pose])}"></span>`;
+  }).join("");
+
+  const phraseIndex = Math.min(voiceCount, voiceEnrollmentPhrases.length - 1);
+  identityVoiceSampleLabel.textContent = `Voice sample ${Math.min(voiceCount + 1, REQUIRED_VOICE_SAMPLE_COUNT)} of ${REQUIRED_VOICE_SAMPLE_COUNT}`;
+  identityVoicePhrase.textContent = voiceEnrollmentPhrases[phraseIndex];
+  updateIdentityWizardVoiceMeters(identityWizardVoiceSignal);
+  identityWizardFaceSummary.textContent = `${Math.min(faceCount, REQUIRED_FACE_POSE_COUNT)}/${REQUIRED_FACE_POSE_COUNT} poses`;
+  identityWizardVoiceSummary.textContent = `${voiceCount}/${REQUIRED_VOICE_SAMPLE_COUNT} samples`;
+  identityWizardFinalSummary.textContent = faceCount >= REQUIRED_FACE_POSE_COUNT && voiceCount >= REQUIRED_VOICE_SAMPLE_COUNT
+    ? "Recognition ready"
+    : "Enrollment needs more samples";
+  identityWizardTitle.textContent = {
+    overview: "Set up recognition",
+    face: "Enroll your face",
+    voice: "Enroll your voice",
+    summary: "Review identity"
+  }[identityWizardStage];
+  identityWizardStatus.textContent = {
+    overview: "Create a local known-user profile for Synra.",
+    face: `${FACE_ENROLLMENT_POSE_LABELS[selectedPose]}: ${FACE_ENROLLMENT_POSE_INSTRUCTIONS[selectedPose]}`,
+    voice: `Say: ${voiceEnrollmentPhrases[phraseIndex]}`,
+    summary: wizardReadinessText()
+  }[identityWizardStage];
+  identityFaceRing.classList.toggle("ready", faceCount >= REQUIRED_FACE_POSE_COUNT);
+  identityFaceRing.classList.toggle("needs-work", faceCount < REQUIRED_FACE_POSE_COUNT);
+  identityWizardBackButton.disabled = identityWizardStage === "overview";
+  identityWizardNextButton.hidden = identityWizardStage === "summary";
+  identityWizardDoneButton.hidden = identityWizardStage !== "summary";
+  identityWizardCaptureFaceButton.textContent = faceCount >= REQUIRED_FACE_POSE_COUNT ? "Recapture Face Pose" : "Capture Face Pose";
+  identityWizardCaptureVoiceButton.textContent = voiceCount >= REQUIRED_VOICE_SAMPLE_COUNT ? "Recapture Voice Sample" : "Record Voice Sample";
+  refreshIdentityEnrollmentPanel();
+}
+
+function retreatIdentityWizard(): void {
+  const index = Math.max(0, identityWizardStages.indexOf(identityWizardStage) - 1);
+  setIdentityWizardStage(identityWizardStages[index]);
+}
+
+async function advanceIdentityWizard(): Promise<void> {
+  if (identityWizardStage === "overview") {
+    const name = identityWizardOwnerNameInput.value.trim();
+    if (!name) {
+      identityWizardStatus.textContent = "Enter the person's name before enrollment.";
+      identityWizardOwnerNameInput.focus();
+      return;
+    }
+    knownUserNameInput.value = name;
+    knownUserRelationshipInput.value = identityWizardRelationshipInput.value.trim();
+    setIdentityWizardStage("face");
+    return;
+  }
+  const { faceCount, voiceCount } = wizardEnrollmentCounts();
+  if (identityWizardStage === "face" && faceCount < REQUIRED_FACE_POSE_COUNT) {
+    identityWizardStatus.textContent = "Capture each guided face pose before voice enrollment.";
+    return;
+  }
+  if (identityWizardStage === "voice" && voiceCount < REQUIRED_VOICE_SAMPLE_COUNT) {
+    identityWizardStatus.textContent = "Record all three voice samples before review.";
+    return;
+  }
+  const index = Math.min(identityWizardStages.length - 1, identityWizardStages.indexOf(identityWizardStage) + 1);
+  setIdentityWizardStage(identityWizardStages[index]);
+}
+
+async function startIdentityWizardCameraPreview(): Promise<void> {
+  if (identityWizardPreviewStream || !identityEnrollmentWizard.open) return;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    identityWizardStatus.textContent = "Camera capture is not available in this browser.";
+    return;
+  }
+  try {
+    identityWizardPreviewStream = await openSelectedCameraStream();
+    identityFacePreview.srcObject = identityWizardPreviewStream;
+    await identityFacePreview.play();
+  } catch {
+    identityWizardStatus.textContent = "Face setup needs camera permission.";
+  }
+}
+
+function stopIdentityWizardCameraPreview(): void {
+  if (!identityWizardPreviewStream) return;
+  for (const track of identityWizardPreviewStream.getTracks()) track.stop();
+  identityWizardPreviewStream = null;
+  identityFacePreview.srcObject = null;
+}
+
+function captureFacePoseDataUrl(video: HTMLVideoElement, width = 480, height = 360): string {
+  const canvasElement = document.createElement("canvas");
+  canvasElement.width = width;
+  canvasElement.height = height;
+  canvasElement.getContext("2d")?.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+  return canvasElement.toDataURL("image/jpeg", 0.82);
+}
+
+async function captureIdentityWizardFacePose(): Promise<void> {
+  if (!state.companionSettings.allowFaceSampleStorage && faceSampleStorageInput.value !== "on") {
+    faceSampleStorageInput.value = "on";
+  }
+  identityWizardCaptureFaceButton.disabled = true;
+  identityFaceRing.classList.add("capturing");
+  try {
+    if (!identityWizardPreviewStream) await startIdentityWizardCameraPreview();
+    await new Promise((resolve) => window.setTimeout(resolve, 260));
+    if (!identityFacePreview.videoWidth) throw new Error("Camera preview is not ready.");
+    const pose = selectedFacePose();
+    pendingFacePoseSamples = { ...pendingFacePoseSamples, [pose]: captureFacePoseDataUrl(identityFacePreview) };
+    facePoseInput.value = nextMissingFacePose(currentEnrollmentUser());
+    setSynraState("idle", `${FACE_ENROLLMENT_POSE_LABELS[pose]} face pose captured locally.`);
+  } catch (error) {
+    identityWizardStatus.textContent = error instanceof Error ? error.message : "Face sample capture needs camera permission.";
+    setSynraState("idle", "Face sample capture needs camera permission.");
+  } finally {
+    identityFaceRing.classList.remove("capturing");
+    identityWizardCaptureFaceButton.disabled = false;
+    renderIdentityWizard();
+  }
+}
+
+async function captureIdentityWizardVoiceSample(): Promise<void> {
+  if (!navigator.mediaDevices?.getUserMedia || !("MediaRecorder" in window)) {
+    identityWizardStatus.textContent = "Voice Match capture is not available in this browser.";
+    return;
+  }
+  identityWizardCaptureVoiceButton.disabled = true;
+  const phrase = voiceEnrollmentPhrases[Math.min(wizardEnrollmentCounts().voiceCount, voiceEnrollmentPhrases.length - 1)];
+  setSynraState("listening", `Say: ${phrase}`);
+  try {
+    identityWizardVoiceSignal = { level: 0, isolation: 0, noise: 0 };
+    updateIdentityWizardVoiceMeters(identityWizardVoiceSignal);
+    const capture = await recordMicrophoneBlob({
+      durationMs: 4200,
+      minRms: 0.003,
+      onSignal: updateIdentityWizardVoiceMeters
+    });
+    if (capture.peakRms < 0.003) {
+      identityWizardStatus.textContent = "That voice sample was too quiet. Try again closer to the mic.";
+      setSynraState("idle", "That voice sample was too quiet. Try again closer to the mic.");
+      return;
+    }
+    const voicePrint = await createVoicePrintFromBlob(capture.blob);
+    pendingVoicePrints = [...pendingVoicePrints, voicePrint].slice(-REQUIRED_VOICE_SAMPLE_COUNT);
+    identityWizardVoiceSignal = {
+      level: Math.max(identityWizardVoiceSignal.level, Math.min(1, capture.peakRms * 30)),
+      isolation: voicePrint.quality,
+      noise: Math.max(0.35, Math.min(0.95, voicePrint.quality - 0.05))
+    };
+    updateIdentityWizardVoiceMeters(identityWizardVoiceSignal);
+    setSynraState("idle", `Voice sample ${wizardEnrollmentCounts().voiceCount}/${REQUIRED_VOICE_SAMPLE_COUNT} captured locally.`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Voice Match capture needs microphone permission.";
+    identityWizardStatus.textContent = message;
+    setSynraState("idle", message);
+  } finally {
+    identityWizardCaptureVoiceButton.disabled = false;
+    renderIdentityWizard();
+  }
+}
+
+function updateIdentityWizardVoiceMeters(signal: { level: number; isolation: number; noise: number } | MicrophoneSignal): void {
+  const level = "levelScore" in signal ? signal.levelScore : signal.level;
+  const isolation = "voiceIsolationScore" in signal ? signal.voiceIsolationScore : signal.isolation;
+  const noise = "backgroundNoiseScore" in signal ? signal.backgroundNoiseScore : signal.noise;
+  identityWizardVoiceSignal = { level, isolation, noise };
+  identityVoiceLevelMeter.style.width = `${Math.round(clampUnit(level, 0) * 100)}%`;
+  identityVoiceIsolationMeter.style.width = `${Math.round(clampUnit(isolation, 0) * 100)}%`;
+  identityVoiceNoiseMeter.style.width = `${Math.round(clampUnit(noise, 0) * 100)}%`;
+}
 
 function selectedFacePose(): SynraFacePose {
   return FACE_ENROLLMENT_POSES.includes(facePoseInput.value as SynraFacePose) ? facePoseInput.value as SynraFacePose : "center";
@@ -2522,12 +2926,8 @@ async function captureKnownUserFaceSample(): Promise<void> {
     video.srcObject = stream;
     await video.play();
     await new Promise((resolve) => window.setTimeout(resolve, 350));
-    const canvasElement = document.createElement("canvas");
-    canvasElement.width = 320;
-    canvasElement.height = 240;
-    canvasElement.getContext("2d")?.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
     const pose = selectedFacePose();
-    pendingFacePoseSamples = { ...pendingFacePoseSamples, [pose]: canvasElement.toDataURL("image/jpeg", 0.78) };
+    pendingFacePoseSamples = { ...pendingFacePoseSamples, [pose]: captureFacePoseDataUrl(video, 320, 240) };
     facePoseInput.value = nextMissingFacePose(currentEnrollmentUser());
     setSynraState("idle", `${FACE_ENROLLMENT_POSE_LABELS[pose]} face pose captured locally.`);
   } catch {
@@ -5608,7 +6008,7 @@ async function recordAndTranscribeMicrophone(options: { durationMs: number; minR
   return { text: String(data.text || "").trim(), voicePrint };
 }
 
-async function recordMicrophoneBlob(options: { durationMs: number; minRms: number }): Promise<MicrophoneCapture> {
+async function recordMicrophoneBlob(options: { durationMs: number; minRms: number; onSignal?: (signal: MicrophoneSignal) => void }): Promise<MicrophoneCapture> {
   if (!navigator.mediaDevices?.getUserMedia || !("MediaRecorder" in window)) {
     throw new Error("Microphone recording is not available in this kiosk/browser.");
   }
@@ -5616,6 +6016,7 @@ async function recordMicrophoneBlob(options: { durationMs: number; minRms: numbe
   let audioContext: AudioContext | null = null;
   let sampleTimer = 0;
   let peakRms = 0;
+  let lastSignal: MicrophoneSignal = { levelScore: 0, voiceIsolationScore: 0, backgroundNoiseScore: 0 };
   try {
     const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (AudioContextCtor) {
@@ -5629,7 +6030,13 @@ async function recordMicrophoneBlob(options: { durationMs: number; minRms: numbe
         analyser.getFloatTimeDomainData(samples);
         let sum = 0;
         for (const sample of samples) sum += sample * sample;
-        peakRms = Math.max(peakRms, Math.sqrt(sum / samples.length));
+        const rms = Math.sqrt(sum / samples.length);
+        peakRms = Math.max(peakRms, rms);
+        const levelScore = clampUnit(rms * 32, 0);
+        const backgroundNoiseScore = clampUnit(1 - Math.max(0, rms - 0.01) * 8, 0.2);
+        const voiceIsolationScore = clampUnit((levelScore * 0.72) + (backgroundNoiseScore * 0.28), 0);
+        lastSignal = { levelScore, voiceIsolationScore, backgroundNoiseScore };
+        options.onSignal?.(lastSignal);
       }, 120);
     }
 
@@ -5648,7 +6055,7 @@ async function recordMicrophoneBlob(options: { durationMs: number; minRms: numbe
       }, options.durationMs);
     });
     const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || "audio/webm" });
-    return { blob, peakRms };
+    return { blob, peakRms, signal: lastSignal };
   } finally {
     if (sampleTimer) window.clearInterval(sampleTimer);
     for (const track of stream.getTracks()) track.stop();
@@ -7099,6 +7506,13 @@ interface HoldToTalkSession {
 interface MicrophoneCapture {
   blob: Blob;
   peakRms: number;
+  signal?: MicrophoneSignal;
+}
+
+interface MicrophoneSignal {
+  levelScore: number;
+  voiceIsolationScore: number;
+  backgroundNoiseScore: number;
 }
 
 interface TranscriptionResult {

@@ -27,6 +27,10 @@ const checks = {
   guidesFacePoseCapture: main.includes("facePoseInput") && main.includes("pendingFacePoseSamples"),
   guidesVoiceSampleCapture: main.includes("voiceEnrollmentPhrases") && main.includes("pendingVoicePrints"),
   showsEnrollmentProgress: main.includes("identityEnrollmentStatus") && main.includes("faceEnrollmentProgress"),
+  hasDedicatedIdentityWizard: main.includes('id="identityEnrollmentWizard"') && main.includes("openIdentityWizardButton"),
+  hasAppleGradeFaceStage: main.includes("identity-face-frame") && main.includes("identityFaceRing") && main.includes("identityWizardCaptureFaceButton"),
+  hasAppleGradeVoiceStage: main.includes("identity-voice-meter") && main.includes("identityVoiceLevelMeter") && main.includes("identityVoiceIsolationMeter") && main.includes("identityVoiceNoiseMeter"),
+  hasWizardStageController: main.includes("identityWizardStage") && main.includes("renderIdentityWizard") && main.includes("advanceIdentityWizard"),
   showsReadinessInUi: main.includes("identity-readiness"),
   exportsSafeReadiness: main.includes("identityReadiness"),
   packageScriptExists: packageJson.includes("\"audit:identity-readiness\"")

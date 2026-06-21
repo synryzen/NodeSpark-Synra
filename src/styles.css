@@ -1327,6 +1327,10 @@ dialog {
   width: min(720px, calc(100vw - 32px));
 }
 
+#identityEnrollmentWizard {
+  width: min(840px, calc(100vw - 28px));
+}
+
 dialog::backdrop {
   background: rgb(0 0 0 / 62%);
 }
@@ -1521,6 +1525,307 @@ dialog::backdrop {
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 8px;
   background: rgb(255 255 255 / 5%);
+}
+
+.identity-wizard-launch-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgb(37 221 255 / 22%);
+  border-radius: 8px;
+  background: rgb(6 18 28 / 58%);
+}
+
+.identity-wizard-launch-panel div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.identity-wizard-launch-panel strong {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.identity-wizard-launch-panel span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.identity-wizard {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  color: #fff;
+}
+
+.identity-wizard-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+}
+
+.identity-wizard-header div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.identity-wizard-header span,
+.identity-voice-card span,
+.identity-summary-grid span,
+.identity-voice-meter-grid span {
+  color: rgb(235 242 250 / 70%);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.identity-wizard-header h2 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: 0;
+}
+
+.identity-wizard-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.identity-wizard button,
+.identity-wizard-launch-panel button {
+  min-height: 40px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 8px;
+  padding: 0 14px;
+  background: rgb(255 255 255 / 9%);
+  color: #fff;
+  font-weight: 900;
+}
+
+.identity-wizard button:hover,
+.identity-wizard-launch-panel button:hover {
+  border-color: rgb(37 221 255 / 38%);
+  background: rgb(37 221 255 / 14%);
+}
+
+.identity-wizard-progress {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.identity-wizard-progress span {
+  min-width: 0;
+  min-height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 6%);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.identity-wizard-progress span.active {
+  border-color: rgb(37 221 255 / 44%);
+  color: #fff;
+  background: rgb(37 221 255 / 13%);
+}
+
+.identity-wizard-progress span.complete {
+  border-color: rgb(24 214 181 / 34%);
+  color: #e8fff9;
+  background: rgb(24 214 181 / 12%);
+}
+
+.identity-wizard-stage {
+  display: grid;
+  gap: 14px;
+}
+
+.identity-wizard-stage[hidden] {
+  display: none;
+}
+
+.identity-profile-grid,
+.identity-summary-grid,
+.identity-voice-meter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.identity-profile-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.identity-wizard label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.identity-wizard input {
+  height: 42px;
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: rgb(255 255 255 / 8%);
+  color: #fff;
+  font: inherit;
+}
+
+.identity-wizard-readiness,
+.identity-voice-card,
+.identity-summary-grid > div {
+  min-height: 74px;
+  display: grid;
+  gap: 6px;
+  align-content: center;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 6%);
+}
+
+.identity-face-frame {
+  position: relative;
+  min-height: 360px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 8px;
+  background: #05070a;
+}
+
+.identity-face-frame video {
+  width: 100%;
+  height: 360px;
+  display: block;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.identity-face-ring {
+  position: absolute;
+  inset: 30px;
+  border: 3px solid rgb(255 255 255 / 42%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 999px rgb(0 0 0 / 24%);
+  pointer-events: none;
+}
+
+.identity-face-ring.ready {
+  border-color: rgb(24 214 181 / 86%);
+}
+
+.identity-face-ring.needs-work {
+  border-color: rgb(37 221 255 / 62%);
+}
+
+.identity-face-ring.capturing {
+  border-color: #fff;
+  box-shadow:
+    0 0 0 999px rgb(0 0 0 / 18%),
+    0 0 26px rgb(37 221 255 / 44%);
+}
+
+.identity-face-prompt {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 16px;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 8px;
+  background: rgb(5 7 10 / 76%);
+}
+
+.identity-face-prompt strong {
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.identity-face-prompt span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.identity-pose-dots {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.identity-pose-dots span {
+  height: 8px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 14%);
+}
+
+.identity-pose-dots span.active {
+  background: rgb(37 221 255 / 74%);
+}
+
+.identity-pose-dots span.complete {
+  background: rgb(24 214 181 / 88%);
+}
+
+.identity-voice-card strong,
+.identity-summary-grid strong {
+  min-width: 0;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 950;
+  overflow-wrap: anywhere;
+}
+
+.identity-voice-meter-grid > div {
+  display: grid;
+  gap: 8px;
+}
+
+.identity-voice-meter {
+  height: 12px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 8%);
+}
+
+.identity-voice-meter i {
+  width: 0%;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--teal), var(--cyan));
+  transition: width 120ms ease-out;
+}
+
+.identity-wizard-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 12px 0 0;
+  border-top: 1px solid rgb(255 255 255 / 10%);
 }
 
 .known-user-empty {
@@ -1808,6 +2113,19 @@ dialog::backdrop {
   .performance-panel {
     display: none;
   }
+
+  .identity-profile-grid,
+  .identity-summary-grid,
+  .identity-voice-meter-grid,
+  .identity-wizard-launch-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .identity-face-frame,
+  .identity-face-frame video {
+    min-height: 300px;
+    height: 300px;
+  }
 }
 
 @media (max-width: 700px) {
@@ -1840,6 +2158,20 @@ dialog::backdrop {
     width: 224px;
     max-width: calc(100% - 8px);
     height: 56px;
+  }
+
+  .identity-wizard {
+    padding: 12px;
+  }
+
+  .identity-wizard-header,
+  .identity-wizard-progress,
+  .identity-wizard-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .identity-face-ring {
+    inset: 22px;
   }
 
   .caption-shell {
