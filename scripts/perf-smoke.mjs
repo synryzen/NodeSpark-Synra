@@ -406,7 +406,9 @@ const browserFallbackVoiceIsDeliberate =
   mainScript.includes("preferredBrowserVoice") &&
   mainScript.includes("selectedBrowserVoice") &&
   mainScript.includes("utterance.voice = browserVoice") &&
-  mainScript.includes("Browser fallback voice:");
+  mainScript.includes("Apple Voice") &&
+  mainScript.includes("Apple system voice") &&
+  mainScript.includes("Browser / Apple Voice");
 const productAccessSplitIsExplicit =
   mainScript.includes('id="nodeSparkAccessInput"') &&
   mainScript.includes('id="openSkillSettingsButton"') &&

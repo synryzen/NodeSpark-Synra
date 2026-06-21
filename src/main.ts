@@ -657,18 +657,18 @@ app.innerHTML = `
         <label>
           Voice provider
           <select id="voiceProviderInput">
-            <option value="browser">Browser speech</option>
+            <option value="browser">Apple Voice</option>
             <option value="elevenLabs">ElevenLabs</option>
             <option value="chatterbox">Chatterbox local</option>
           </select>
         </label>
         <label>
-          Browser fallback voice
+          Apple system voice
           <select id="browserVoiceSelect">
             <option value="">Best available English female voice</option>
           </select>
         </label>
-        <p id="browserVoiceStatus" class="settings-note">Browser speech uses the best available English female-style system voice when ElevenLabs is not configured.</p>
+        <p id="browserVoiceStatus" class="settings-note">Apple Voice uses the installed macOS/iOS system voices exposed by the browser engine. Downloaded Apple voices appear here after the OS finishes installing them.</p>
         <label>
           ElevenLabs API key
           <input id="elevenLabsApiKeyInput" type="password" autocomplete="off" placeholder="Paste ElevenLabs API key" />
@@ -2695,13 +2695,13 @@ function readVoiceSettingsFromInputs(): VoiceSettings {
 function populateBrowserVoiceSelect(): void {
   const voices = browserSpeechVoices();
   if (!("speechSynthesis" in window)) {
-    browserVoiceSelect.innerHTML = `<option value="">Browser speech unavailable</option>`;
-    updateBrowserVoiceStatus("Browser speech is not available in this kiosk/browser.");
+    browserVoiceSelect.innerHTML = `<option value="">Apple Voice unavailable</option>`;
+    updateBrowserVoiceStatus("Apple Voice is not available in this kiosk/browser.");
     return;
   }
   if (voices.length === 0) {
-    browserVoiceSelect.innerHTML = `<option value="">No browser voices loaded yet</option>`;
-    updateBrowserVoiceStatus("No browser voices are loaded yet. Use ElevenLabs for reliable speech.");
+    browserVoiceSelect.innerHTML = `<option value="">No Apple voices loaded yet</option>`;
+    updateBrowserVoiceStatus("No Apple system voices are loaded yet. Use ElevenLabs or install/download voices in System Settings.");
     return;
   }
   const preferred = resolveBrowserVoice(state.voiceSettings.browserVoiceURI, voices);
@@ -2755,13 +2755,13 @@ function voiceSortKey(voice: SpeechSynthesisVoice): string {
 }
 
 function browserVoiceStatusText(): string {
-  if (!("speechSynthesis" in window)) return "Browser speech is unavailable here. Configure ElevenLabs for voice.";
+  if (!("speechSynthesis" in window)) return "Apple Voice is unavailable here. Configure ElevenLabs for voice.";
   const voices = browserSpeechVoices();
-  if (voices.length === 0) return "No browser voices are loaded. Configure ElevenLabs for reliable voice.";
+  if (voices.length === 0) return "No Apple system voices are loaded. Configure ElevenLabs or install/download voices in System Settings.";
   const selected = selectedBrowserVoice();
-  if (!selected) return "Browser fallback will use the system default voice.";
+  if (!selected) return "Apple Voice will use the system default voice.";
   const languageNote = selected.lang.toLowerCase().startsWith("en") ? "" : " Install an English system voice or use ElevenLabs for a better Synra voice.";
-  return `Browser fallback voice: ${selected.name} (${selected.lang}).${languageNote}`;
+  return `Browser / Apple Voice: ${selected.name} (${selected.lang}).${languageNote}`;
 }
 
 function updateBrowserVoiceStatus(message: string): void {
@@ -5878,7 +5878,7 @@ function refreshVoiceStatus(): void {
   updateElevenLabsVoiceStatus(elevenLabsVoiceStatusText());
   updateChatterboxVoiceStatus(chatterboxVoiceStatusText());
   const selected = selectedBrowserVoice();
-  const browserDetail = selected ? `Browser voice path available: ${selected.name}` : "Browser voice path available";
+  const browserDetail = selected ? `Apple voice path available: ${selected.name}` : "Apple voice path available";
   setConnectionTruth("voice", canSpeak || canListen ? "ready" : "configured", canSpeak || canListen ? browserDetail : "Text input is available");
 }
 
@@ -6829,16 +6829,16 @@ async function runVoiceDiagnostics(): Promise<void> {
   const browserVoice = selectedBrowserVoice();
   const browserState = "speechSynthesis" in window
     ? browserVoice
-      ? `Browser fallback voice: ${browserVoice.name} (${browserVoice.lang}); ${browserVoices.length} system voices visible.`
-      : `Browser speech is available but no system voices are visible.`
-    : "Browser speech is unavailable in this runtime.";
+      ? `Browser / Apple Voice: ${browserVoice.name} (${browserVoice.lang}); ${browserVoices.length} system voices visible.`
+      : `Apple Voice is available but no system voices are visible.`
+    : "Apple Voice is unavailable in this runtime.";
   const elevenLabsState = state.voiceSettings.provider === "elevenLabs"
     ? canUseElevenLabsSpeech()
       ? `ElevenLabs configured${state.voiceSettings.elevenLabsVoiceName ? ` with ${state.voiceSettings.elevenLabsVoiceName}` : ""}. Server-managed API keys are supported.`
       : "ElevenLabs needs a selected voice."
     : state.voiceSettings.provider === "chatterbox"
     ? `Chatterbox local voice selected: ${state.voiceSettings.chatterboxModel} on ${state.voiceSettings.chatterboxDevice}.`
-    : "Browser speech is selected.";
+    : "Apple Voice is selected.";
   const message = `Voice diagnostics: ${provider}. Audio unlock ${audioReady ? "ready" : "blocked"}. ${devices} ${browserState} ${elevenLabsState}`;
   updateVoiceStatus(audioReady ? "Voice diagnostics" : "Playback blocked");
   setConnectionTruth("voice", audioReady ? "ready" : "permission-needed", message);
@@ -6883,7 +6883,7 @@ async function testVoiceConnection(): Promise<void> {
 function voiceProviderLabel(provider: VoiceProvider): string {
   if (provider === "elevenLabs") return "ElevenLabs";
   if (provider === "chatterbox") return "Chatterbox";
-  return "browser speech";
+  return "Apple Voice";
 }
 
 async function refreshServerModelStatus(): Promise<void> {
