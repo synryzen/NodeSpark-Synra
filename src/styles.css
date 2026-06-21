@@ -1788,6 +1788,19 @@ dialog::backdrop {
   background: rgb(24 214 181 / 88%);
 }
 
+.identity-quality-status {
+  min-height: 38px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 5%);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
 .identity-voice-card strong,
 .identity-summary-grid strong {
   min-width: 0;

@@ -10,6 +10,7 @@ import { SynraMotionPlayer, type SynraMotionClipSpec } from "./motion-player";
 import { SERVER_SECRET_SENTINEL, loadCompanionSettings, loadHomeAssistantSettings, loadMemory, loadModelSettings, loadProductSettings, loadVisualSettings, loadVoiceSettings, saveCompanionSettings, saveHomeAssistantSettings, saveMemory, saveModelSettings, saveProductSettings, saveVisualSettings, saveVoiceSettings } from "./storage";
 import type { CompanionSettings, HomeAssistantConfirmationPolicy, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraFacePose, SynraFacePoseSamples, SynraIdentityReadiness, SynraMemory, SynraMessage, SynraSkillMode, SynraState, VisualSettings, VoiceMatchMode, VoiceMatchSensitivity, VoicePrintSample, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
 import { FACE_ENROLLMENT_POSE_INSTRUCTIONS, FACE_ENROLLMENT_POSE_LABELS, FACE_ENROLLMENT_POSES, REQUIRED_FACE_POSE_COUNT, REQUIRED_VOICE_SAMPLE_COUNT, faceSamplesFromPoseMap, identityReadinessForUser, normalizeFacePoseSamples } from "./identity";
+import { evaluateFaceFrameQuality, evaluateVoiceEnrollmentQuality, type EnrollmentMicrophoneSignal } from "./enrollmentQuality";
 import { estimateSpeechDurationMs, visemesForSpeechPosition } from "./hub-runtime/services/speech-output";
 import packageInfo from "../package.json";
 
@@ -998,6 +999,7 @@ app.innerHTML = `
           </div>
         </div>
         <div id="identityFacePoseDots" class="identity-pose-dots" aria-label="Face pose progress"></div>
+        <p id="identityFaceQualityStatus" class="identity-quality-status">Center your face in the ring before capture.</p>
         <button type="button" id="identityWizardCaptureFaceButton">Capture Face Pose</button>
       </section>
       <section class="identity-wizard-stage" data-stage="voice" hidden>
@@ -1019,6 +1021,7 @@ app.innerHTML = `
             <div class="identity-voice-meter"><i id="identityVoiceNoiseMeter"></i></div>
           </div>
         </div>
+        <p id="identityVoiceQualityStatus" class="identity-quality-status">Speak clearly in a quiet room.</p>
         <button type="button" id="identityWizardCaptureVoiceButton">Record Voice Sample</button>
       </section>
       <section class="identity-wizard-stage" data-stage="summary" hidden>
@@ -1241,12 +1244,14 @@ const identityFaceRing = must<HTMLElement, HTMLElement>("identityFaceRing");
 const identityFacePoseTitle = must<HTMLElement, HTMLElement>("identityFacePoseTitle");
 const identityFacePoseInstruction = must<HTMLElement, HTMLElement>("identityFacePoseInstruction");
 const identityFacePoseDots = must<HTMLElement, HTMLElement>("identityFacePoseDots");
+const identityFaceQualityStatus = must<HTMLElement, HTMLElement>("identityFaceQualityStatus");
 const identityWizardCaptureFaceButton = must<HTMLElement, HTMLButtonElement>("identityWizardCaptureFaceButton");
 const identityVoiceSampleLabel = must<HTMLElement, HTMLElement>("identityVoiceSampleLabel");
 const identityVoicePhrase = must<HTMLElement, HTMLElement>("identityVoicePhrase");
 const identityVoiceLevelMeter = must<HTMLElement, HTMLElement>("identityVoiceLevelMeter");
 const identityVoiceIsolationMeter = must<HTMLElement, HTMLElement>("identityVoiceIsolationMeter");
 const identityVoiceNoiseMeter = must<HTMLElement, HTMLElement>("identityVoiceNoiseMeter");
+const identityVoiceQualityStatus = must<HTMLElement, HTMLElement>("identityVoiceQualityStatus");
 const identityWizardCaptureVoiceButton = must<HTMLElement, HTMLButtonElement>("identityWizardCaptureVoiceButton");
 const identityWizardFaceSummary = must<HTMLElement, HTMLElement>("identityWizardFaceSummary");
 const identityWizardVoiceSummary = must<HTMLElement, HTMLElement>("identityWizardVoiceSummary");
@@ -2787,12 +2792,15 @@ function stopIdentityWizardCameraPreview(): void {
   identityFacePreview.srcObject = null;
 }
 
-function captureFacePoseDataUrl(video: HTMLVideoElement, width = 480, height = 360): string {
+function captureFacePoseFrame(video: HTMLVideoElement, width = 480, height = 360): { dataUrl: string; faceQuality: ReturnType<typeof evaluateFaceFrameQuality> } {
   const canvasElement = document.createElement("canvas");
   canvasElement.width = width;
   canvasElement.height = height;
-  canvasElement.getContext("2d")?.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
-  return canvasElement.toDataURL("image/jpeg", 0.82);
+  const context = canvasElement.getContext("2d");
+  if (!context) throw new Error("Face sample capture is not available.");
+  context.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+  const faceQuality = evaluateFaceFrameQuality(context.getImageData(0, 0, canvasElement.width, canvasElement.height));
+  return { dataUrl: canvasElement.toDataURL("image/jpeg", 0.82), faceQuality };
 }
 
 async function captureIdentityWizardFacePose(): Promise<void> {
@@ -2806,7 +2814,14 @@ async function captureIdentityWizardFacePose(): Promise<void> {
     await new Promise((resolve) => window.setTimeout(resolve, 260));
     if (!identityFacePreview.videoWidth) throw new Error("Camera preview is not ready.");
     const pose = selectedFacePose();
-    pendingFacePoseSamples = { ...pendingFacePoseSamples, [pose]: captureFacePoseDataUrl(identityFacePreview) };
+    const capture = captureFacePoseFrame(identityFacePreview);
+    const faceQuality = capture.faceQuality;
+    identityFaceQualityStatus.textContent = `${faceQuality.message} Quality ${Math.round(faceQuality.score * 100)}%.`;
+    if (!faceQuality.accepted) {
+      setSynraState("idle", faceQuality.message);
+      return;
+    }
+    pendingFacePoseSamples = { ...pendingFacePoseSamples, [pose]: capture.dataUrl };
     facePoseInput.value = nextMissingFacePose(currentEnrollmentUser());
     setSynraState("idle", `${FACE_ENROLLMENT_POSE_LABELS[pose]} face pose captured locally.`);
   } catch (error) {
@@ -2835,19 +2850,24 @@ async function captureIdentityWizardVoiceSample(): Promise<void> {
       minRms: 0.003,
       onSignal: updateIdentityWizardVoiceMeters
     });
-    if (capture.peakRms < 0.003) {
-      identityWizardStatus.textContent = "That voice sample was too quiet. Try again closer to the mic.";
-      setSynraState("idle", "That voice sample was too quiet. Try again closer to the mic.");
-      return;
-    }
     const voicePrint = await createVoicePrintFromBlob(capture.blob);
-    pendingVoicePrints = [...pendingVoicePrints, voicePrint].slice(-REQUIRED_VOICE_SAMPLE_COUNT);
+    const voiceQuality = evaluateVoiceEnrollmentQuality({
+      peakRms: capture.peakRms,
+      signal: capture.signal,
+      voicePrintQuality: voicePrint.quality
+    });
     identityWizardVoiceSignal = {
       level: Math.max(identityWizardVoiceSignal.level, Math.min(1, capture.peakRms * 30)),
       isolation: voicePrint.quality,
-      noise: Math.max(0.35, Math.min(0.95, voicePrint.quality - 0.05))
+      noise: voiceQuality.noise
     };
     updateIdentityWizardVoiceMeters(identityWizardVoiceSignal);
+    identityVoiceQualityStatus.textContent = `${voiceQuality.message} Quality ${Math.round(voiceQuality.score * 100)}%.`;
+    if (!voiceQuality.accepted) {
+      setSynraState("idle", voiceQuality.message);
+      return;
+    }
+    pendingVoicePrints = [...pendingVoicePrints, voicePrint].slice(-REQUIRED_VOICE_SAMPLE_COUNT);
     setSynraState("idle", `Voice sample ${wizardEnrollmentCounts().voiceCount}/${REQUIRED_VOICE_SAMPLE_COUNT} captured locally.`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Voice Match capture needs microphone permission.";
@@ -2927,7 +2947,13 @@ async function captureKnownUserFaceSample(): Promise<void> {
     await video.play();
     await new Promise((resolve) => window.setTimeout(resolve, 350));
     const pose = selectedFacePose();
-    pendingFacePoseSamples = { ...pendingFacePoseSamples, [pose]: captureFacePoseDataUrl(video, 320, 240) };
+    const capture = captureFacePoseFrame(video, 320, 240);
+    const faceQuality = capture.faceQuality;
+    if (!faceQuality.accepted) {
+      setSynraState("idle", faceQuality.message);
+      return;
+    }
+    pendingFacePoseSamples = { ...pendingFacePoseSamples, [pose]: capture.dataUrl };
     facePoseInput.value = nextMissingFacePose(currentEnrollmentUser());
     setSynraState("idle", `${FACE_ENROLLMENT_POSE_LABELS[pose]} face pose captured locally.`);
   } catch {
@@ -2950,11 +2976,17 @@ async function captureKnownUserVoiceSample(): Promise<void> {
   setSynraState("listening", `Say: ${phrase}`);
   try {
     const capture = await recordMicrophoneBlob({ durationMs: 4200, minRms: 0.003 });
-    if (capture.peakRms < 0.003) {
-      setSynraState("idle", "That voice sample was too quiet. Try again closer to the mic.");
+    const voicePrint = await createVoicePrintFromBlob(capture.blob);
+    const voiceQuality = evaluateVoiceEnrollmentQuality({
+      peakRms: capture.peakRms,
+      signal: capture.signal,
+      voicePrintQuality: voicePrint.quality
+    });
+    if (!voiceQuality.accepted) {
+      setSynraState("idle", voiceQuality.message);
       return;
     }
-    pendingVoicePrints = [...pendingVoicePrints, await createVoicePrintFromBlob(capture.blob)].slice(-REQUIRED_VOICE_SAMPLE_COUNT);
+    pendingVoicePrints = [...pendingVoicePrints, voicePrint].slice(-REQUIRED_VOICE_SAMPLE_COUNT);
     setSynraState("idle", `Voice sample ${pendingVoicePrints.length}/${REQUIRED_VOICE_SAMPLE_COUNT} captured locally.`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Voice Match capture needs microphone permission.";
@@ -7509,11 +7541,7 @@ interface MicrophoneCapture {
   signal?: MicrophoneSignal;
 }
 
-interface MicrophoneSignal {
-  levelScore: number;
-  voiceIsolationScore: number;
-  backgroundNoiseScore: number;
-}
+interface MicrophoneSignal extends EnrollmentMicrophoneSignal {}
 
 interface TranscriptionResult {
   text: string;

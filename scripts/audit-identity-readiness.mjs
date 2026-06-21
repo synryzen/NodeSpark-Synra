@@ -6,7 +6,13 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const types = readFileSync(join(root, "src/types.ts"), "utf8");
 const main = readFileSync(join(root, "src/main.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
+let enrollmentQuality = "";
 let identity = "";
+try {
+  enrollmentQuality = readFileSync(join(root, "src/enrollmentQuality.ts"), "utf8");
+} catch {
+  enrollmentQuality = "";
+}
 try {
   identity = readFileSync(join(root, "src/identity.ts"), "utf8");
 } catch {
@@ -31,6 +37,10 @@ const checks = {
   hasAppleGradeFaceStage: main.includes("identity-face-frame") && main.includes("identityFaceRing") && main.includes("identityWizardCaptureFaceButton"),
   hasAppleGradeVoiceStage: main.includes("identity-voice-meter") && main.includes("identityVoiceLevelMeter") && main.includes("identityVoiceIsolationMeter") && main.includes("identityVoiceNoiseMeter"),
   hasWizardStageController: main.includes("identityWizardStage") && main.includes("renderIdentityWizard") && main.includes("advanceIdentityWizard"),
+  hasSharedEnrollmentQuality: enrollmentQuality.includes("evaluateFaceFrameQuality") && enrollmentQuality.includes("evaluateVoiceEnrollmentQuality"),
+  gatesFaceCaptureQuality: main.includes("evaluateFaceFrameQuality") && main.includes("faceQuality.accepted"),
+  gatesVoiceCaptureQuality: main.includes("evaluateVoiceEnrollmentQuality") && main.includes("voiceQuality.accepted"),
+  explainsQualityRetry: main.includes("identityFaceQualityStatus") && main.includes("identityVoiceQualityStatus"),
   showsReadinessInUi: main.includes("identity-readiness"),
   exportsSafeReadiness: main.includes("identityReadiness"),
   packageScriptExists: packageJson.includes("\"audit:identity-readiness\"")
