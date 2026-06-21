@@ -18,6 +18,7 @@ export type HomeAssistantConfirmationPolicy = "alwaysConfirm" | "trustedLights" 
 export type VoiceMatchMode = "off" | "knownUsers" | "ownerOnly";
 export type VoiceMatchSensitivity = "relaxed" | "balanced" | "strict";
 export type SynraFacePose = "center" | "turnLeft" | "turnRight" | "lookUp" | "lookDown" | "rollLeft" | "rollRight";
+export type SynraFacePoseSamples = Partial<Record<SynraFacePose, string>>;
 
 export interface ModelSettings {
   provider: ModelProvider;
@@ -43,6 +44,7 @@ export interface KnownUserProfile {
   name: string;
   relationship: string;
   faceSamples: string[];
+  facePoseSamples: SynraFacePoseSamples;
   voicePrints: VoicePrintSample[];
   recognitionEnabled: boolean;
   createdAt: string;
@@ -61,6 +63,8 @@ export interface SynraIdentityReadiness {
   voiceSampleCount: number;
   requiredFacePoseCount: number;
   requiredVoiceSampleCount: number;
+  completedFacePoses: SynraFacePose[];
+  missingFacePoses: SynraFacePose[];
   faceReady: boolean;
   voiceReady: boolean;
   overallReady: boolean;

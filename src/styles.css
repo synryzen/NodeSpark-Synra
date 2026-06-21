@@ -1480,6 +1480,49 @@ dialog::backdrop {
   gap: 9px;
 }
 
+.identity-enrollment-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgb(125 211 252 / 20%);
+  border-radius: 8px;
+  background: rgb(8 24 38 / 44%);
+}
+
+.identity-enrollment-panel > div:first-child,
+.identity-progress-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.identity-enrollment-panel strong,
+.identity-enrollment-panel span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.identity-enrollment-panel strong {
+  color: #eef8ff;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.identity-enrollment-panel span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.identity-progress-grid span {
+  min-height: 34px;
+  padding: 8px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 5%);
+}
+
 .known-user-empty {
   padding: 12px;
   border: 1px dashed rgb(255 255 255 / 16%);

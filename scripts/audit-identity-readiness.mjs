@@ -16,11 +16,17 @@ try {
 const checks = {
   exportsReadinessType: types.includes("SynraIdentityReadiness"),
   exportsPoseType: types.includes("SynraFacePose"),
+  storesFacePoseSamples: types.includes("facePoseSamples"),
   definesFacePoses: identity.includes("FACE_ENROLLMENT_POSES"),
+  definesFacePoseLabels: identity.includes("FACE_ENROLLMENT_POSE_LABELS"),
   definesFaceRequirement: identity.includes("REQUIRED_FACE_POSE_COUNT"),
   definesVoiceRequirement: identity.includes("REQUIRED_VOICE_SAMPLE_COUNT"),
+  normalizesFacePoseSamples: identity.includes("normalizeFacePoseSamples"),
   scoresKnownUser: identity.includes("identityReadinessForUser"),
   importsReadiness: main.includes("identityReadinessForUser"),
+  guidesFacePoseCapture: main.includes("facePoseInput") && main.includes("pendingFacePoseSamples"),
+  guidesVoiceSampleCapture: main.includes("voiceEnrollmentPhrases") && main.includes("pendingVoicePrints"),
+  showsEnrollmentProgress: main.includes("identityEnrollmentStatus") && main.includes("faceEnrollmentProgress"),
   showsReadinessInUi: main.includes("identity-readiness"),
   exportsSafeReadiness: main.includes("identityReadiness"),
   packageScriptExists: packageJson.includes("\"audit:identity-readiness\"")

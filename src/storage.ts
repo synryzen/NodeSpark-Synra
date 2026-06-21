@@ -1,5 +1,6 @@
 import type { AgentSettings, CompanionSettings, HomeAssistantSettings, ModelSettings, ProductSettings, SynraMemory, VisualSettings, VoiceSettings } from "./types";
 import { DEFAULT_SYNRA_AVATAR_ID } from "./avatar-catalog";
+import { faceSamplesFromPoseMap, normalizeFacePoseSamples } from "./identity";
 
 const modelKey = "synraStandalone.modelSettings.v1";
 const memoryKey = "synraStandalone.memory.v1";
@@ -133,11 +134,15 @@ export function loadCompanionSettings(): CompanionSettings {
     voiceMatchMode: settings.voiceMatchMode === "knownUsers" || settings.voiceMatchMode === "ownerOnly" ? settings.voiceMatchMode : "off",
     voiceMatchSensitivity: settings.voiceMatchSensitivity === "relaxed" || settings.voiceMatchSensitivity === "strict" ? settings.voiceMatchSensitivity : "balanced",
     knownUsers: Array.isArray(settings.knownUsers)
-      ? settings.knownUsers.map((user) => ({
-        ...user,
-        faceSamples: Array.isArray(user.faceSamples) ? user.faceSamples : [],
-        voicePrints: Array.isArray(user.voicePrints) ? user.voicePrints : []
-      }))
+      ? settings.knownUsers.map((user) => {
+        const facePoseSamples = normalizeFacePoseSamples(user.facePoseSamples);
+        return {
+          ...user,
+          faceSamples: Array.isArray(user.faceSamples) ? user.faceSamples : faceSamplesFromPoseMap(facePoseSamples),
+          facePoseSamples,
+          voicePrints: Array.isArray(user.voicePrints) ? user.voicePrints : []
+        };
+      })
       : []
   };
 }

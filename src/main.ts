@@ -8,8 +8,8 @@ import type { SynraActionName, SynraMode } from "./hub-runtime/types/avatar";
 import { askModel, classifySynraRequest, localSynraReply } from "./model-client";
 import { SynraMotionPlayer, type SynraMotionClipSpec } from "./motion-player";
 import { SERVER_SECRET_SENTINEL, loadCompanionSettings, loadHomeAssistantSettings, loadMemory, loadModelSettings, loadProductSettings, loadVisualSettings, loadVoiceSettings, saveCompanionSettings, saveHomeAssistantSettings, saveMemory, saveModelSettings, saveProductSettings, saveVisualSettings, saveVoiceSettings } from "./storage";
-import type { CompanionSettings, HomeAssistantConfirmationPolicy, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraIdentityReadiness, SynraMemory, SynraMessage, SynraSkillMode, SynraState, VisualSettings, VoiceMatchMode, VoiceMatchSensitivity, VoicePrintSample, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
-import { identityReadinessForUser } from "./identity";
+import type { CompanionSettings, HomeAssistantConfirmationPolicy, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraFacePose, SynraFacePoseSamples, SynraIdentityReadiness, SynraMemory, SynraMessage, SynraSkillMode, SynraState, VisualSettings, VoiceMatchMode, VoiceMatchSensitivity, VoicePrintSample, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
+import { FACE_ENROLLMENT_POSE_INSTRUCTIONS, FACE_ENROLLMENT_POSE_LABELS, FACE_ENROLLMENT_POSES, REQUIRED_FACE_POSE_COUNT, REQUIRED_VOICE_SAMPLE_COUNT, faceSamplesFromPoseMap, identityReadinessForUser, normalizeFacePoseSamples } from "./identity";
 import { estimateSpeechDurationMs, visemesForSpeechPosition } from "./hub-runtime/services/speech-output";
 import packageInfo from "../package.json";
 
@@ -794,6 +794,29 @@ app.innerHTML = `
             <option value="strict">Strict</option>
           </select>
         </label>
+        <div class="identity-enrollment-panel">
+          <div>
+            <strong>Identity enrollment</strong>
+            <span id="identityEnrollmentStatus">Face 0/7 · Voice 0/3</span>
+          </div>
+          <label>
+            Face pose
+            <select id="facePoseInput">
+              <option value="center">Center</option>
+              <option value="turnLeft">Turn left</option>
+              <option value="turnRight">Turn right</option>
+              <option value="lookUp">Look up</option>
+              <option value="lookDown">Look down</option>
+              <option value="rollLeft">Tilt left</option>
+              <option value="rollRight">Tilt right</option>
+            </select>
+          </label>
+          <div class="identity-progress-grid">
+            <span id="faceEnrollmentProgress">Next face pose: center</span>
+            <span id="voiceEnrollmentProgress">Next voice sample: 1 of 3</span>
+          </div>
+          <p id="voicePhrasePrompt" class="settings-note">Say: Hello Synra, this is my voice.</p>
+        </div>
         <div class="settings-button-row">
           <button type="button" id="captureUserFaceButton">Capture Face Sample</button>
           <button type="button" id="captureUserVoiceButton">Capture Voice Sample</button>
@@ -1101,6 +1124,11 @@ const faceRecognitionInput = must<HTMLElement, HTMLSelectElement>("faceRecogniti
 const faceSampleStorageInput = must<HTMLElement, HTMLSelectElement>("faceSampleStorageInput");
 const voiceMatchModeInput = must<HTMLElement, HTMLSelectElement>("voiceMatchModeInput");
 const voiceMatchSensitivityInput = must<HTMLElement, HTMLSelectElement>("voiceMatchSensitivityInput");
+const facePoseInput = must<HTMLElement, HTMLSelectElement>("facePoseInput");
+const identityEnrollmentStatus = must<HTMLElement, HTMLElement>("identityEnrollmentStatus");
+const faceEnrollmentProgress = must<HTMLElement, HTMLElement>("faceEnrollmentProgress");
+const voiceEnrollmentProgress = must<HTMLElement, HTMLElement>("voiceEnrollmentProgress");
+const voicePhrasePrompt = must<HTMLElement, HTMLElement>("voicePhrasePrompt");
 const captureUserFaceButton = must<HTMLElement, HTMLButtonElement>("captureUserFaceButton");
 const captureUserVoiceButton = must<HTMLElement, HTMLButtonElement>("captureUserVoiceButton");
 const saveKnownUserButton = must<HTMLElement, HTMLButtonElement>("saveKnownUserButton");
@@ -1209,8 +1237,8 @@ let micInteractionActive = false;
 let holdToTalkPressed = false;
 let serverWakeWordActive = false;
 let serverWakeWordTimer = 0;
-let pendingFaceSample = "";
-let pendingVoicePrint: VoicePrintSample | null = null;
+let pendingFacePoseSamples: SynraFacePoseSamples = {};
+let pendingVoicePrints: VoicePrintSample[] = [];
 let wakeWordMicActive = false;
 let wakeWordLastHeard = "";
 let wakeWordLastError = "";
@@ -1719,6 +1747,14 @@ saveKnownUserButton.addEventListener("click", () => {
   saveKnownUserFromInputs();
 });
 
+knownUserNameInput.addEventListener("input", () => {
+  refreshIdentityEnrollmentPanel();
+});
+
+facePoseInput.addEventListener("change", () => {
+  refreshIdentityEnrollmentPanel();
+});
+
 wizardSkipButton.addEventListener("click", () => {
   state.companionSettings = { ...state.companionSettings, setupComplete: true };
   saveCompanionSettingsEverywhere();
@@ -1822,6 +1858,7 @@ function populateCompanionSettingsInputs(): void {
   faceSampleStorageInput.value = state.companionSettings.allowFaceSampleStorage ? "on" : "off";
   voiceMatchModeInput.value = normalizeVoiceMatchMode(state.companionSettings.voiceMatchMode);
   voiceMatchSensitivityInput.value = normalizeVoiceMatchSensitivity(state.companionSettings.voiceMatchSensitivity);
+  refreshIdentityEnrollmentPanel();
   renderKnownUsers();
 }
 
@@ -1864,23 +1901,28 @@ function normalizeVoiceMatchSensitivity(value: string | undefined): VoiceMatchSe
 }
 
 function normalizeKnownUserProfiles(users: KnownUserProfile[]): KnownUserProfile[] {
-  return users.map((user) => ({
-    id: String(user.id || `user-${Date.now().toString(36)}`),
-    name: String(user.name || "").slice(0, 80),
-    relationship: String(user.relationship || "").slice(0, 80),
-    faceSamples: Array.isArray(user.faceSamples) ? user.faceSamples.map(String).slice(-5) : [],
-    voicePrints: Array.isArray(user.voicePrints)
-      ? user.voicePrints.map((sample) => ({
-        id: String(sample.id || `voice-${Date.now().toString(36)}`),
-        features: Array.isArray(sample.features) ? sample.features.map(Number).filter(Number.isFinite).slice(0, 96) : [],
-        quality: clampUnit(Number(sample.quality), 0),
-        createdAt: String(sample.createdAt || new Date().toISOString())
-      })).filter((sample) => sample.features.length > 0).slice(-8)
-      : [],
-    recognitionEnabled: user.recognitionEnabled === true,
-    createdAt: String(user.createdAt || new Date().toISOString()),
-    updatedAt: String(user.updatedAt || new Date().toISOString())
-  })).filter((user) => user.name).slice(0, 12);
+  return users.map((user) => {
+    const facePoseSamples = normalizeFacePoseSamples(user.facePoseSamples);
+    const poseImages = faceSamplesFromPoseMap(facePoseSamples);
+    return {
+      id: String(user.id || `user-${Date.now().toString(36)}`),
+      name: String(user.name || "").slice(0, 80),
+      relationship: String(user.relationship || "").slice(0, 80),
+      faceSamples: (Array.isArray(user.faceSamples) ? user.faceSamples.map(String) : poseImages).slice(-REQUIRED_FACE_POSE_COUNT),
+      facePoseSamples,
+      voicePrints: Array.isArray(user.voicePrints)
+        ? user.voicePrints.map((sample) => ({
+          id: String(sample.id || `voice-${Date.now().toString(36)}`),
+          features: Array.isArray(sample.features) ? sample.features.map(Number).filter(Number.isFinite).slice(0, 96) : [],
+          quality: clampUnit(Number(sample.quality), 0),
+          createdAt: String(sample.createdAt || new Date().toISOString())
+        })).filter((sample) => sample.features.length > 0).slice(-8)
+        : [],
+      recognitionEnabled: user.recognitionEnabled === true,
+      createdAt: String(user.createdAt || new Date().toISOString()),
+      updatedAt: String(user.updatedAt || new Date().toISOString())
+    };
+  }).filter((user) => user.name).slice(0, 12);
 }
 
 function identityReadinessSummary(): SynraIdentitySummary {
@@ -1967,7 +2009,9 @@ function shouldUseServerTranscriptionForCommand(): boolean {
 }
 
 function shouldUseServerTranscriptionForWake(): boolean {
-  return canUseHealthyServerTranscription() && (runtimeMode === "kiosk" || state.voiceSettings.provider === "elevenLabs");
+  const voiceMatchNeedsServerStt = state.companionSettings.voiceMatchMode !== "off";
+  const speechOutputNeedsServerStt = state.voiceSettings.provider === "elevenLabs";
+  return canUseHealthyServerTranscription() && (voiceMatchNeedsServerStt || speechOutputNeedsServerStt);
 }
 
 function refreshCompanionPresence(): void {
@@ -2415,6 +2459,49 @@ function scheduleServerWakeWordTick(delayMs: number, callback: () => void): void
   serverWakeWordTimer = window.setTimeout(callback, delayMs);
 }
 
+const voiceEnrollmentPhrases = [
+  "Hello Synra, this is my voice.",
+  "Synra, verify my voice for this device.",
+  "Hello Synra, I am ready to begin."
+];
+
+function selectedFacePose(): SynraFacePose {
+  return FACE_ENROLLMENT_POSES.includes(facePoseInput.value as SynraFacePose) ? facePoseInput.value as SynraFacePose : "center";
+}
+
+function pendingFacePoseCount(): number {
+  return faceSamplesFromPoseMap(pendingFacePoseSamples).length;
+}
+
+function nextMissingFacePose(existing?: KnownUserProfile): SynraFacePose {
+  const savedSamples = normalizeFacePoseSamples(existing?.facePoseSamples);
+  return FACE_ENROLLMENT_POSES.find((pose) => !pendingFacePoseSamples[pose] && !savedSamples[pose]) ?? "center";
+}
+
+function currentEnrollmentUser(): KnownUserProfile | undefined {
+  const name = knownUserNameInput.value.trim().toLowerCase();
+  if (!name) return undefined;
+  return state.companionSettings.knownUsers.find((user) => user.name.toLowerCase() === name);
+}
+
+function refreshIdentityEnrollmentPanel(): void {
+  const existing = currentEnrollmentUser();
+  const savedFaceSamples = normalizeFacePoseSamples(existing?.facePoseSamples);
+  const faceCount = FACE_ENROLLMENT_POSES.filter((pose) => savedFaceSamples[pose] || pendingFacePoseSamples[pose]).length;
+  const voiceCount = Math.min((existing?.voicePrints?.length ?? 0) + pendingVoicePrints.length, REQUIRED_VOICE_SAMPLE_COUNT);
+  const nextPose = nextMissingFacePose(existing);
+  if (!pendingFacePoseSamples[selectedFacePose()] && nextPose !== selectedFacePose()) facePoseInput.value = nextPose;
+  const selectedPose = selectedFacePose();
+  const phraseIndex = Math.min(pendingVoicePrints.length, voiceEnrollmentPhrases.length - 1);
+
+  identityEnrollmentStatus.textContent = `Face ${Math.min(faceCount, REQUIRED_FACE_POSE_COUNT)}/${REQUIRED_FACE_POSE_COUNT} · Voice ${voiceCount}/${REQUIRED_VOICE_SAMPLE_COUNT}`;
+  faceEnrollmentProgress.textContent = `${FACE_ENROLLMENT_POSE_LABELS[selectedPose]}: ${FACE_ENROLLMENT_POSE_INSTRUCTIONS[selectedPose]}`;
+  voiceEnrollmentProgress.textContent = `Next voice sample: ${Math.min(phraseIndex + 1, REQUIRED_VOICE_SAMPLE_COUNT)} of ${REQUIRED_VOICE_SAMPLE_COUNT}`;
+  voicePhrasePrompt.textContent = `Say: ${voiceEnrollmentPhrases[phraseIndex]}`;
+  captureUserFaceButton.textContent = pendingFacePoseCount() ? "Capture Next Face Pose" : "Capture Face Pose";
+  captureUserVoiceButton.textContent = pendingVoicePrints.length ? "Capture Next Voice Sample" : "Capture Voice Sample";
+}
+
 async function captureKnownUserFaceSample(): Promise<void> {
   if (!state.companionSettings.allowFaceSampleStorage && faceSampleStorageInput.value !== "on") {
     setSynraState("idle", "Turn on local face sample storage before capturing a user profile.");
@@ -2439,14 +2526,16 @@ async function captureKnownUserFaceSample(): Promise<void> {
     canvasElement.width = 320;
     canvasElement.height = 240;
     canvasElement.getContext("2d")?.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
-    pendingFaceSample = canvasElement.toDataURL("image/jpeg", 0.72);
-    setSynraState("idle", "Face sample captured locally. Save the user when ready.");
+    const pose = selectedFacePose();
+    pendingFacePoseSamples = { ...pendingFacePoseSamples, [pose]: canvasElement.toDataURL("image/jpeg", 0.78) };
+    facePoseInput.value = nextMissingFacePose(currentEnrollmentUser());
+    setSynraState("idle", `${FACE_ENROLLMENT_POSE_LABELS[pose]} face pose captured locally.`);
   } catch {
     setSynraState("idle", "Face sample capture needs camera permission.");
   } finally {
     if (stream) for (const track of stream.getTracks()) track.stop();
     captureUserFaceButton.disabled = false;
-    captureUserFaceButton.textContent = pendingFaceSample ? "Capture Another Sample" : "Capture Face Sample";
+    refreshIdentityEnrollmentPanel();
   }
 }
 
@@ -2457,21 +2546,22 @@ async function captureKnownUserVoiceSample(): Promise<void> {
   }
   captureUserVoiceButton.disabled = true;
   captureUserVoiceButton.textContent = "Listening";
-  setSynraState("listening", "Say: Hello Synra, this is my voice.");
+  const phrase = voiceEnrollmentPhrases[Math.min(pendingVoicePrints.length, voiceEnrollmentPhrases.length - 1)];
+  setSynraState("listening", `Say: ${phrase}`);
   try {
     const capture = await recordMicrophoneBlob({ durationMs: 4200, minRms: 0.003 });
     if (capture.peakRms < 0.003) {
       setSynraState("idle", "That voice sample was too quiet. Try again closer to the mic.");
       return;
     }
-    pendingVoicePrint = await createVoicePrintFromBlob(capture.blob);
-    setSynraState("idle", "Voice sample captured locally. Save the user when ready.");
+    pendingVoicePrints = [...pendingVoicePrints, await createVoicePrintFromBlob(capture.blob)].slice(-REQUIRED_VOICE_SAMPLE_COUNT);
+    setSynraState("idle", `Voice sample ${pendingVoicePrints.length}/${REQUIRED_VOICE_SAMPLE_COUNT} captured locally.`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Voice Match capture needs microphone permission.";
     setSynraState("idle", message);
   } finally {
     captureUserVoiceButton.disabled = false;
-    captureUserVoiceButton.textContent = pendingVoicePrint ? "Capture Another Voice Sample" : "Capture Voice Sample";
+    refreshIdentityEnrollmentPanel();
   }
 }
 
@@ -2483,12 +2573,18 @@ function saveKnownUserFromInputs(): void {
   }
   const now = new Date().toISOString();
   const existing = state.companionSettings.knownUsers.find((user) => user.name.toLowerCase() === name.toLowerCase());
+  const facePoseSamples = {
+    ...normalizeFacePoseSamples(existing?.facePoseSamples),
+    ...pendingFacePoseSamples
+  };
+  const capturedFaceSamples = faceSamplesFromPoseMap(pendingFacePoseSamples);
   const nextUser: KnownUserProfile = {
     id: existing?.id ?? `user-${Date.now().toString(36)}`,
     name,
     relationship: knownUserRelationshipInput.value.trim(),
-    faceSamples: [...(existing?.faceSamples ?? []), ...(pendingFaceSample ? [pendingFaceSample] : [])].slice(-5),
-    voicePrints: [...(existing?.voicePrints ?? []), ...(pendingVoicePrint ? [pendingVoicePrint] : [])].slice(-8),
+    faceSamples: [...(existing?.faceSamples ?? []), ...capturedFaceSamples].slice(-REQUIRED_FACE_POSE_COUNT),
+    facePoseSamples,
+    voicePrints: [...(existing?.voicePrints ?? []), ...pendingVoicePrints].slice(-8),
     recognitionEnabled: faceRecognitionInput.value === "on",
     createdAt: existing?.createdAt ?? now,
     updatedAt: now
@@ -2498,12 +2594,11 @@ function saveKnownUserFromInputs(): void {
     knownUsers: [nextUser, ...state.companionSettings.knownUsers.filter((user) => user.id !== nextUser.id)].slice(0, 12)
   };
   saveCompanionSettingsEverywhere();
-  pendingFaceSample = "";
-  pendingVoicePrint = null;
+  pendingFacePoseSamples = {};
+  pendingVoicePrints = [];
   knownUserNameInput.value = "";
   knownUserRelationshipInput.value = "";
-  captureUserFaceButton.textContent = "Capture Face Sample";
-  captureUserVoiceButton.textContent = "Capture Voice Sample";
+  refreshIdentityEnrollmentPanel();
   renderKnownUsers();
   setSynraState("idle", `${name} is saved as a known user.`);
 }
@@ -2515,12 +2610,14 @@ function renderKnownUsers(): void {
   }
   knownUsersList.innerHTML = state.companionSettings.knownUsers.map((user) => {
     const readiness = identityReadinessForUser(user);
+    const facePoseSamples = normalizeFacePoseSamples(user.facePoseSamples);
+    const thumbnail = facePoseSamples.center || faceSamplesFromPoseMap(facePoseSamples)[0] || user.faceSamples[0] || "";
     return `
       <article class="known-user-card">
-        ${user.faceSamples[0] ? `<img src="${user.faceSamples[0]}" alt="${escapeHtml(user.name)} face sample" />` : `<div class="known-user-avatar">${escapeHtml(user.name.slice(0, 1).toUpperCase())}</div>`}
+        ${thumbnail ? `<img src="${thumbnail}" alt="${escapeHtml(user.name)} face sample" />` : `<div class="known-user-avatar">${escapeHtml(user.name.slice(0, 1).toUpperCase())}</div>`}
         <div>
           <strong>${escapeHtml(user.name)}</strong>
-          <span>${escapeHtml(user.relationship || "Known user")} · ${user.recognitionEnabled ? "Recognition on" : "Recognition off"} · ${user.faceSamples.length} face sample${user.faceSamples.length === 1 ? "" : "s"} · ${(user.voicePrints ?? []).length} voice sample${(user.voicePrints ?? []).length === 1 ? "" : "s"}</span>
+          <span>${escapeHtml(user.relationship || "Known user")} · ${user.recognitionEnabled ? "Recognition on" : "Recognition off"} · ${readiness.faceSampleCount}/${readiness.requiredFacePoseCount} face poses · ${readiness.voiceSampleCount}/${readiness.requiredVoiceSampleCount} voice samples</span>
           <span class="identity-readiness">${escapeHtml(identityReadinessLabel(readiness))}</span>
         </div>
         <button type="button" data-delete-user="${escapeHtml(user.id)}">Delete</button>
@@ -2928,8 +3025,9 @@ function exportSanitizedBackupFromSettings(): void {
         knownUsers: state.companionSettings.knownUsers.map((user) => ({
           ...user,
           faceSamples: [],
+          facePoseSamples: {},
           voicePrints: [],
-          faceSampleCount: user.faceSamples.length,
+          faceSampleCount: identityReadinessForUser(user).faceSampleCount,
           voicePrintCount: user.voicePrints?.length ?? 0
         }))
       },
@@ -2975,6 +3073,7 @@ function importSanitizedBackupFromSettings(): void {
           name: String(user.name || "").slice(0, 80),
           relationship: String(user.relationship || "").slice(0, 80),
           faceSamples: [],
+          facePoseSamples: {},
           voicePrints: [],
           recognitionEnabled: user.recognitionEnabled === true,
           createdAt: String(user.createdAt || new Date().toISOString()),
@@ -3108,7 +3207,7 @@ function durableServerSettingsPayload(): DurableServerSettings {
     companion: {
       ...state.companionSettings,
       identityReadiness: identityReadinessSummary(),
-      knownUsers: state.companionSettings.knownUsers.map((user) => ({ ...user, faceSamples: [] }))
+      knownUsers: state.companionSettings.knownUsers.map((user) => ({ ...user, faceSamples: [], facePoseSamples: {} }))
     },
     memory: state.memory
   };
