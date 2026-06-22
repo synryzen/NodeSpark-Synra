@@ -81,7 +81,8 @@ requireText("proof verify button handler", main, "recognitionProofVerifyButton.a
 requireText("proof sync attempt timestamp", main, "enrollmentProofState.lastSyncAttemptAt");
 requireText("proof sync confirmed timestamp", main, "enrollmentProofState.lastSyncConfirmedAt");
 requireText("proof sync error", main, "enrollmentProofState.lastSyncError");
-requireText("proof health updater marker", main, "updateEnrollmentProofFromStatus(identityStatusFromStationHealth(health))");
+requireText("proof health count-preserving helper", main, "function preserveLocalEnrollmentCountsForStationHealth");
+requireText("proof health updater marker", main, "updateEnrollmentProofFromStatus(preserveLocalEnrollmentCountsForStationHealth(identityStatusFromStationHealth(health)))");
 requireText("proof no-lower-local render marker", main, "function renderEnrollmentProofWithoutLoweringLocalCounts");
 requireText("proof styles", styles, ".recognition-proof-panel");
 requireText("package script", packageJson, "\"audit:enrollment-proof\"");
@@ -113,5 +114,18 @@ if (renderSmartRecognitionIndex < countLagIndex) {
 }
 requireText("confirm count-lag local render", confirmEnrollmentProofSyncBody, "renderEnrollmentProofWithoutLoweringLocalCounts()");
 requireText("confirm bad proof offline", confirmEnrollmentProofSyncBody, "failEnrollmentProofSync(\"Bad proof\", false)");
+
+const preserveLocalEnrollmentCountsBody = extractFunctionBody(main, "function preserveLocalEnrollmentCountsForStationHealth");
+requireText("preserve helper keeps face count", preserveLocalEnrollmentCountsBody, "Math.max(localStatus.faceSampleCount, stationStatus.faceSampleCount)");
+requireText("preserve helper keeps voice count", preserveLocalEnrollmentCountsBody, "Math.max(localStatus.voiceSampleCount, stationStatus.voiceSampleCount)");
+requireText("preserve helper keeps completed poses", preserveLocalEnrollmentCountsBody, "completedFacePoses");
+
+const refreshSmartRecognitionHealthBody = extractFunctionBody(main, "async function refreshSmartRecognitionHealth");
+requireText("health refresh preserves station counts", refreshSmartRecognitionHealthBody, "preserveLocalEnrollmentCountsForStationHealth(identityStatusFromStationHealth(health))");
+rejectText("health refresh raw proof update", refreshSmartRecognitionHealthBody, "updateEnrollmentProofFromStatus(identityStatusFromStationHealth(health))");
+
+const refreshSmartRecognitionFromHealthBody = extractFunctionBody(main, "function refreshSmartRecognitionFromHealth");
+requireText("health render preserves station counts", refreshSmartRecognitionFromHealthBody, "preserveLocalEnrollmentCountsForStationHealth(identityStatusFromStationHealth(health))");
+rejectText("health render raw station status", refreshSmartRecognitionFromHealthBody, "renderSmartRecognition(identityStatusFromStationHealth(health))");
 
 console.log("Enrollment proof mode audit passed.");

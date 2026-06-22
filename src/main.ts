@@ -3422,7 +3422,7 @@ async function refreshSmartRecognitionHealth(): Promise<void> {
     }
     enrollmentProofState.stationAvailable = true;
     enrollmentProofState.lastHealthAt = new Date().toISOString();
-    updateEnrollmentProofFromStatus(identityStatusFromStationHealth(health));
+    updateEnrollmentProofFromStatus(preserveLocalEnrollmentCountsForStationHealth(identityStatusFromStationHealth(health)));
     refreshSmartRecognitionFromHealth(health);
   } catch {
     enrollmentProofState.stationAvailable = false;
@@ -3569,8 +3569,36 @@ function identityStatusFromStationHealth(health: { identitySmoke?: unknown }): S
   });
 }
 
+function preserveLocalEnrollmentCountsForStationHealth(stationStatus: SynraIdentityStatus, localStatus: SynraIdentityStatus = state.identityStatus): SynraIdentityStatus {
+  const faceSampleCount = Math.max(localStatus.faceSampleCount, stationStatus.faceSampleCount);
+  const voiceSampleCount = Math.max(localStatus.voiceSampleCount, stationStatus.voiceSampleCount);
+  const completedFacePoses = Array.from(new Set([...localStatus.completedFacePoses, ...stationStatus.completedFacePoses]));
+  const faceReady = faceSampleCount >= stationStatus.requiredFacePoseCount;
+  const voiceReady = voiceSampleCount >= stationStatus.requiredVoiceSampleCount;
+  const trustedActionsReady = faceReady
+    && voiceReady
+    && stationStatus.cameraDevice !== "degraded"
+    && stationStatus.microphoneDevice !== "degraded"
+    && stationStatus.sttRoute !== "degraded";
+
+  return normalizeIdentityStatus({
+    ...stationStatus,
+    faceSampleCount,
+    voiceSampleCount,
+    completedFacePoses,
+    readiness: {
+      ...stationStatus.readiness,
+      faceReady,
+      voiceReady,
+      trustedActionsReady,
+      overallScore: Math.min(1, ((faceSampleCount / stationStatus.requiredFacePoseCount) + (voiceSampleCount / stationStatus.requiredVoiceSampleCount)) / 2),
+      confidence: Math.min(1, ((faceSampleCount / stationStatus.requiredFacePoseCount) + (voiceSampleCount / stationStatus.requiredVoiceSampleCount)) / 2)
+    }
+  });
+}
+
 function refreshSmartRecognitionFromHealth(health: { identitySmoke?: unknown }): void {
-  if (health.identitySmoke) renderSmartRecognition(identityStatusFromStationHealth(health));
+  if (health.identitySmoke) renderSmartRecognition(preserveLocalEnrollmentCountsForStationHealth(identityStatusFromStationHealth(health)));
 }
 
 function stationRouteToIdentityDevice(value: string | undefined): SynraIdentityDeviceState {
