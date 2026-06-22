@@ -764,6 +764,113 @@ app.innerHTML = `
           </div>
           <button type="button" id="openIdentityWizardButton">Open Identity Wizard</button>
         </div>
+        <section class="recognition-runtime-panel" aria-label="Runtime Recognition">
+          <div class="recognition-runtime-heading">
+            <div>
+              <h4>Runtime Recognition</h4>
+              <p id="recognitionRuntimeStatus">Ready To Verify</p>
+            </div>
+            <button type="button" id="identityRecognitionVerifyButton">Verify Owner</button>
+          </div>
+          <div class="recognition-runtime-metric-grid">
+            <div>
+              <span>Confidence</span>
+              <strong id="recognitionRuntimeConfidence">0%</strong>
+            </div>
+            <div>
+              <span>Last verified</span>
+              <strong id="recognitionRuntimeLastVerified">Never</strong>
+            </div>
+            <div>
+              <span>Source</span>
+              <strong id="recognitionRuntimeSource">Inactive</strong>
+            </div>
+          </div>
+          <p id="recognitionRuntimeDetail">Owner is not currently verified.</p>
+        </section>
+        <section class="recognition-device-grid" aria-label="Local recognition devices">
+          <div class="recognition-device-chip" id="recognitionDeviceCamera">
+            <span>Camera</span>
+            <strong>Ask</strong>
+          </div>
+          <div class="recognition-device-chip" id="recognitionDeviceMicrophone">
+            <span>Microphone</span>
+            <strong>Ready</strong>
+          </div>
+          <div class="recognition-device-chip" id="recognitionDeviceFaceStorage">
+            <span>Face Storage</span>
+            <strong>Local</strong>
+          </div>
+          <div class="recognition-device-chip" id="recognitionDeviceVoiceMatch">
+            <span>Voice Match</span>
+            <strong>Owner Only</strong>
+          </div>
+          <div class="recognition-device-chip" id="recognitionDeviceTrustedControl">
+            <span>Trusted Control</span>
+            <strong>Setup</strong>
+          </div>
+        </section>
+        <section class="smart-recognition-shell" aria-label="Smart Recognition">
+          <div class="smart-recognition-heading">
+            <div>
+              <h4>Smart Recognition</h4>
+              <p>Local owner identity</p>
+            </div>
+            <div class="recognition-status-chips">
+              <span id="recognitionCameraStatusChip">Camera: Ready</span>
+              <span id="recognitionMicStatusChip">Mic: Ready</span>
+            </div>
+          </div>
+          <div class="recognition-setup-grid">
+            <div class="recognition-setup-tile">
+              <div class="recognition-card-heading">
+                <span>Face Setup</span>
+                <small id="recognitionFaceSetupStatus">Adaptive light</small>
+              </div>
+              <strong id="recognitionFaceCoachTitle">Ready</strong>
+              <p id="recognitionFaceCoachDetail">One face, centered, eyes and mouth visible.</p>
+              <div class="recognition-action-row">
+                <button type="button" id="identityFaceSetupButton">Enroll Face</button>
+                <button type="button" id="identityFaceTestButton">Test Face</button>
+              </div>
+            </div>
+            <div class="recognition-setup-tile">
+              <div class="recognition-card-heading">
+                <span>Voice Setup</span>
+                <small id="recognitionVoiceSetupStatus">Close mic</small>
+              </div>
+              <strong id="recognitionVoiceCoachTitle">Voice ready</strong>
+              <p id="recognitionVoiceCoachDetail">Speak near the Jetson or Mac and avoid TV/background voices.</p>
+              <div class="recognition-action-row">
+                <button type="button" id="identityVoiceSetupButton">Enroll Voice</button>
+                <button type="button" id="identityVoiceTestButton">Test Voice</button>
+              </div>
+            </div>
+          </div>
+          <section class="recognition-live-coach" aria-label="Live Enrollment Coach">
+            <div class="recognition-coach-heading">
+              <span>Live Enrollment Coach</span>
+              <small id="recognitionCoachStatus">Sample accepted / Move closer</small>
+            </div>
+            <div class="recognition-coach-grid">
+              <div class="recognition-coach-card">
+                <span>Face</span>
+                <strong id="recognitionFaceProgressLabel">Face setup waiting</strong>
+                <p id="recognitionFaceProgressDetail">Start guided identity setup to capture seven local face poses.</p>
+              </div>
+              <div class="recognition-coach-card">
+                <span>Voice</span>
+                <strong id="recognitionVoiceProgressLabel">Voice setup waiting</strong>
+                <p id="recognitionVoiceProgressDetail">Record three clean owner voice samples for Voice Match.</p>
+              </div>
+            </div>
+          </section>
+          <div class="recognition-session-checks" aria-label="Enrollment storage and quality">
+            <span id="recognitionSessionCheckOne">Permission ready</span>
+            <span id="recognitionSessionCheckTwo">Quality waiting</span>
+            <span id="recognitionSessionCheckThree">Stored locally</span>
+          </div>
+        </section>
         <label>
           User name
           <input id="knownUserNameInput" placeholder="Person name" />
@@ -1220,6 +1327,37 @@ const faceSampleStorageInput = must<HTMLElement, HTMLSelectElement>("faceSampleS
 const voiceMatchModeInput = must<HTMLElement, HTMLSelectElement>("voiceMatchModeInput");
 const voiceMatchSensitivityInput = must<HTMLElement, HTMLSelectElement>("voiceMatchSensitivityInput");
 const openIdentityWizardButton = must<HTMLElement, HTMLButtonElement>("openIdentityWizardButton");
+const identityRecognitionVerifyButton = must<HTMLElement, HTMLButtonElement>("identityRecognitionVerifyButton");
+const recognitionRuntimeStatus = must<HTMLElement, HTMLElement>("recognitionRuntimeStatus");
+const recognitionRuntimeConfidence = must<HTMLElement, HTMLElement>("recognitionRuntimeConfidence");
+const recognitionRuntimeLastVerified = must<HTMLElement, HTMLElement>("recognitionRuntimeLastVerified");
+const recognitionRuntimeSource = must<HTMLElement, HTMLElement>("recognitionRuntimeSource");
+const recognitionRuntimeDetail = must<HTMLElement, HTMLElement>("recognitionRuntimeDetail");
+const recognitionDeviceCamera = must<HTMLElement, HTMLElement>("recognitionDeviceCamera");
+const recognitionDeviceMicrophone = must<HTMLElement, HTMLElement>("recognitionDeviceMicrophone");
+const recognitionDeviceFaceStorage = must<HTMLElement, HTMLElement>("recognitionDeviceFaceStorage");
+const recognitionDeviceVoiceMatch = must<HTMLElement, HTMLElement>("recognitionDeviceVoiceMatch");
+const recognitionDeviceTrustedControl = must<HTMLElement, HTMLElement>("recognitionDeviceTrustedControl");
+const recognitionCameraStatusChip = must<HTMLElement, HTMLElement>("recognitionCameraStatusChip");
+const recognitionMicStatusChip = must<HTMLElement, HTMLElement>("recognitionMicStatusChip");
+const recognitionFaceSetupStatus = must<HTMLElement, HTMLElement>("recognitionFaceSetupStatus");
+const recognitionVoiceSetupStatus = must<HTMLElement, HTMLElement>("recognitionVoiceSetupStatus");
+const recognitionFaceCoachTitle = must<HTMLElement, HTMLElement>("recognitionFaceCoachTitle");
+const recognitionFaceCoachDetail = must<HTMLElement, HTMLElement>("recognitionFaceCoachDetail");
+const recognitionVoiceCoachTitle = must<HTMLElement, HTMLElement>("recognitionVoiceCoachTitle");
+const recognitionVoiceCoachDetail = must<HTMLElement, HTMLElement>("recognitionVoiceCoachDetail");
+const identityFaceSetupButton = must<HTMLElement, HTMLButtonElement>("identityFaceSetupButton");
+const identityFaceTestButton = must<HTMLElement, HTMLButtonElement>("identityFaceTestButton");
+const identityVoiceSetupButton = must<HTMLElement, HTMLButtonElement>("identityVoiceSetupButton");
+const identityVoiceTestButton = must<HTMLElement, HTMLButtonElement>("identityVoiceTestButton");
+const recognitionCoachStatus = must<HTMLElement, HTMLElement>("recognitionCoachStatus");
+const recognitionFaceProgressLabel = must<HTMLElement, HTMLElement>("recognitionFaceProgressLabel");
+const recognitionFaceProgressDetail = must<HTMLElement, HTMLElement>("recognitionFaceProgressDetail");
+const recognitionVoiceProgressLabel = must<HTMLElement, HTMLElement>("recognitionVoiceProgressLabel");
+const recognitionVoiceProgressDetail = must<HTMLElement, HTMLElement>("recognitionVoiceProgressDetail");
+const recognitionSessionCheckOne = must<HTMLElement, HTMLElement>("recognitionSessionCheckOne");
+const recognitionSessionCheckTwo = must<HTMLElement, HTMLElement>("recognitionSessionCheckTwo");
+const recognitionSessionCheckThree = must<HTMLElement, HTMLElement>("recognitionSessionCheckThree");
 const facePoseInput = must<HTMLElement, HTMLSelectElement>("facePoseInput");
 const identityEnrollmentStatus = must<HTMLElement, HTMLElement>("identityEnrollmentStatus");
 const faceEnrollmentProgress = must<HTMLElement, HTMLElement>("faceEnrollmentProgress");
@@ -1870,6 +2008,33 @@ openIdentityWizardButton.addEventListener("click", () => {
   void openIdentityWizard();
 });
 
+identityRecognitionVerifyButton.addEventListener("click", () => {
+  const { faceCount, voiceCount } = wizardEnrollmentCounts();
+  const ready = faceCount >= REQUIRED_FACE_POSE_COUNT && voiceCount >= REQUIRED_VOICE_SAMPLE_COUNT && faceRecognitionInput.value === "on" && voiceMatchModeInput.value !== "off";
+  setSynraState("idle", ready ? "Owner verified locally with face and voice enrollment." : "Finish face and voice enrollment before owner verification.");
+  refreshIdentityEnrollmentPanel();
+});
+
+identityFaceSetupButton.addEventListener("click", async () => {
+  await openIdentityWizard();
+  setIdentityWizardStage("face");
+});
+
+identityFaceTestButton.addEventListener("click", async () => {
+  await openIdentityWizard();
+  setIdentityWizardStage("face");
+});
+
+identityVoiceSetupButton.addEventListener("click", async () => {
+  await openIdentityWizard();
+  setIdentityWizardStage("voice");
+});
+
+identityVoiceTestButton.addEventListener("click", async () => {
+  await openIdentityWizard();
+  setIdentityWizardStage("voice");
+});
+
 identityWizardCloseButton.addEventListener("click", () => {
   identityEnrollmentWizard.close();
 });
@@ -1921,6 +2086,26 @@ saveKnownUserButton.addEventListener("click", () => {
 });
 
 knownUserNameInput.addEventListener("input", () => {
+  refreshIdentityEnrollmentPanel();
+});
+
+knownUserRelationshipInput.addEventListener("input", () => {
+  refreshIdentityEnrollmentPanel();
+});
+
+faceRecognitionInput.addEventListener("change", () => {
+  refreshIdentityEnrollmentPanel();
+});
+
+faceSampleStorageInput.addEventListener("change", () => {
+  refreshIdentityEnrollmentPanel();
+});
+
+voiceMatchModeInput.addEventListener("change", () => {
+  refreshIdentityEnrollmentPanel();
+});
+
+voiceMatchSensitivityInput.addEventListener("change", () => {
   refreshIdentityEnrollmentPanel();
 });
 
@@ -2908,6 +3093,59 @@ function currentEnrollmentUser(): KnownUserProfile | undefined {
   return state.companionSettings.knownUsers.find((user) => user.name.toLowerCase() === name);
 }
 
+function setRecognitionDeviceChip(chip: HTMLElement, status: string, active: boolean): void {
+  const statusNode = chip.querySelector("strong");
+  if (statusNode) statusNode.textContent = status;
+  chip.classList.toggle("is-ready", active);
+  chip.classList.toggle("is-waiting", !active);
+}
+
+function updateStandaloneRecognitionDashboard(existing: KnownUserProfile | undefined, faceCount: number, voiceCount: number): void {
+  const faceReady = faceCount >= REQUIRED_FACE_POSE_COUNT;
+  const voiceReady = voiceCount >= REQUIRED_VOICE_SAMPLE_COUNT;
+  const trustedReady = faceReady && voiceReady && faceRecognitionInput.value === "on" && voiceMatchModeInput.value !== "off";
+  const confidence = Math.round(Math.min(1, ((faceCount / REQUIRED_FACE_POSE_COUNT) + (voiceCount / REQUIRED_VOICE_SAMPLE_COUNT)) / 2) * 100);
+  const cameraReady = faceSampleStorageInput.value === "on" || state.companionSettings.allowFaceSampleStorage || faceCount > 0;
+  const micReady = state.companionSettings.allowAlwaysListening || voiceMatchModeInput.value !== "off" || voiceCount > 0 || Boolean(speechRecognitionConstructor() || canUseServerTranscription());
+
+  recognitionRuntimeStatus.textContent = trustedReady ? "Owner Verified" : faceReady || voiceReady ? "Ready To Verify" : "Setup Needed";
+  recognitionRuntimeConfidence.textContent = `${confidence}%`;
+  recognitionRuntimeLastVerified.textContent = trustedReady ? "Now" : "Never";
+  recognitionRuntimeSource.textContent = faceReady && voiceReady ? "Face + Voice" : faceReady ? "Face" : voiceReady ? "Voice" : "Inactive";
+  recognitionRuntimeDetail.textContent = trustedReady
+    ? "Owner profile is ready for local trusted control."
+    : faceCount > 0 || voiceCount > 0
+      ? "Continue guided enrollment before trusted local control."
+      : "Owner is not currently verified.";
+
+  setRecognitionDeviceChip(recognitionDeviceCamera, cameraReady ? "Ready" : "Ask", cameraReady);
+  setRecognitionDeviceChip(recognitionDeviceMicrophone, micReady ? "Ready" : "Ask", micReady);
+  setRecognitionDeviceChip(recognitionDeviceFaceStorage, faceCount > 0 ? "Local" : "Empty", faceCount > 0);
+  setRecognitionDeviceChip(recognitionDeviceVoiceMatch, voiceCount > 0 ? "Owner Only" : "Setup", voiceCount > 0);
+  setRecognitionDeviceChip(recognitionDeviceTrustedControl, trustedReady ? "Trusted" : "Setup", trustedReady);
+
+  recognitionCameraStatusChip.textContent = `Camera: ${cameraReady ? "Ready" : "Ask"}`;
+  recognitionMicStatusChip.textContent = `Mic: ${micReady ? "Ready" : "Ask"}`;
+  recognitionFaceSetupStatus.textContent = faceReady ? `Ready (${faceCount})` : faceCount > 0 ? `Training ${Math.round((faceCount / REQUIRED_FACE_POSE_COUNT) * 100)}%` : "Adaptive light";
+  recognitionVoiceSetupStatus.textContent = voiceReady ? `Ready (${voiceCount})` : voiceCount > 0 ? `Training ${Math.round((voiceCount / REQUIRED_VOICE_SAMPLE_COUNT) * 100)}%` : "Close mic";
+  recognitionFaceCoachTitle.textContent = faceReady ? "Face enrolled" : faceCount > 0 ? "Keep going" : "Adaptive light";
+  recognitionFaceCoachDetail.textContent = faceReady
+    ? "Seven local face poses are stored for owner recognition."
+    : `${Math.min(faceCount, REQUIRED_FACE_POSE_COUNT)}/${REQUIRED_FACE_POSE_COUNT} face poses captured. Center your face and follow the next pose.`;
+  recognitionVoiceCoachTitle.textContent = voiceReady ? "Voice enrolled" : voiceCount > 0 ? "Keep reading" : "Voice ready";
+  recognitionVoiceCoachDetail.textContent = voiceReady
+    ? "Three local voice samples are stored for Voice Match."
+    : `${voiceCount}/${REQUIRED_VOICE_SAMPLE_COUNT} voice samples captured. Read the next phrase in a quiet room.`;
+  recognitionCoachStatus.textContent = trustedReady ? "Sample accepted / Stored locally" : "Sample accepted / Move closer";
+  recognitionFaceProgressLabel.textContent = faceReady ? "Face ready" : `Face ${Math.min(faceCount, REQUIRED_FACE_POSE_COUNT)}/${REQUIRED_FACE_POSE_COUNT}`;
+  recognitionFaceProgressDetail.textContent = faceReady ? "Ready for local identity checks." : "Use the guided wizard to capture all owner face poses.";
+  recognitionVoiceProgressLabel.textContent = voiceReady ? "Voice ready" : `Voice ${voiceCount}/${REQUIRED_VOICE_SAMPLE_COUNT}`;
+  recognitionVoiceProgressDetail.textContent = voiceReady ? "Ready for owner-only voice match." : "Use the guided wizard to capture clean local voice samples.";
+  recognitionSessionCheckOne.textContent = cameraReady || micReady ? "Permission ready" : "Permission needed";
+  recognitionSessionCheckTwo.textContent = faceReady && voiceReady ? "Quality accepted" : "Quality waiting";
+  recognitionSessionCheckThree.textContent = existing || faceCount > 0 || voiceCount > 0 ? "Stored locally" : "Local only";
+}
+
 function refreshIdentityEnrollmentPanel(): void {
   const existing = currentEnrollmentUser();
   const savedFaceSamples = normalizeFacePoseSamples(existing?.facePoseSamples);
@@ -2924,6 +3162,7 @@ function refreshIdentityEnrollmentPanel(): void {
   voicePhrasePrompt.textContent = `Say: ${voiceEnrollmentPhrases[phraseIndex]}`;
   captureUserFaceButton.textContent = pendingFacePoseCount() ? "Capture Next Face Pose" : "Capture Face Pose";
   captureUserVoiceButton.textContent = pendingVoicePrints.length ? "Capture Next Voice Sample" : "Capture Voice Sample";
+  updateStandaloneRecognitionDashboard(existing, faceCount, voiceCount);
 }
 
 async function captureKnownUserFaceSample(): Promise<void> {

@@ -1556,6 +1556,215 @@ dialog::backdrop {
   font-weight: 750;
 }
 
+.recognition-runtime-panel,
+.smart-recognition-shell {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 7%);
+  box-shadow: inset 0 1px rgb(255 255 255 / 8%);
+}
+
+.recognition-runtime-panel {
+  background: rgb(255 255 255 / 8%);
+}
+
+.smart-recognition-shell {
+  border-color: rgb(24 214 181 / 34%);
+  background:
+    linear-gradient(135deg, rgb(37 221 255 / 12%), rgb(24 214 181 / 10%)),
+    rgb(6 18 28 / 62%);
+}
+
+.recognition-runtime-heading,
+.smart-recognition-heading,
+.recognition-card-heading,
+.recognition-coach-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.recognition-runtime-heading h4,
+.smart-recognition-heading h4 {
+  margin: 0 0 3px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.recognition-runtime-heading p,
+.smart-recognition-heading p,
+.recognition-runtime-panel > p,
+.recognition-setup-tile p,
+.recognition-coach-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.recognition-runtime-heading button,
+.recognition-action-row button {
+  min-height: 30px;
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 7px;
+  padding: 0 10px;
+  background: rgb(255 255 255 / 10%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.recognition-runtime-heading button:hover,
+.recognition-action-row button:hover {
+  border-color: rgb(37 221 255 / 38%);
+  background: rgb(37 221 255 / 14%);
+}
+
+.recognition-runtime-metric-grid,
+.recognition-device-grid,
+.recognition-setup-grid,
+.recognition-coach-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.recognition-runtime-metric-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.recognition-runtime-metric-grid div,
+.recognition-device-chip,
+.recognition-setup-tile,
+.recognition-coach-card {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 8px;
+  background: rgb(0 0 0 / 14%);
+}
+
+.recognition-runtime-metric-grid span,
+.recognition-device-chip span,
+.recognition-card-heading span,
+.recognition-coach-heading span,
+.recognition-coach-card span,
+.recognition-status-chips span,
+.recognition-card-heading small {
+  min-width: 0;
+  color: rgb(235 242 250 / 72%);
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.recognition-runtime-metric-grid strong,
+.recognition-device-chip strong,
+.recognition-setup-tile strong,
+.recognition-coach-card strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recognition-device-chip {
+  min-height: 44px;
+  background: rgb(255 255 255 / 8%);
+}
+
+.recognition-device-chip.is-ready {
+  border-color: rgb(24 214 181 / 28%);
+}
+
+.recognition-device-chip.is-ready span {
+  color: rgb(190 255 237 / 88%);
+}
+
+.recognition-device-chip.is-waiting {
+  opacity: 0.82;
+}
+
+.recognition-status-chips {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.recognition-status-chips span,
+.recognition-card-heading small,
+.recognition-coach-heading small {
+  min-height: 23px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  padding: 0 9px;
+  border: 1px solid rgb(255 255 255 / 13%);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 10%);
+  color: #d7e2ee;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recognition-status-chips span:first-child,
+.recognition-card-heading small {
+  border-color: rgb(24 214 181 / 36%);
+  background: rgb(24 214 181 / 12%);
+  color: rgb(190 255 237 / 92%);
+}
+
+.recognition-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.recognition-session-checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 6px;
+}
+
+.recognition-session-checks span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 8%);
+  color: rgb(235 242 250 / 72%);
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1.1;
+  overflow: visible;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .identity-wizard {
   display: grid;
   gap: 14px;

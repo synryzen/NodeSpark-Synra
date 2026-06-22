@@ -5,6 +5,7 @@ import { join } from "node:path";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const types = readFileSync(join(root, "src/types.ts"), "utf8");
 const main = readFileSync(join(root, "src/main.ts"), "utf8");
+const styles = readFileSync(join(root, "src/styles.css"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 let enrollmentQuality = "";
 let identity = "";
@@ -34,6 +35,9 @@ const checks = {
   guidesVoiceSampleCapture: main.includes("voiceEnrollmentPhrases") && main.includes("pendingVoicePrints"),
   showsEnrollmentProgress: main.includes("identityEnrollmentStatus") && main.includes("faceEnrollmentProgress"),
   hasDedicatedIdentityWizard: main.includes('id="identityEnrollmentWizard"') && main.includes("openIdentityWizardButton"),
+  hasSynraAiRuntimeRecognitionPanel: main.includes("recognition-runtime-panel") && main.includes("Runtime Recognition") && main.includes("Verify Owner"),
+  hasSynraAiDeviceStateGrid: main.includes("recognition-device-grid") && main.includes("Face Storage") && main.includes("Voice Match") && main.includes("Trusted Control"),
+  hasSynraAiSmartRecognitionSurface: main.includes("smart-recognition-shell") && main.includes("Smart Recognition") && main.includes("Face Setup") && main.includes("Voice Setup") && main.includes("Live Enrollment Coach"),
   hasAppleGradeFaceStage: main.includes("identity-face-frame") && main.includes("identityFaceRing") && main.includes("identityWizardCaptureFaceButton"),
   hasAppleGradeVoiceStage: main.includes("identity-voice-meter") && main.includes("identityVoiceLevelMeter") && main.includes("identityVoiceIsolationMeter") && main.includes("identityVoiceNoiseMeter"),
   hasWizardStageController: main.includes("identityWizardStage") && main.includes("renderIdentityWizard") && main.includes("advanceIdentityWizard"),
@@ -42,6 +46,7 @@ const checks = {
   gatesVoiceCaptureQuality: main.includes("evaluateVoiceEnrollmentQuality") && main.includes("voiceQuality.accepted"),
   explainsQualityRetry: main.includes("identityFaceQualityStatus") && main.includes("identityVoiceQualityStatus"),
   showsReadinessInUi: main.includes("identity-readiness"),
+  hasOverflowSafeRecognitionChips: styles.includes("recognition-session-checks") && styles.includes("repeat(auto-fit, minmax(104px, 1fr))") && styles.includes("white-space: normal") && styles.includes("overflow-wrap: anywhere"),
   exportsSafeReadiness: main.includes("identityReadiness"),
   packageScriptExists: packageJson.includes("\"audit:identity-readiness\"")
 };
