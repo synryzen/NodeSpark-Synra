@@ -867,6 +867,37 @@ app.innerHTML = `
               </div>
             </div>
           </section>
+          <section class="recognition-proof-panel" aria-label="Enrollment Proof">
+            <div class="recognition-proof-heading">
+              <div>
+                <span>Enrollment Proof</span>
+                <strong id="recognitionProofSyncStatus">Not Tested</strong>
+              </div>
+              <button type="button" id="recognitionProofVerifyButton">Verify Sync</button>
+            </div>
+            <div class="recognition-proof-grid">
+              <div>
+                <span>Station</span>
+                <strong id="recognitionProofStationStatus">Unknown</strong>
+              </div>
+              <div>
+                <span>Camera</span>
+                <strong id="recognitionProofCameraStatus">Unknown</strong>
+              </div>
+              <div>
+                <span>Mic</span>
+                <strong id="recognitionProofMicStatus">Unknown</strong>
+              </div>
+              <div>
+                <span>Face</span>
+                <strong id="recognitionProofFaceStatus">0/7</strong>
+              </div>
+              <div>
+                <span>Voice</span>
+                <strong id="recognitionProofVoiceStatus">0/3</strong>
+              </div>
+            </div>
+          </section>
           <div class="recognition-session-checks" aria-label="Enrollment storage and quality">
             <span id="recognitionSessionCheckOne">Permission ready</span>
             <span id="recognitionSessionCheckTwo">Quality waiting</span>
@@ -1360,6 +1391,13 @@ const recognitionVoiceProgressDetail = must<HTMLElement, HTMLElement>("recogniti
 const recognitionSessionCheckOne = must<HTMLElement, HTMLElement>("recognitionSessionCheckOne");
 const recognitionSessionCheckTwo = must<HTMLElement, HTMLElement>("recognitionSessionCheckTwo");
 const recognitionSessionCheckThree = must<HTMLElement, HTMLElement>("recognitionSessionCheckThree");
+const recognitionProofStationStatus = must<HTMLElement, HTMLElement>("recognitionProofStationStatus");
+const recognitionProofCameraStatus = must<HTMLElement, HTMLElement>("recognitionProofCameraStatus");
+const recognitionProofMicStatus = must<HTMLElement, HTMLElement>("recognitionProofMicStatus");
+const recognitionProofFaceStatus = must<HTMLElement, HTMLElement>("recognitionProofFaceStatus");
+const recognitionProofVoiceStatus = must<HTMLElement, HTMLElement>("recognitionProofVoiceStatus");
+const recognitionProofSyncStatus = must<HTMLElement, HTMLElement>("recognitionProofSyncStatus");
+const recognitionProofVerifyButton = must<HTMLElement, HTMLButtonElement>("recognitionProofVerifyButton");
 const facePoseInput = must<HTMLElement, HTMLSelectElement>("facePoseInput");
 const identityEnrollmentStatus = must<HTMLElement, HTMLElement>("identityEnrollmentStatus");
 const faceEnrollmentProgress = must<HTMLElement, HTMLElement>("faceEnrollmentProgress");

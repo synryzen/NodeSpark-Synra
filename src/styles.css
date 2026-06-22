@@ -1765,6 +1765,77 @@ dialog::backdrop {
   overflow-wrap: anywhere;
 }
 
+.recognition-proof-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgb(24 214 181 / 24%);
+  border-radius: 8px;
+  padding: 10px;
+  background:
+    linear-gradient(135deg, rgb(24 214 181 / 11%), rgb(37 221 255 / 8%) 52%, rgb(255 200 90 / 7%)),
+    rgb(0 0 0 / 18%);
+}
+
+.recognition-proof-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.recognition-proof-heading div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.recognition-proof-heading span,
+.recognition-proof-grid span {
+  color: rgb(235 242 250 / 62%);
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.recognition-proof-heading strong,
+.recognition-proof-grid strong {
+  min-width: 0;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 950;
+  overflow-wrap: anywhere;
+}
+
+.recognition-proof-heading button {
+  min-width: 88px;
+  min-height: 31px;
+  border: 1px solid rgb(24 214 181 / 34%);
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgb(24 214 181 / 20%), rgb(37 221 255 / 12%)),
+    rgb(255 255 255 / 8%);
+  color: #f8fafc;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.recognition-proof-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.recognition-proof-grid div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+  padding: 8px;
+  background: rgb(0 0 0 / 16%);
+}
+
 .identity-wizard {
   display: grid;
   gap: 14px;

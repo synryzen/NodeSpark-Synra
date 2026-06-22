@@ -15,6 +15,7 @@
     "audit:stt-fallback": "node scripts/audit-stt-fallback.mjs",
     "audit:identity-readiness": "node scripts/audit-identity-readiness.mjs",
     "audit:station-identity-counts": "node scripts/audit-station-identity-counts-sync.mjs",
+    "audit:enrollment-proof": "node scripts/audit-enrollment-proof-mode.mjs",
     "qa:avatars": "node scripts/avatar-motion-smoke.mjs",
     "perf:smoke": "node scripts/perf-smoke.mjs",
     "station:typecheck": "npm --prefix tools/SynraJetsonStation run typecheck",
