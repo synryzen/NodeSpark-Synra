@@ -10,6 +10,7 @@ import { SynraMotionPlayer, type SynraMotionClipSpec } from "./motion-player";
 import { SERVER_SECRET_SENTINEL, loadCompanionSettings, loadHomeAssistantSettings, loadMemory, loadModelSettings, loadProductSettings, loadVisualSettings, loadVoiceSettings, saveCompanionSettings, saveHomeAssistantSettings, saveMemory, saveModelSettings, saveProductSettings, saveVisualSettings, saveVoiceSettings } from "./storage";
 import type { CompanionSettings, HomeAssistantConfirmationPolicy, HomeAssistantEntity, HomeAssistantSettings, KnownUserProfile, ModelSettings, NodeSparkAccess, ProductSettings, RenderQuality, ScreenTimeoutMinutes, SynraFacePose, SynraFacePoseSamples, SynraIdentityReadiness, SynraMemory, SynraMessage, SynraSkillMode, SynraState, VisualSettings, VoiceMatchMode, VoiceMatchSensitivity, VoicePrintSample, VoiceProvider, VoiceSettings, WakeWordMode } from "./types";
 import { FACE_ENROLLMENT_POSE_INSTRUCTIONS, FACE_ENROLLMENT_POSE_LABELS, FACE_ENROLLMENT_POSES, REQUIRED_FACE_POSE_COUNT, REQUIRED_VOICE_SAMPLE_COUNT, faceSamplesFromPoseMap, identityReadinessForUser, normalizeFacePoseSamples } from "./identity";
+import { defaultIdentityStatus, normalizeIdentityStatus, type SynraIdentityDeviceState, type SynraIdentityStatus } from "./identity-contract";
 import { evaluateFaceFrameQuality, evaluateVoiceEnrollmentQuality, type EnrollmentMicrophoneSignal } from "./enrollmentQuality";
 import { estimateSpeechDurationMs, visemesForSpeechPosition } from "./hub-runtime/services/speech-output";
 import packageInfo from "../package.json";
@@ -239,6 +240,7 @@ const state = {
   serverVisionStatus: "Jetson camera not checked",
   serverCameraDeviceCount: null as number | null,
   serverCameraConfiguredDevice: "",
+  identityStatus: normalizeIdentityStatus(defaultIdentityStatus),
   performanceTier: initialPerformanceTier,
   lowFpsStartedAt: 0,
   stableFpsStartedAt: 0,
@@ -3100,50 +3102,124 @@ function setRecognitionDeviceChip(chip: HTMLElement, status: string, active: boo
   chip.classList.toggle("is-waiting", !active);
 }
 
+function renderSmartRecognition(status: SynraIdentityStatus = state.identityStatus): void {
+  const normalized = normalizeIdentityStatus(status);
+  state.identityStatus = normalized;
+  const faceReady = normalized.readiness.faceReady;
+  const voiceReady = normalized.readiness.voiceReady;
+  const trustedReady = normalized.readiness.trustedActionsReady;
+  const cameraReady = isIdentityDeviceReady(normalized.cameraDevice);
+  const micReady = isIdentityDeviceReady(normalized.microphoneDevice);
+
+  recognitionRuntimeStatus.textContent = trustedReady ? "Owner Verified" : faceReady || voiceReady ? "Ready To Verify" : "Setup Needed";
+  recognitionRuntimeConfidence.textContent = `${Math.round(normalized.readiness.confidence * 100)}%`;
+  recognitionRuntimeLastVerified.textContent = normalized.readiness.lastVerifiedAt ? new Date(normalized.readiness.lastVerifiedAt).toLocaleString() : "Never";
+  recognitionRuntimeSource.textContent = normalized.readiness.source;
+  recognitionRuntimeDetail.textContent = normalized.readiness.summary;
+
+  setRecognitionDeviceChip(recognitionDeviceCamera, identityDeviceLabel(normalized.cameraDevice), cameraReady);
+  setRecognitionDeviceChip(recognitionDeviceMicrophone, identityDeviceLabel(normalized.microphoneDevice), micReady);
+  setRecognitionDeviceChip(recognitionDeviceFaceStorage, normalized.faceSampleCount > 0 ? "Local" : "Empty", normalized.faceSampleCount > 0);
+  setRecognitionDeviceChip(recognitionDeviceVoiceMatch, normalized.voiceSampleCount > 0 ? "Owner Only" : "Setup", normalized.voiceSampleCount > 0);
+  setRecognitionDeviceChip(recognitionDeviceTrustedControl, trustedReady ? "Trusted" : "Setup", trustedReady);
+
+  recognitionCameraStatusChip.textContent = `Camera: ${identityDeviceLabel(normalized.cameraDevice)}`;
+  recognitionMicStatusChip.textContent = `Mic: ${identityDeviceLabel(normalized.microphoneDevice)}`;
+  recognitionFaceSetupStatus.textContent = faceReady
+    ? `Ready (${normalized.faceSampleCount})`
+    : normalized.faceSampleCount > 0
+      ? `Training ${Math.round(normalized.face.progress * 100)}%`
+      : "Adaptive light";
+  recognitionVoiceSetupStatus.textContent = voiceReady
+    ? `Ready (${normalized.voiceSampleCount})`
+    : normalized.voiceSampleCount > 0
+      ? `Training ${Math.round(normalized.voice.progress * 100)}%`
+      : "Close mic";
+  recognitionFaceCoachTitle.textContent = normalized.face.title;
+  recognitionFaceCoachDetail.textContent = normalized.face.detail;
+  recognitionVoiceCoachTitle.textContent = normalized.voice.title;
+  recognitionVoiceCoachDetail.textContent = normalized.voice.detail;
+  recognitionCoachStatus.textContent = trustedReady || normalized.face.phase === "accepted" || normalized.voice.phase === "accepted"
+    ? "Sample accepted / Stored locally"
+    : "Waiting for sample";
+  recognitionFaceProgressLabel.textContent = faceReady ? "Face ready" : `Face ${Math.min(normalized.faceSampleCount, normalized.requiredFacePoseCount)}/${normalized.requiredFacePoseCount}`;
+  recognitionFaceProgressDetail.textContent = faceReady ? "Ready for local identity checks." : normalized.face.detail;
+  recognitionVoiceProgressLabel.textContent = voiceReady ? "Voice ready" : `Voice ${normalized.voiceSampleCount}/${normalized.requiredVoiceSampleCount}`;
+  recognitionVoiceProgressDetail.textContent = voiceReady ? "Ready for owner-only voice match." : normalized.voice.detail;
+  recognitionSessionCheckOne.textContent = normalized.face.checks[0] ?? normalized.voice.checks[0] ?? "Permission waiting";
+  recognitionSessionCheckTwo.textContent = normalized.face.checks[1] ?? normalized.voice.checks[1] ?? "Quality waiting";
+  recognitionSessionCheckThree.textContent = "Stored locally";
+}
+
 function updateStandaloneRecognitionDashboard(existing: KnownUserProfile | undefined, faceCount: number, voiceCount: number): void {
   const faceReady = faceCount >= REQUIRED_FACE_POSE_COUNT;
   const voiceReady = voiceCount >= REQUIRED_VOICE_SAMPLE_COUNT;
   const trustedReady = faceReady && voiceReady && faceRecognitionInput.value === "on" && voiceMatchModeInput.value !== "off";
-  const confidence = Math.round(Math.min(1, ((faceCount / REQUIRED_FACE_POSE_COUNT) + (voiceCount / REQUIRED_VOICE_SAMPLE_COUNT)) / 2) * 100);
   const cameraReady = faceSampleStorageInput.value === "on" || state.companionSettings.allowFaceSampleStorage || faceCount > 0;
   const micReady = state.companionSettings.allowAlwaysListening || voiceMatchModeInput.value !== "off" || voiceCount > 0 || Boolean(speechRecognitionConstructor() || canUseServerTranscription());
+  const savedSamples = normalizeFacePoseSamples(existing?.facePoseSamples);
+  const completedFacePoses = FACE_ENROLLMENT_POSES.filter((pose) => savedSamples[pose] || pendingFacePoseSamples[pose]);
 
-  recognitionRuntimeStatus.textContent = trustedReady ? "Owner Verified" : faceReady || voiceReady ? "Ready To Verify" : "Setup Needed";
-  recognitionRuntimeConfidence.textContent = `${confidence}%`;
-  recognitionRuntimeLastVerified.textContent = trustedReady ? "Now" : "Never";
-  recognitionRuntimeSource.textContent = faceReady && voiceReady ? "Face + Voice" : faceReady ? "Face" : voiceReady ? "Voice" : "Inactive";
-  recognitionRuntimeDetail.textContent = trustedReady
-    ? "Owner profile is ready for local trusted control."
-    : faceCount > 0 || voiceCount > 0
-      ? "Continue guided enrollment before trusted local control."
-      : "Owner is not currently verified.";
+  renderSmartRecognition(normalizeIdentityStatus({
+    ...state.identityStatus,
+    generatedAt: new Date().toISOString(),
+    cameraPermission: cameraReady ? "ready" : "unknown",
+    microphonePermission: micReady ? "ready" : "unknown",
+    cameraDevice: cameraReady ? "ready" : "permission-needed",
+    microphoneDevice: micReady ? "ready" : "permission-needed",
+    sttRoute: canUseServerTranscription() || speechRecognitionConstructor() ? "ready" : "not-configured",
+    faceSampleCount: faceCount,
+    voiceSampleCount: voiceCount,
+    completedFacePoses,
+    face: {
+      phase: faceReady ? "accepted" : faceCount > 0 ? "previewing" : "idle",
+      title: faceReady ? "Face enrolled" : faceCount > 0 ? "Keep going" : "Adaptive light",
+      detail: faceReady
+        ? "Seven local face poses are stored for owner recognition."
+        : `${Math.min(faceCount, REQUIRED_FACE_POSE_COUNT)}/${REQUIRED_FACE_POSE_COUNT} face poses captured. Center your face and follow the next pose.`,
+      progress: faceCount / REQUIRED_FACE_POSE_COUNT,
+      score: faceCount / REQUIRED_FACE_POSE_COUNT,
+      checks: [cameraReady ? "Permission ready" : "Permission needed", faceReady ? "Quality accepted" : "Quality waiting", "Stored locally"]
+    },
+    voice: {
+      phase: voiceReady ? "accepted" : voiceCount > 0 ? "recording" : "idle",
+      title: voiceReady ? "Voice enrolled" : voiceCount > 0 ? "Keep reading" : "Voice ready",
+      detail: voiceReady
+        ? "Three local voice samples are stored for Voice Match."
+        : `${voiceCount}/${REQUIRED_VOICE_SAMPLE_COUNT} voice samples captured. Read the next phrase in a quiet room.`,
+      progress: voiceCount / REQUIRED_VOICE_SAMPLE_COUNT,
+      score: voiceCount / REQUIRED_VOICE_SAMPLE_COUNT,
+      checks: [micReady ? "Mic ready" : "Mic needed", voiceReady ? "Quality accepted" : "Isolation waiting", "Stored locally"]
+    },
+    readiness: {
+      ownerReady: Boolean(existing) || faceCount > 0 || voiceCount > 0,
+      faceReady,
+      voiceReady,
+      trustedActionsReady: trustedReady,
+      overallScore: Math.min(1, ((faceCount / REQUIRED_FACE_POSE_COUNT) + (voiceCount / REQUIRED_VOICE_SAMPLE_COUNT)) / 2),
+      confidence: Math.min(1, ((faceCount / REQUIRED_FACE_POSE_COUNT) + (voiceCount / REQUIRED_VOICE_SAMPLE_COUNT)) / 2),
+      lastVerifiedAt: trustedReady ? new Date().toISOString() : null,
+      source: faceReady && voiceReady ? "Face + Voice" : faceReady ? "Face" : voiceReady ? "Voice" : "Inactive",
+      summary: trustedReady
+        ? "Owner profile is ready for local trusted control."
+        : faceCount > 0 || voiceCount > 0
+          ? "Continue guided enrollment before trusted local control."
+          : "Owner is not currently verified."
+    }
+  }));
+}
 
-  setRecognitionDeviceChip(recognitionDeviceCamera, cameraReady ? "Ready" : "Ask", cameraReady);
-  setRecognitionDeviceChip(recognitionDeviceMicrophone, micReady ? "Ready" : "Ask", micReady);
-  setRecognitionDeviceChip(recognitionDeviceFaceStorage, faceCount > 0 ? "Local" : "Empty", faceCount > 0);
-  setRecognitionDeviceChip(recognitionDeviceVoiceMatch, voiceCount > 0 ? "Owner Only" : "Setup", voiceCount > 0);
-  setRecognitionDeviceChip(recognitionDeviceTrustedControl, trustedReady ? "Trusted" : "Setup", trustedReady);
+function isIdentityDeviceReady(value: SynraIdentityDeviceState): boolean {
+  return value === "ready" || value === "active";
+}
 
-  recognitionCameraStatusChip.textContent = `Camera: ${cameraReady ? "Ready" : "Ask"}`;
-  recognitionMicStatusChip.textContent = `Mic: ${micReady ? "Ready" : "Ask"}`;
-  recognitionFaceSetupStatus.textContent = faceReady ? `Ready (${faceCount})` : faceCount > 0 ? `Training ${Math.round((faceCount / REQUIRED_FACE_POSE_COUNT) * 100)}%` : "Adaptive light";
-  recognitionVoiceSetupStatus.textContent = voiceReady ? `Ready (${voiceCount})` : voiceCount > 0 ? `Training ${Math.round((voiceCount / REQUIRED_VOICE_SAMPLE_COUNT) * 100)}%` : "Close mic";
-  recognitionFaceCoachTitle.textContent = faceReady ? "Face enrolled" : faceCount > 0 ? "Keep going" : "Adaptive light";
-  recognitionFaceCoachDetail.textContent = faceReady
-    ? "Seven local face poses are stored for owner recognition."
-    : `${Math.min(faceCount, REQUIRED_FACE_POSE_COUNT)}/${REQUIRED_FACE_POSE_COUNT} face poses captured. Center your face and follow the next pose.`;
-  recognitionVoiceCoachTitle.textContent = voiceReady ? "Voice enrolled" : voiceCount > 0 ? "Keep reading" : "Voice ready";
-  recognitionVoiceCoachDetail.textContent = voiceReady
-    ? "Three local voice samples are stored for Voice Match."
-    : `${voiceCount}/${REQUIRED_VOICE_SAMPLE_COUNT} voice samples captured. Read the next phrase in a quiet room.`;
-  recognitionCoachStatus.textContent = trustedReady ? "Sample accepted / Stored locally" : "Sample accepted / Move closer";
-  recognitionFaceProgressLabel.textContent = faceReady ? "Face ready" : `Face ${Math.min(faceCount, REQUIRED_FACE_POSE_COUNT)}/${REQUIRED_FACE_POSE_COUNT}`;
-  recognitionFaceProgressDetail.textContent = faceReady ? "Ready for local identity checks." : "Use the guided wizard to capture all owner face poses.";
-  recognitionVoiceProgressLabel.textContent = voiceReady ? "Voice ready" : `Voice ${voiceCount}/${REQUIRED_VOICE_SAMPLE_COUNT}`;
-  recognitionVoiceProgressDetail.textContent = voiceReady ? "Ready for owner-only voice match." : "Use the guided wizard to capture clean local voice samples.";
-  recognitionSessionCheckOne.textContent = cameraReady || micReady ? "Permission ready" : "Permission needed";
-  recognitionSessionCheckTwo.textContent = faceReady && voiceReady ? "Quality accepted" : "Quality waiting";
-  recognitionSessionCheckThree.textContent = existing || faceCount > 0 || voiceCount > 0 ? "Stored locally" : "Local only";
+function identityDeviceLabel(value: SynraIdentityDeviceState): string {
+  if (value === "ready") return "Ready";
+  if (value === "active") return "Active";
+  if (value === "degraded") return "Degraded";
+  if (value === "permission-needed") return "Ask";
+  if (value === "not-configured") return "Setup";
+  return "Unavailable";
 }
 
 function refreshIdentityEnrollmentPanel(): void {
