@@ -57,6 +57,27 @@ def station_identity_smoke_status() -> dict[str, Any] | None:
         return None
 
 
+def post_station_identity_counts(face_sample_count: Any, voice_sample_count: Any) -> dict[str, Any]:
+    url = os.environ.get("SYNRA_STATION_IDENTITY_COUNTS_URL", "http://127.0.0.1:4788/station/identity-counts").strip()
+    if not url:
+        return {"ok": False, "error": "Station identity counts URL is not configured."}
+    payload = {
+        "faceSampleCount": face_sample_count,
+        "voiceSampleCount": voice_sample_count,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        method="POST",
+    )
+    timeout = float(os.environ.get("SYNRA_STATION_HEALTH_TIMEOUT", "0.8"))
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        body = json.loads(response.read().decode("utf-8"))
+        return body if isinstance(body, dict) else {"ok": False, "error": "Station returned a non-object response."}
+
+
 class SynraHandler(SimpleHTTPRequestHandler):
     server_version = "SynraStandalone/4.4"
 
@@ -195,6 +216,9 @@ class SynraHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/confirmations/prepare"):
             self.handle_prepare_confirmation()
             return
+        if self.path.startswith("/api/station/identity-counts"):
+            self.handle_station_identity_counts()
+            return
         if self.path.startswith("/api/settings/save"):
             self.handle_save_settings()
             return
@@ -291,6 +315,21 @@ class SynraHandler(SimpleHTTPRequestHandler):
             self.send_json(200, {"ok": False, "error": describe_http_error("External model endpoint", error)})
         except urllib.error.URLError as error:
             self.send_json(200, {"ok": False, "error": f"External model endpoint is unreachable: {error.reason}."})
+        except Exception as error:
+            self.send_json(200, {"ok": False, "error": str(error)})
+
+    def handle_station_identity_counts(self) -> None:
+        try:
+            body = self.read_json_body()
+            response = post_station_identity_counts(
+                body.get("faceSampleCount"),
+                body.get("voiceSampleCount"),
+            )
+            self.send_json(200, {"ok": True, "identitySmoke": response})
+        except urllib.error.HTTPError as error:
+            self.send_json(200, {"ok": False, "error": describe_http_error("Station identity counts", error)})
+        except urllib.error.URLError as error:
+            self.send_json(200, {"ok": False, "error": f"Station identity counts is unreachable: {error.reason}."})
         except Exception as error:
             self.send_json(200, {"ok": False, "error": str(error)})
 
