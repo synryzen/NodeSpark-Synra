@@ -1,4 +1,5 @@
-import type { SynraSensorStatus } from "./types.js";
+import fs from "node:fs";
+import type { StationCameraHealth, SynraSensorStatus } from "./types.js";
 
 export class StationCamera {
   private statusValue: SynraSensorStatus;
@@ -32,7 +33,38 @@ export class StationCamera {
     throw new Error(this.lastErrorValue);
   }
 
-  debug() {
-    return { enabled: this.enabled, status: this.statusValue, lastError: this.lastErrorValue };
+  debug(): StationCameraHealth {
+    const devices = this.detectDevices();
+    const configuredDevice = process.env.SYNRA_CAMERA_DEVICE || "";
+    const configuredPresent = configuredDevice ? devices.some((device) => device.path === configuredDevice) : false;
+    return {
+      enabled: this.enabled,
+      status: this.statusValue,
+      lastError: this.lastErrorValue,
+      configuredDevice: configuredDevice || null,
+      devices: devices.map((device) => ({
+        path: device.path,
+        present: true,
+        configured: device.path === configuredDevice
+      })),
+      routeStatus: this.cameraRouteStatus(devices.length, configuredDevice, configuredPresent)
+    };
+  }
+
+  private detectDevices(): Array<{ path: string }> {
+    try {
+      return fs.readdirSync("/dev")
+        .filter((name) => /^video\d+$/.test(name))
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        .map((name) => ({ path: `/dev/${name}` }));
+    } catch {
+      return [];
+    }
+  }
+
+  private cameraRouteStatus(deviceCount: number, configuredDevice: string, configuredPresent: boolean): StationCameraHealth["routeStatus"] {
+    if (!this.enabled) return "unavailable";
+    if (configuredDevice) return configuredPresent ? "ready" : "degraded";
+    return deviceCount > 0 ? "not-configured" : "unavailable";
   }
 }

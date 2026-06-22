@@ -63,6 +63,48 @@ export interface SynraDeviceRecord {
   updatedAt: string;
 }
 
+export interface StationCameraDevice {
+  path: string;
+  present: boolean;
+  configured: boolean;
+}
+
+export interface StationAudioDevice {
+  id: string;
+  label: string;
+  present: boolean;
+  configured: boolean;
+}
+
+export type StationRouteStatus = "ready" | "degraded" | "not-configured" | "unavailable";
+
+export interface StationCameraHealth {
+  enabled: boolean;
+  status: SynraSensorStatus;
+  lastError: string | null;
+  configuredDevice: string | null;
+  devices: StationCameraDevice[];
+  routeStatus: StationRouteStatus;
+}
+
+export interface StationMicrophoneHealth {
+  enabled: boolean;
+  status: SynraSensorStatus;
+  lastError: string | null;
+  configuredSource: string | null;
+  sources: StationAudioDevice[];
+  routeStatus: StationRouteStatus;
+}
+
+export interface StationIdentitySmoke {
+  ok: boolean;
+  camera: { status: StationRouteStatus; configuredDevice: string | null; devices: StationCameraDevice[] };
+  microphone: { status: StationRouteStatus; configuredSource: string | null; sources: StationAudioDevice[] };
+  stt: { status: StationRouteStatus; provider: string; lastError: string | null };
+  speaker: { status: StationRouteStatus; provider: string; lastError: string | null };
+  identity: { faceSampleCount: number; voiceSampleCount: number; rawSamplesIncluded: false; secretsIncluded: false };
+}
+
 export interface SynraHealthReport {
   generatedAt: string;
   uptimeSeconds: number;
@@ -89,8 +131,9 @@ export interface SynraHealthReport {
     gpu: string | null;
     network: SynraNetworkState;
   };
-  camera: { enabled: boolean; status: SynraSensorStatus; lastError: string | null };
-  microphone: { enabled: boolean; status: SynraSensorStatus; lastError: string | null };
+  camera: StationCameraHealth;
+  microphone: StationMicrophoneHealth;
+  identitySmoke: StationIdentitySmoke;
   lastError: string | null;
 }
 

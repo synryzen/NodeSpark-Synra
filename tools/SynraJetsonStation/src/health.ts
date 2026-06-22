@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { StationConfig, SynraHealthReport, SynraNetworkState } from "./types.js";
+import type { StationConfig, StationIdentitySmoke, StationRouteStatus, SynraHealthReport, SynraNetworkState } from "./types.js";
 import type { StationCamera } from "./camera.js";
 import type { StationMicrophone } from "./microphone.js";
 
@@ -51,6 +51,53 @@ function networkState(): SynraNetworkState {
   return "unknown";
 }
 
+function routeStatusFromStt(provider: string, lastError: string | null): StationRouteStatus {
+  if (lastError) return "degraded";
+  if (provider === "none") return "not-configured";
+  return "ready";
+}
+
+function numberFromEnv(name: string): number {
+  const value = Number(process.env[name] || 0);
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function identitySmoke(camera: StationCamera, microphone: StationMicrophone): StationIdentitySmoke {
+  const cameraDebug = camera.debug();
+  const microphoneDebug = microphone.debug();
+  const sttError = process.env.SYNRA_STT_LAST_ERROR || null;
+  const sttProvider = process.env.SYNRA_STT_PROVIDER || "browser-fallback";
+  return {
+    ok: cameraDebug.routeStatus !== "degraded" && microphoneDebug.routeStatus !== "degraded" && !sttError,
+    camera: {
+      status: cameraDebug.routeStatus,
+      configuredDevice: cameraDebug.configuredDevice,
+      devices: cameraDebug.devices
+    },
+    microphone: {
+      status: microphoneDebug.routeStatus,
+      configuredSource: microphoneDebug.configuredSource,
+      sources: microphoneDebug.sources
+    },
+    stt: {
+      status: routeStatusFromStt(sttProvider, sttError),
+      provider: sttProvider,
+      lastError: sttError
+    },
+    speaker: {
+      status: "ready",
+      provider: process.env.SYNRA_SPEAKER_PROVIDER || "system",
+      lastError: null
+    },
+    identity: {
+      faceSampleCount: numberFromEnv("SYNRA_FACE_SAMPLE_COUNT"),
+      voiceSampleCount: numberFromEnv("SYNRA_VOICE_SAMPLE_COUNT"),
+      rawSamplesIncluded: false,
+      secretsIncluded: false
+    }
+  };
+}
+
 export interface HealthState {
   startedAtMs: number;
   synraRuntimePresent: boolean;
@@ -69,6 +116,7 @@ export async function collectHealth(
   microphone: StationMicrophone
 ): Promise<SynraHealthReport> {
   const [disk, temp] = await Promise.all([diskStats(), temperatureC()]);
+  const identitySmokeReport = identitySmoke(camera, microphone);
   return {
     generatedAt: new Date().toISOString(),
     uptimeSeconds: Math.max(0, Math.round((Date.now() - state.startedAtMs) / 1000)),
@@ -97,6 +145,7 @@ export async function collectHealth(
     },
     camera: camera.debug(),
     microphone: microphone.debug(),
+    identitySmoke: identitySmokeReport,
     lastError: state.lastError
   };
 }

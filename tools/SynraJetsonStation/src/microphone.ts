@@ -1,4 +1,4 @@
-import type { SynraSensorStatus } from "./types.js";
+import type { StationMicrophoneHealth, SynraSensorStatus } from "./types.js";
 
 export class StationMicrophone {
   private statusValue: SynraSensorStatus;
@@ -32,7 +32,25 @@ export class StationMicrophone {
     throw new Error(this.lastErrorValue);
   }
 
-  debug() {
-    return { enabled: this.enabled, status: this.statusValue, lastError: this.lastErrorValue };
+  debug(): StationMicrophoneHealth {
+    const configuredSource = process.env.SYNRA_MICROPHONE_SOURCE || null;
+    return {
+      enabled: this.enabled,
+      status: this.statusValue,
+      lastError: this.lastErrorValue,
+      configuredSource,
+      sources: configuredSource ? [{
+        id: configuredSource,
+        label: configuredSource,
+        present: true,
+        configured: true
+      }] : [],
+      routeStatus: this.microphoneRouteStatus(configuredSource)
+    };
+  }
+
+  private microphoneRouteStatus(configuredSource: string | null): StationMicrophoneHealth["routeStatus"] {
+    if (!this.enabled) return "unavailable";
+    return configuredSource ? "ready" : "not-configured";
   }
 }
