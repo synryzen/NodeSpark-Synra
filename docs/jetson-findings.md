@@ -1,16 +1,17 @@
 # Jetson Findings
 
-Last checked: June 20, 2026.
+Last checked: June 22, 2026.
 
 ## Runtime
 
 - `synra-standalone.service` is active.
+- `synra-jetson-station.service` is active and serving the Station API on port `4788`.
 - `synra-electron-kiosk.service` is active.
 - Python server memory is low, around 25 MB in the latest service check.
 - `/api/health` reports route-specific model labels for conversation, vision, tools, and NodeSpark.
 - Kiosk telemetry is available at `/api/telemetry/public`.
 - Synra Standalone reports version `4.4.0`.
-- The Jetson Station shell on the device reported version `4.3.0`, while the local station package is `4.4.0`; redeploy station assets so the shell and app version match.
+- The Jetson Station package deployed and tested as version `4.4.0`.
 
 ## Camera
 
@@ -18,6 +19,7 @@ Last checked: June 20, 2026.
 - `/api/health` reports two video devices and two media devices.
 - `/api/vision/public` still has an empty configured camera device and remains diagnostic-only.
 - Real identity enrollment needs a visible, permissioned capture path that selects `/dev/video0` or `/dev/video1` and reports configured-device readiness.
+- Station identity smoke now selects `/dev/video0` and reports camera route status `ready`.
 
 ## Audio
 
@@ -26,6 +28,7 @@ Last checked: June 20, 2026.
 - Kiosk wake listening is active, but live checks have reported ElevenLabs speech-to-text HTTP failures, first HTTP 500 and then HTTP 401 after deployment.
 - Synra Standalone now has a server transcription circuit breaker and browser speech fallback so a remote STT outage or invalid server-managed STT credential does not keep retrying silently.
 - A physical kiosk microphone retest is still needed from the Jetson display/browser permission prompt after deployment.
+- Station identity smoke currently reports microphone route status `not-configured`; configure `SYNRA_MICROPHONE_SOURCE` in `~/.config/synra-jetson-station.env` after selecting the preferred Jetson input source.
 
 ## Kiosk Display
 
@@ -78,6 +81,12 @@ Observed after the full Vulkan-from-ANGLE flag set:
 - Synra 4.5 now reports identity readiness as metadata so "recognition on" no longer hides missing enrollment data.
 - Face readiness requires seven pose samples: center, turn left, turn right, look up, look down, roll left, and roll right.
 - Voice readiness requires three voice samples.
+- `/station/identity-smoke` reports redaction-safe camera, microphone, STT, speaker, and sample-count readiness.
+- `/api/health` now includes `identitySmoke` when the Station API is reachable, so the Standalone Smart Recognition panel can render real Jetson route state.
+- Raw samples and secrets are not present in identity smoke output.
+- Camera route status after deploy: `ready`.
+- STT route status after deploy: `ready` with provider `browser-fallback`.
+- Identity sample counts after deploy: face `0`, voice `0`; enrollment still needs real local captures.
 
 ## Recommendation
 

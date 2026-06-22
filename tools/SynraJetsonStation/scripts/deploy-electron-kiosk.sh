@@ -26,13 +26,13 @@ mkdir -p \"\$BACKUP_DIR\"
 BACKUP=\"\$BACKUP_DIR/synra-station-state-\$(date +%Y%m%d%H%M%S).tgz\"
 cd \"/home/${JETSON_USER}\"
 backup_paths=()
-for path in '.config/Electron' '.config/systemd/user/synra-electron-kiosk.service' 'synra-jetson-station/.env'; do
+for path in '.config/Electron' '.config/systemd/user/synra-electron-kiosk.service' '.config/systemd/user/synra-jetson-station.service' 'synra-jetson-station/.env'; do
   if [ -e \"\$path\" ]; then
     backup_paths+=(\"\$path\")
   fi
 done
 if [ \"\${#backup_paths[@]}\" -gt 0 ]; then
-  tar --ignore-failed-read -czf \"\$BACKUP\" \"\${backup_paths[@]}\"
+  tar --ignore-failed-read --warning=no-file-changed -czf \"\$BACKUP\" \"\${backup_paths[@]}\" || echo \"Synra Station backup completed with live-file warnings.\"
   chmod 600 \"\$BACKUP\"
   echo \"Synra Station state backup: \$BACKUP\"
 fi
@@ -58,8 +58,48 @@ load_node_tools
 '$REMOTE_DIR/scripts/repair-electron-install.sh'
 \"\$NPM_BIN\" run build
 \"\$NPM_BIN\" run test:kiosk
+mkdir -p \"/home/${JETSON_USER}/.config/systemd/user\"
+cat > \"/home/${JETSON_USER}/.config/systemd/user/synra-jetson-station.service\" <<SERVICE
+[Unit]
+Description=Synra Jetson Station API
+After=network.target synra-standalone.service
+Wants=synra-standalone.service
+
+[Service]
+Type=simple
+WorkingDirectory=$REMOTE_DIR
+Environment=NODE_ENV=production
+Environment=STATION_HOST=0.0.0.0
+Environment=STATION_PORT=4788
+Environment=STATION_CAMERA_ENABLED=1
+Environment=STATION_MICROPHONE_ENABLED=1
+Environment=STATION_LOCAL_VISION=1
+Environment=STATION_LOCAL_SPEECH=1
+Environment=SYNRA_CAMERA_DEVICE=/dev/video0
+Environment=SYNRA_STT_PROVIDER=browser-fallback
+Environment=HUB_BASE_URL=http://127.0.0.1:8787
+EnvironmentFile=-/home/${JETSON_USER}/.config/synra-jetson-station.env
+ExecStart=\$NODE_BIN $REMOTE_DIR/dist/station-server.js
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Install]
+WantedBy=default.target
+SERVICE
+systemctl --user daemon-reload
+systemctl --user enable --now synra-jetson-station.service
+systemctl --user restart synra-jetson-station.service
+for _ in \$(seq 1 10); do
+  if systemctl --user --quiet is-active synra-jetson-station.service; then
+    break
+  fi
+  sleep 1
+done
 rm -f /tmp/synra-jetson-station-electron.tgz
 echo 'Synra Electron kiosk installed at $REMOTE_DIR'
+systemctl --user is-active synra-jetson-station.service
 echo 'Launch with: $REMOTE_DIR/scripts/start-electron-kiosk.sh'
 echo 'GPU check:   $REMOTE_DIR/scripts/electron-gpu-check.sh'
 "

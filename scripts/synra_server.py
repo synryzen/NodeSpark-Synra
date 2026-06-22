@@ -43,6 +43,20 @@ def env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def station_identity_smoke_status() -> dict[str, Any] | None:
+    url = os.environ.get("SYNRA_STATION_IDENTITY_SMOKE_URL", "http://127.0.0.1:4788/station/identity-smoke").strip()
+    if not url:
+        return None
+    try:
+        request = urllib.request.Request(url, headers={"Accept": "application/json"})
+        timeout = float(os.environ.get("SYNRA_STATION_HEALTH_TIMEOUT", "0.6"))
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
+
+
 class SynraHandler(SimpleHTTPRequestHandler):
     server_version = "SynraStandalone/4.4"
 
@@ -60,6 +74,7 @@ class SynraHandler(SimpleHTTPRequestHandler):
         request_path = urllib.parse.urlparse(self.path).path
         if self.path.startswith("/api/health"):
             vision = vision_public_status()
+            identity_smoke = station_identity_smoke_status()
             self.send_json(
                 200,
                 {
@@ -75,6 +90,8 @@ class SynraHandler(SimpleHTTPRequestHandler):
                     "cameraDeviceCount": vision["cameraDeviceCount"],
                     "mediaDeviceCount": vision["mediaDeviceCount"],
                     "videoDeviceCount": vision["videoDeviceCount"],
+                    "identitySmoke": identity_smoke,
+                    "stationIdentitySmokeAvailable": identity_smoke is not None,
                 },
             )
             return
