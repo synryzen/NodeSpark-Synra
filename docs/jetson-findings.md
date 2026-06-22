@@ -131,6 +131,9 @@ Observed after the full Vulkan-from-ANGLE flag set:
   - `secretsIncluded: false`.
 - `Verify Sync` now reads only current numeric face and voice counts from `/api/health.identitySmoke`; it does not send raw face frames, voice blobs, voice prints, pending samples, or biometric payloads.
 - Proof state preserves local enrollment counts when Station health lags, so a stale Jetson response cannot lower local progress and then falsely claim `Synced`.
+- Rendered UI verification from `http://192.168.1.165:5191/` confirmed the Users settings tab displays the proof panel without covering the main Synra stage.
+- Pressing `Verify Sync` in the rendered UI changed proof state to `Synced`, `Station Ready`, `Camera Ready`, `Mic Ready`, `Face 0/7 synced`, and `Voice 0/3 synced`; the button re-enabled after verification.
+- Pressing `Enroll Voice` opened the guided identity wizard to `Enroll your voice` with the enrollment phrase and `Record Voice Sample` action visible.
 - Manual UI verification is still required after a real accepted camera/microphone sample to confirm the count increase from the physical enrollment path.
 
 ## Recommendation
