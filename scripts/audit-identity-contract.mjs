@@ -20,6 +20,7 @@ const requiredContractTokens = [
 
 const requiredMainTokens = [
   "normalizeIdentityStatus",
+  "identityStatusFromStationHealth",
   "renderSmartRecognition",
   "identityFaceSetupButton",
   "identityVoiceSetupButton",

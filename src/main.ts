@@ -3209,6 +3209,59 @@ function updateStandaloneRecognitionDashboard(existing: KnownUserProfile | undef
   }));
 }
 
+function identityStatusFromStationHealth(health: { identitySmoke?: unknown }): SynraIdentityStatus {
+  const smoke = health.identitySmoke as {
+    camera?: { status?: string };
+    microphone?: { status?: string };
+    stt?: { status?: string; provider?: string; lastError?: string | null };
+    speaker?: { status?: string; provider?: string; lastError?: string | null };
+    identity?: { faceSampleCount?: number; voiceSampleCount?: number };
+  } | undefined;
+  const faceSampleCount = Number(smoke?.identity?.faceSampleCount ?? state.identityStatus.faceSampleCount);
+  const voiceSampleCount = Number(smoke?.identity?.voiceSampleCount ?? state.identityStatus.voiceSampleCount);
+  const cameraDevice = stationRouteToIdentityDevice(smoke?.camera?.status);
+  const microphoneDevice = stationRouteToIdentityDevice(smoke?.microphone?.status);
+  const sttRoute = stationRouteToIdentityDevice(smoke?.stt?.status);
+  const speakerRoute = stationRouteToIdentityDevice(smoke?.speaker?.status);
+  const faceReady = faceSampleCount >= state.identityStatus.requiredFacePoseCount;
+  const voiceReady = voiceSampleCount >= state.identityStatus.requiredVoiceSampleCount;
+  const trustedActionsReady = faceReady && voiceReady && cameraDevice !== "degraded" && microphoneDevice !== "degraded" && sttRoute !== "degraded";
+  const sttProvider = smoke?.stt?.provider || "station";
+  const sttError = smoke?.stt?.lastError;
+
+  return normalizeIdentityStatus({
+    ...state.identityStatus,
+    generatedAt: new Date().toISOString(),
+    cameraDevice,
+    microphoneDevice,
+    sttRoute,
+    speakerRoute,
+    faceSampleCount,
+    voiceSampleCount,
+    readiness: {
+      ...state.identityStatus.readiness,
+      faceReady,
+      voiceReady,
+      trustedActionsReady,
+      source: `station:${sttProvider}`,
+      summary: sttError
+        ? `Speech recognition degraded: ${sttError}`
+        : "Local identity status refreshed from station health."
+    }
+  });
+}
+
+function refreshSmartRecognitionFromHealth(health: { identitySmoke?: unknown }): void {
+  if (health.identitySmoke) renderSmartRecognition(identityStatusFromStationHealth(health));
+}
+
+function stationRouteToIdentityDevice(value: string | undefined): SynraIdentityDeviceState {
+  if (value === "ready") return "ready";
+  if (value === "degraded") return "degraded";
+  if (value === "not-configured") return "not-configured";
+  return "unavailable";
+}
+
 function isIdentityDeviceReady(value: SynraIdentityDeviceState): boolean {
   return value === "ready" || value === "active";
 }
@@ -4804,7 +4857,9 @@ async function systemStatusCommand(): Promise<LocalCommandResult> {
       cameraDeviceCount?: number;
       videoDeviceCount?: number;
       mediaDeviceCount?: number;
+      identitySmoke?: unknown;
     };
+    refreshSmartRecognitionFromHealth(health);
     const uptime = typeof health.uptimeSeconds === "number" ? `${Math.round(health.uptimeSeconds)} seconds` : "unknown";
     const smartHome = health.smartHomeConfigured ? "smart home configured" : "smart home not configured";
     updateServerVisionStatus(summarizeVisionDiagnostics(health));
@@ -5507,7 +5562,8 @@ async function smartHomeIsConfigured(): Promise<boolean> {
   if (homeAssistantSettingsReady(state.homeAssistantSettings)) return true;
   try {
     const response = await fetch("/api/health", { cache: "no-store" });
-    const health = (await response.json()) as { smartHomeConfigured?: boolean };
+    const health = (await response.json()) as { smartHomeConfigured?: boolean; identitySmoke?: unknown };
+    refreshSmartRecognitionFromHealth(health);
     return health.smartHomeConfigured === true;
   } catch {
     return false;
