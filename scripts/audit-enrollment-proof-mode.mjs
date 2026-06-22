@@ -25,6 +25,13 @@ for (const id of [
 
 requireText("proof heading", main, "Enrollment Proof");
 requireText("proof section class", main, "recognition-proof-panel");
+requireText("proof sync state type", main, "type EnrollmentProofSyncState");
+requireText("proof state type", main, "type EnrollmentProofState");
+requireText("proof state", main, "const enrollmentProofState");
+requireText("proof renderer", main, "function renderEnrollmentProof");
+requireText("proof status updater", main, "function updateEnrollmentProofFromStatus");
+requireText("proof station render", main, "recognitionProofStationStatus.textContent");
+requireText("proof sync render", main, "recognitionProofSyncStatus.textContent");
 requireText("proof styles", styles, ".recognition-proof-panel");
 requireText("package script", packageJson, "\"audit:enrollment-proof\"");
 

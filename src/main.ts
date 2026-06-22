@@ -1545,6 +1545,31 @@ let serverWakeWordTimer = 0;
 let pendingFacePoseSamples: SynraFacePoseSamples = {};
 let pendingVoicePrints: VoicePrintSample[] = [];
 type IdentityWizardStage = "overview" | "face" | "voice" | "summary";
+type EnrollmentProofSyncState = "not-tested" | "pending" | "confirmed" | "failed" | "degraded";
+type EnrollmentProofState = {
+  lastHealthAt: string | null;
+  lastFaceAcceptedAt: string | null;
+  lastVoiceAcceptedAt: string | null;
+  lastSyncAttemptAt: string | null;
+  lastSyncConfirmedAt: string | null;
+  lastSyncError: string | null;
+  lastSyncedFaceSampleCount: number;
+  lastSyncedVoiceSampleCount: number;
+  stationAvailable: boolean;
+  syncState: EnrollmentProofSyncState;
+};
+const enrollmentProofState: EnrollmentProofState = {
+  lastHealthAt: null,
+  lastFaceAcceptedAt: null,
+  lastVoiceAcceptedAt: null,
+  lastSyncAttemptAt: null,
+  lastSyncConfirmedAt: null,
+  lastSyncError: null,
+  lastSyncedFaceSampleCount: 0,
+  lastSyncedVoiceSampleCount: 0,
+  stationAvailable: false,
+  syncState: "not-tested"
+};
 let identityWizardStage: IdentityWizardStage = "overview";
 let identityWizardPreviewStream: MediaStream | null = null;
 let identityWizardVoiceSignal = { level: 0, isolation: 0, noise: 0 };
@@ -3144,6 +3169,64 @@ function setRecognitionDeviceChip(chip: HTMLElement, status: string, active: boo
   chip.classList.toggle("is-waiting", !active);
 }
 
+function proofRouteLabel(value: boolean): string {
+  return value ? "Ready" : "Offline";
+}
+
+function proofSyncLabel(state: EnrollmentProofSyncState): string {
+  if (state === "pending") return "Checking";
+  if (state === "confirmed") return "Synced";
+  if (state === "failed") return "Failed";
+  if (state === "degraded") return "Degraded";
+  return "Not Tested";
+}
+
+function proofCountLabel(count: number, target: number, acceptedAt: string | null): string {
+  const safeTarget = Math.max(1, Math.floor(target));
+  const safeCount = Math.max(0, Math.min(Math.floor(count), safeTarget));
+  if (acceptedAt && safeCount >= safeTarget) return `${safeCount}/${safeTarget} ready`;
+  if (acceptedAt) return `${safeCount}/${safeTarget} saved`;
+  return `${safeCount}/${safeTarget}`;
+}
+
+function renderEnrollmentProof(status: SynraIdentityStatus): void {
+  const cameraReady = isIdentityDeviceReady(status.cameraDevice) || status.cameraPermission === "ready";
+  const micReady = isIdentityDeviceReady(status.microphoneDevice) || status.microphonePermission === "ready";
+  const faceCount = Math.min(status.faceSampleCount, status.requiredFacePoseCount);
+  const voiceCount = Math.min(status.voiceSampleCount, status.requiredVoiceSampleCount);
+  const faceSynced = enrollmentProofState.syncState === "confirmed" && enrollmentProofState.lastSyncedFaceSampleCount >= faceCount;
+  const voiceSynced = enrollmentProofState.syncState === "confirmed" && enrollmentProofState.lastSyncedVoiceSampleCount >= voiceCount;
+  const syncError = enrollmentProofState.syncState === "failed" && enrollmentProofState.lastSyncError
+    ? `: ${enrollmentProofState.lastSyncError.slice(0, 18)}`
+    : "";
+
+  recognitionProofStationStatus.textContent = proofRouteLabel(enrollmentProofState.stationAvailable);
+  recognitionProofCameraStatus.textContent = proofRouteLabel(cameraReady);
+  recognitionProofMicStatus.textContent = proofRouteLabel(micReady);
+  recognitionProofFaceStatus.textContent = faceSynced
+    ? `${faceCount}/${status.requiredFacePoseCount} synced`
+    : proofCountLabel(status.faceSampleCount, status.requiredFacePoseCount, enrollmentProofState.lastFaceAcceptedAt);
+  recognitionProofVoiceStatus.textContent = voiceSynced
+    ? `${voiceCount}/${status.requiredVoiceSampleCount} synced`
+    : proofCountLabel(status.voiceSampleCount, status.requiredVoiceSampleCount, enrollmentProofState.lastVoiceAcceptedAt);
+  recognitionProofSyncStatus.textContent = `${proofSyncLabel(enrollmentProofState.syncState)}${syncError}`;
+}
+
+function updateEnrollmentProofFromStatus(status: SynraIdentityStatus): void {
+  const updatedAt = status.generatedAt === defaultIdentityStatus.generatedAt ? new Date().toISOString() : status.generatedAt;
+  if (status.readiness.source.startsWith("station:")) {
+    enrollmentProofState.stationAvailable = true;
+    enrollmentProofState.lastHealthAt = updatedAt;
+  }
+  if (status.readiness.faceReady) enrollmentProofState.lastFaceAcceptedAt ??= updatedAt;
+  if (status.readiness.voiceReady) enrollmentProofState.lastVoiceAcceptedAt ??= updatedAt;
+  if (enrollmentProofState.syncState === "confirmed") {
+    if (status.faceSampleCount > enrollmentProofState.lastSyncedFaceSampleCount || status.voiceSampleCount > enrollmentProofState.lastSyncedVoiceSampleCount) {
+      enrollmentProofState.syncState = "degraded";
+    }
+  }
+}
+
 function renderSmartRecognition(status: SynraIdentityStatus = state.identityStatus): void {
   const normalized = normalizeIdentityStatus(status);
   state.identityStatus = normalized;
@@ -3191,6 +3274,8 @@ function renderSmartRecognition(status: SynraIdentityStatus = state.identityStat
   recognitionSessionCheckOne.textContent = normalized.face.checks[0] ?? normalized.voice.checks[0] ?? "Permission waiting";
   recognitionSessionCheckTwo.textContent = normalized.face.checks[1] ?? normalized.voice.checks[1] ?? "Quality waiting";
   recognitionSessionCheckThree.textContent = "Stored locally";
+  updateEnrollmentProofFromStatus(normalized);
+  renderEnrollmentProof(normalized);
 }
 
 function updateStandaloneRecognitionDashboard(existing: KnownUserProfile | undefined, faceCount: number, voiceCount: number): void {
@@ -3254,10 +3339,20 @@ function updateStandaloneRecognitionDashboard(existing: KnownUserProfile | undef
 async function refreshSmartRecognitionHealth(): Promise<void> {
   try {
     const response = await fetch("/api/health", { cache: "no-store" });
-    if (!response.ok) return;
+    if (!response.ok) {
+      enrollmentProofState.stationAvailable = false;
+      enrollmentProofState.syncState = enrollmentProofState.syncState === "confirmed" ? "degraded" : enrollmentProofState.syncState;
+      renderEnrollmentProof(state.identityStatus);
+      return;
+    }
     const health = (await response.json()) as { identitySmoke?: unknown };
+    enrollmentProofState.stationAvailable = true;
+    enrollmentProofState.lastHealthAt = new Date().toISOString();
     refreshSmartRecognitionFromHealth(health);
+    if (!health.identitySmoke) renderEnrollmentProof(state.identityStatus);
   } catch {
+    enrollmentProofState.stationAvailable = false;
+    enrollmentProofState.syncState = enrollmentProofState.syncState === "confirmed" ? "degraded" : enrollmentProofState.syncState;
     renderSmartRecognition(normalizeIdentityStatus({
       ...state.identityStatus,
       readiness: {
@@ -3269,6 +3364,10 @@ async function refreshSmartRecognitionHealth(): Promise<void> {
 }
 
 async function syncStationIdentityCounts(counts: { faceSampleCount: number; voiceSampleCount: number }): Promise<void> {
+  enrollmentProofState.lastSyncAttemptAt = new Date().toISOString();
+  enrollmentProofState.lastSyncError = null;
+  enrollmentProofState.syncState = "pending";
+  renderEnrollmentProof(state.identityStatus);
   try {
     const response = await fetch("/api/station/identity-counts", {
       method: "POST",
@@ -3280,11 +3379,23 @@ async function syncStationIdentityCounts(counts: { faceSampleCount: number; voic
     });
     if (response.ok) {
       const body = (await response.json()) as { ok?: boolean; identitySmoke?: unknown };
+      enrollmentProofState.stationAvailable = true;
+      enrollmentProofState.lastSyncConfirmedAt = new Date().toISOString();
+      enrollmentProofState.lastSyncedFaceSampleCount = Math.max(0, Math.floor(counts.faceSampleCount));
+      enrollmentProofState.lastSyncedVoiceSampleCount = Math.max(0, Math.floor(counts.voiceSampleCount));
+      enrollmentProofState.syncState = "confirmed";
       if (body.identitySmoke) refreshSmartRecognitionFromHealth({ identitySmoke: body.identitySmoke });
+    } else {
+      enrollmentProofState.syncState = "failed";
+      enrollmentProofState.lastSyncError = `HTTP ${response.status}`;
     }
   } catch {
+    enrollmentProofState.stationAvailable = false;
+    enrollmentProofState.syncState = "failed";
+    enrollmentProofState.lastSyncError = "Offline";
     setSynraState("idle", "Enrollment saved locally. Station identity count sync is unavailable.");
   } finally {
+    renderEnrollmentProof(state.identityStatus);
     await refreshSmartRecognitionHealth();
   }
 }
