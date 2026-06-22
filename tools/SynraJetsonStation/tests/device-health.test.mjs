@@ -71,3 +71,60 @@ test("station health reports explicit identity device routes without raw samples
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("station health clamps over-limit identity counts from env fallback", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "synra-device-health-"));
+  const previousCountsPath = process.env.SYNRA_IDENTITY_COUNTS_PATH;
+  const previousFaceSampleCount = process.env.SYNRA_FACE_SAMPLE_COUNT;
+  const previousVoiceSampleCount = process.env.SYNRA_VOICE_SAMPLE_COUNT;
+  process.env.SYNRA_IDENTITY_COUNTS_PATH = path.join(dir, "missing-identity.json");
+  process.env.SYNRA_FACE_SAMPLE_COUNT = "99";
+  process.env.SYNRA_VOICE_SAMPLE_COUNT = "99";
+
+  try {
+    const health = await collectHealth(
+      {
+        rootDir: process.cwd(),
+        host: "127.0.0.1",
+        port: 5191,
+        hubBaseUrl: "http://127.0.0.1:3000",
+        hubToken: null,
+        deviceId: "test-station",
+        displayName: "Test Station",
+        appVersion: "4.4.0",
+        osVersion: "test",
+        simulate: true,
+        once: false,
+        cameraEnabled: true,
+        microphoneEnabled: true,
+        localVision: true,
+        localSpeech: true,
+        chromiumBin: null,
+        heartbeatIntervalMs: 30000
+      },
+      {
+        startedAtMs: Date.now(),
+        synraRuntimePresent: true,
+        hubConnected: false,
+        hubBaseUrl: "http://127.0.0.1:3000",
+        lastHeartbeatAt: null,
+        lastHubError: null,
+        mockMode: true,
+        lastError: null
+      },
+      new StationCamera(true),
+      new StationMicrophone(true)
+    );
+
+    assert.equal(health.identitySmoke.identity.faceSampleCount, 7);
+    assert.equal(health.identitySmoke.identity.voiceSampleCount, 3);
+  } finally {
+    if (previousCountsPath === undefined) delete process.env.SYNRA_IDENTITY_COUNTS_PATH;
+    else process.env.SYNRA_IDENTITY_COUNTS_PATH = previousCountsPath;
+    if (previousFaceSampleCount === undefined) delete process.env.SYNRA_FACE_SAMPLE_COUNT;
+    else process.env.SYNRA_FACE_SAMPLE_COUNT = previousFaceSampleCount;
+    if (previousVoiceSampleCount === undefined) delete process.env.SYNRA_VOICE_SAMPLE_COUNT;
+    else process.env.SYNRA_VOICE_SAMPLE_COUNT = previousVoiceSampleCount;
+    await rm(dir, { recursive: true, force: true });
+  }
+});

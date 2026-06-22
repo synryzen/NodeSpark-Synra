@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import type { StationConfig, StationIdentitySmoke, StationRouteStatus, SynraHealthReport, SynraNetworkState } from "./types.js";
 import type { StationCamera } from "./camera.js";
 import type { StationMicrophone } from "./microphone.js";
-import { readIdentityCounts, type StationIdentityCounts } from "./identity-counts.js";
+import { clampIdentityCounts, readIdentityCounts, type StationIdentityCounts } from "./identity-counts.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -59,11 +59,12 @@ function routeStatusFromStt(provider: string, lastError: string | null): Station
 }
 
 function countsFromEnvFallback(): StationIdentityCounts {
-  const faceSampleCount = Number(process.env.SYNRA_FACE_SAMPLE_COUNT || 0);
-  const voiceSampleCount = Number(process.env.SYNRA_VOICE_SAMPLE_COUNT || 0);
+  const counts = clampIdentityCounts({
+    faceSampleCount: process.env.SYNRA_FACE_SAMPLE_COUNT || 0,
+    voiceSampleCount: process.env.SYNRA_VOICE_SAMPLE_COUNT || 0
+  });
   return {
-    faceSampleCount: Number.isFinite(faceSampleCount) ? Math.max(0, Math.floor(faceSampleCount)) : 0,
-    voiceSampleCount: Number.isFinite(voiceSampleCount) ? Math.max(0, Math.floor(voiceSampleCount)) : 0,
+    ...counts,
     updatedAt: null
   };
 }
