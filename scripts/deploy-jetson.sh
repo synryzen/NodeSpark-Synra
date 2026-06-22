@@ -29,6 +29,7 @@ if [ "${#backup_paths[@]}" -gt 0 ]; then
   echo "Synra state backup: $BACKUP"
 fi
 mkdir -p "$APP_DIR"
+rm -rf "$APP_DIR/dist"
 tar -xzf "$HOME/synra-standalone-dist.tgz" -C "$APP_DIR"
 find "$APP_DIR" -name "._*" -delete
 find "$APP_DIR" -name ".DS_Store" -delete
