@@ -7,6 +7,7 @@ import { StationCamera } from "./camera.js";
 import { loadConfig, leastPrivilegePermissions, stationCapabilities } from "./config.js";
 import { DeviceMeshClient } from "./device-mesh-client.js";
 import { collectHealth, type HealthState } from "./health.js";
+import { writeIdentityCounts } from "./identity-counts.js";
 import { createLogger } from "./logger.js";
 import { StationMicrophone } from "./microphone.js";
 import { redactSecrets } from "./redaction.js";
@@ -218,6 +219,13 @@ async function handlePost(pathname: string, req: IncomingMessage, res: ServerRes
       mesh.state.pendingConfirmation = null;
       await mesh.sendEvent(event);
       return sendJson(res, 200, { ok: true, event });
+    }
+    case "/station/identity-counts": {
+      await writeIdentityCounts({
+        faceSampleCount: body.faceSampleCount,
+        voiceSampleCount: body.voiceSampleCount
+      });
+      return sendJson(res, 200, await stationIdentitySmokePayload());
     }
     case "/station/bridge": {
       return handleBridge(body, res);
