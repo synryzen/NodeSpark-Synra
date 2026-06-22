@@ -3229,25 +3229,30 @@ function failEnrollmentProofSync(message: string, stationAvailable = enrollmentP
   enrollmentProofState.lastSyncError = message.slice(0, 18);
 }
 
+function renderEnrollmentProofWithoutLoweringLocalCounts(): void {
+  renderEnrollmentProof(state.identityStatus);
+}
+
 function confirmEnrollmentProofSync(health: { identitySmoke?: unknown }, requestedCounts: { faceSampleCount: number; voiceSampleCount: number }): boolean {
-  const stationStatus = identityStatusFromStationHealth(health);
   const confirmedCounts = enrollmentProofCountsFromHealth(health);
-  enrollmentProofState.stationAvailable = true;
-  enrollmentProofState.lastHealthAt = stationStatus.generatedAt;
-  renderSmartRecognition(stationStatus);
   if (!confirmedCounts) {
-    failEnrollmentProofSync("Bad proof", true);
+    failEnrollmentProofSync("Bad proof", false);
     return false;
   }
   enrollmentProofState.lastSyncedFaceSampleCount = confirmedCounts.faceSampleCount;
   enrollmentProofState.lastSyncedVoiceSampleCount = confirmedCounts.voiceSampleCount;
   if (confirmedCounts.faceSampleCount < requestedCounts.faceSampleCount || confirmedCounts.voiceSampleCount < requestedCounts.voiceSampleCount) {
     failEnrollmentProofSync("Count lag", true, "degraded");
+    renderEnrollmentProofWithoutLoweringLocalCounts();
     return false;
   }
+  const stationStatus = identityStatusFromStationHealth(health);
+  enrollmentProofState.stationAvailable = true;
+  enrollmentProofState.lastHealthAt = stationStatus.generatedAt;
   enrollmentProofState.lastSyncConfirmedAt = new Date().toISOString();
   enrollmentProofState.lastSyncError = null;
   enrollmentProofState.syncState = "confirmed";
+  renderSmartRecognition(stationStatus);
   return true;
 }
 
@@ -3463,7 +3468,7 @@ async function syncStationIdentityCounts(counts: { faceSampleCount: number; voic
       };
       if (requestId !== enrollmentProofSyncRequestId) return;
       if (!body.ok) {
-        failEnrollmentProofSync(body.error ? body.error.slice(0, 18) : "Rejected");
+        failEnrollmentProofSync(body.error ? body.error.slice(0, 18) : "Rejected", false);
       } else if (!body.identitySmoke) {
         failEnrollmentProofSync("No proof", false);
       } else {
@@ -3473,7 +3478,7 @@ async function syncStationIdentityCounts(counts: { faceSampleCount: number; voic
         });
       }
     } else {
-      failEnrollmentProofSync(`HTTP ${response.status}`);
+      failEnrollmentProofSync(`HTTP ${response.status}`, false);
     }
   } catch {
     if (requestId !== enrollmentProofSyncRequestId) return;
@@ -3499,7 +3504,7 @@ async function verifyEnrollmentProofSync(): Promise<void> {
     const response = await fetch("/api/health", { cache: "no-store" });
     if (requestId !== enrollmentProofSyncRequestId) return;
     if (!response.ok) {
-      failEnrollmentProofSync(`HTTP ${response.status}`);
+      failEnrollmentProofSync(`HTTP ${response.status}`, false);
       return;
     }
     const health = (await response.json().catch(() => ({}))) as { identitySmoke?: unknown };
@@ -3516,8 +3521,8 @@ async function verifyEnrollmentProofSync(): Promise<void> {
     if (requestId !== enrollmentProofSyncRequestId) return;
     failEnrollmentProofSync("Offline", false);
   } finally {
-    if (requestId !== enrollmentProofSyncRequestId) return;
     recognitionProofVerifyButton.disabled = false;
+    if (requestId !== enrollmentProofSyncRequestId) return;
     renderEnrollmentProof(state.identityStatus);
   }
 }

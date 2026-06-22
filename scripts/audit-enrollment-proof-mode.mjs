@@ -11,10 +11,30 @@ function requireText(label, haystack, needle) {
   if (!haystack.includes(needle)) throw new Error(`${label} missing: ${needle}`);
 }
 
+function rejectText(label, haystack, needle) {
+  if (haystack.includes(needle)) throw new Error(`${label} forbidden: ${needle}`);
+}
+
 function extractFunctionBody(source, signature) {
   const signatureIndex = source.indexOf(signature);
   if (signatureIndex === -1) throw new Error(`function missing: ${signature}`);
-  const bodyStart = source.indexOf("{", signatureIndex);
+  const parameterStart = source.indexOf("(", signatureIndex);
+  if (parameterStart === -1) throw new Error(`function parameters missing: ${signature}`);
+  let parameterDepth = 0;
+  let signatureEnd = -1;
+  for (let index = parameterStart; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "(") parameterDepth += 1;
+    if (char === ")") {
+      parameterDepth -= 1;
+      if (parameterDepth === 0) {
+        signatureEnd = index;
+        break;
+      }
+    }
+  }
+  if (signatureEnd === -1) throw new Error(`function parameters unterminated: ${signature}`);
+  const bodyStart = source.indexOf("{", signatureEnd);
   if (bodyStart === -1) throw new Error(`function body missing: ${signature}`);
   let depth = 0;
   for (let index = bodyStart; index < source.length; index += 1) {
@@ -62,6 +82,7 @@ requireText("proof sync attempt timestamp", main, "enrollmentProofState.lastSync
 requireText("proof sync confirmed timestamp", main, "enrollmentProofState.lastSyncConfirmedAt");
 requireText("proof sync error", main, "enrollmentProofState.lastSyncError");
 requireText("proof health updater marker", main, "updateEnrollmentProofFromStatus(identityStatusFromStationHealth(health))");
+requireText("proof no-lower-local render marker", main, "function renderEnrollmentProofWithoutLoweringLocalCounts");
 requireText("proof styles", styles, ".recognition-proof-panel");
 requireText("package script", packageJson, "\"audit:enrollment-proof\"");
 
@@ -71,5 +92,26 @@ for (const forbidden of ["dataUrl", "blob", "voicePrint", "facePoseSamples", "pe
     throw new Error(`verifyEnrollmentProofSync includes forbidden raw biometric term: ${forbidden}`);
   }
 }
+requireText("verify health fetch", verifyEnrollmentProofSyncBody, "fetch(\"/api/health\", { cache: \"no-store\" })");
+rejectText("verify identity count post route", verifyEnrollmentProofSyncBody, "/api/station/identity-counts");
+rejectText("verify post method", verifyEnrollmentProofSyncBody, "method: \"POST\"");
+requireText("verify preserves face baseline", verifyEnrollmentProofSyncBody, "const requestedFaceSampleCount");
+requireText("verify preserves voice baseline", verifyEnrollmentProofSyncBody, "const requestedVoiceSampleCount");
+requireText("verify confirms against health", verifyEnrollmentProofSyncBody, "confirmEnrollmentProofSync(health, {");
+requireText("verify compares face baseline", verifyEnrollmentProofSyncBody, "faceSampleCount: requestedFaceSampleCount");
+requireText("verify compares voice baseline", verifyEnrollmentProofSyncBody, "voiceSampleCount: requestedVoiceSampleCount");
+requireText("verify HTTP offline", verifyEnrollmentProofSyncBody, "failEnrollmentProofSync(`HTTP ${response.status}`, false)");
+requireText("verify always re-enables button", verifyEnrollmentProofSyncBody, "recognitionProofVerifyButton.disabled = false;");
+
+const confirmEnrollmentProofSyncBody = extractFunctionBody(main, "function confirmEnrollmentProofSync");
+const countLagIndex = confirmEnrollmentProofSyncBody.indexOf("Count lag");
+const renderSmartRecognitionIndex = confirmEnrollmentProofSyncBody.indexOf("renderSmartRecognition");
+if (countLagIndex === -1) throw new Error("confirmEnrollmentProofSync missing count lag handling");
+if (renderSmartRecognitionIndex === -1) throw new Error("confirmEnrollmentProofSync missing confirmed Smart Recognition render");
+if (renderSmartRecognitionIndex < countLagIndex) {
+  throw new Error("confirmEnrollmentProofSync renders Smart Recognition before validating station counts");
+}
+requireText("confirm count-lag local render", confirmEnrollmentProofSyncBody, "renderEnrollmentProofWithoutLoweringLocalCounts()");
+requireText("confirm bad proof offline", confirmEnrollmentProofSyncBody, "failEnrollmentProofSync(\"Bad proof\", false)");
 
 console.log("Enrollment proof mode audit passed.");
