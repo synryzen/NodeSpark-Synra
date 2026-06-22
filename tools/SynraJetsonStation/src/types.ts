@@ -108,7 +108,13 @@ export interface StationIdentitySmoke {
   };
   stt: { status: StationRouteStatus; provider: string; lastError: string | null };
   speaker: { status: StationRouteStatus; provider: string; lastError: string | null };
-  identity: { faceSampleCount: number; voiceSampleCount: number; rawSamplesIncluded: false; secretsIncluded: false };
+  identity: {
+    faceSampleCount: number;
+    voiceSampleCount: number;
+    updatedAt: string | null;
+    rawSamplesIncluded: false;
+    secretsIncluded: false;
+  };
 }
 
 export interface SynraHealthReport {
