@@ -88,6 +88,28 @@ Observed after the full Vulkan-from-ANGLE flag set:
 - STT route status after deploy: `ready` with provider `browser-fallback`.
 - Identity sample counts after deploy: face `0`, voice `0`; enrollment still needs real local captures.
 
+## 2026-06-22 Jetson Microphone And Real Enrollment Verification
+
+- Synra Standalone and Synra Jetson Station were deployed to the active service directories:
+  - `/home/matthew/synra-standalone`
+  - `/home/matthew/synra-jetson-station`
+- `synra-jetson-station.service`, `synra-standalone.service`, and `synra-electron-kiosk.service` were restarted with `systemctl --user` and verified `active`.
+- Jetson tests passed in `/home/matthew/synra-jetson-station`: `npm run test:kiosk`, 20/20 tests.
+- `SYNRA_MICROPHONE_SOURCE` is stored in `~/.config/synra-jetson-station.env`.
+- Selected microphone source: `alsa_input.usb-EMEET_EMEET_SmartCam_S600_A260414000306221-02.analog-stereo`.
+- `/api/health.identitySmoke` reports:
+  - Camera: `ready`, configured `/dev/video0`.
+  - Microphone: `ready`, configured EMEET SmartCam S600 input.
+  - STT: `ready`, provider `browser-fallback`.
+  - Speaker: `ready`, provider `system`.
+  - Face sample count: `0`.
+  - Voice sample count: `0`.
+  - `rawSamplesIncluded: false`.
+  - `secretsIncluded: false`.
+- `/api/station/identity-counts` was verified through the Standalone proxy. It accepted count-only updates, refreshed Station identity smoke, ignored raw sample and token fields, and did not echo blocked sample/token strings.
+- Test counts were reset to face `0` and voice `0` after endpoint verification so the Jetson does not claim fake enrollment.
+- Standalone now syncs accepted enrollment counts only after quality-accepted face or voice captures and refreshes Smart Recognition from `/api/health.identitySmoke`.
+
 ## Recommendation
 
 The app now fails gracefully when WebGL is unavailable, and the kiosk launcher has a repeatable Vulkan-from-ANGLE path that can make WebGL available. Full Synra avatar rendering on this Jetson still requires improving the browser/GPU stack or using a lighter dedicated runtime. The likely next hardware/runtime work is:
