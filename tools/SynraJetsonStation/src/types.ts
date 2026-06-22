@@ -74,6 +74,7 @@ export interface StationAudioDevice {
   label: string;
   present: boolean;
   configured: boolean;
+  monitor?: boolean;
 }
 
 export type StationRouteStatus = "ready" | "degraded" | "not-configured" | "unavailable";
@@ -99,7 +100,12 @@ export interface StationMicrophoneHealth {
 export interface StationIdentitySmoke {
   ok: boolean;
   camera: { status: StationRouteStatus; configuredDevice: string | null; devices: StationCameraDevice[] };
-  microphone: { status: StationRouteStatus; configuredSource: string | null; sources: StationAudioDevice[] };
+  microphone: {
+    status: StationRouteStatus;
+    configuredSource: string | null;
+    sources: StationAudioDevice[];
+    lastError: string | null;
+  };
   stt: { status: StationRouteStatus; provider: string; lastError: string | null };
   speaker: { status: StationRouteStatus; provider: string; lastError: string | null };
   identity: { faceSampleCount: number; voiceSampleCount: number; rawSamplesIncluded: false; secretsIncluded: false };

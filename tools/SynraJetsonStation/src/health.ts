@@ -77,7 +77,8 @@ function identitySmoke(camera: StationCamera, microphone: StationMicrophone): St
     microphone: {
       status: microphoneDebug.routeStatus,
       configuredSource: microphoneDebug.configuredSource,
-      sources: microphoneDebug.sources
+      sources: microphoneDebug.sources,
+      lastError: microphoneDebug.lastError
     },
     stt: {
       status: routeStatusFromStt(sttProvider, sttError),
