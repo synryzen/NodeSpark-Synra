@@ -62,8 +62,8 @@ def post_station_identity_counts(face_sample_count: Any, voice_sample_count: Any
     if not url:
         return {"ok": False, "error": "Station identity counts URL is not configured."}
     payload = {
-        "faceSampleCount": face_sample_count,
-        "voiceSampleCount": voice_sample_count,
+        "faceSampleCount": station_identity_count_value(face_sample_count, 7),
+        "voiceSampleCount": station_identity_count_value(voice_sample_count, 3),
     }
     data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
@@ -76,6 +76,18 @@ def post_station_identity_counts(face_sample_count: Any, voice_sample_count: Any
     with urllib.request.urlopen(request, timeout=timeout) as response:
         body = json.loads(response.read().decode("utf-8"))
         return body if isinstance(body, dict) else {"ok": False, "error": "Station returned a non-object response."}
+
+
+def station_identity_count_value(value: Any, maximum: int) -> int:
+    if isinstance(value, bool):
+        parsed = int(value)
+    elif isinstance(value, (int, float)):
+        parsed = int(value)
+    elif isinstance(value, str) and re.fullmatch(r"\s*\d+(?:\.\d+)?\s*", value):
+        parsed = int(float(value.strip()))
+    else:
+        parsed = 0
+    return max(0, min(maximum, parsed))
 
 
 class SynraHandler(SimpleHTTPRequestHandler):
@@ -159,6 +171,7 @@ class SynraHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self) -> None:
+        request_path = urllib.parse.urlparse(self.path).path
         if self.path.startswith("/api/chat"):
             self.handle_chat()
             return
@@ -192,7 +205,6 @@ class SynraHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/nodespark/action"):
             self.handle_nodespark_action()
             return
-        request_path = urllib.parse.urlparse(self.path).path
         agent_run_start_match = re.fullmatch(r"/api/agents/([^/]+)/runs", request_path)
         if agent_run_start_match:
             self.handle_agent_run_start(urllib.parse.unquote(agent_run_start_match.group(1)))
@@ -216,7 +228,7 @@ class SynraHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/confirmations/prepare"):
             self.handle_prepare_confirmation()
             return
-        if self.path.startswith("/api/station/identity-counts"):
+        if request_path == "/api/station/identity-counts":
             self.handle_station_identity_counts()
             return
         if self.path.startswith("/api/settings/save"):
