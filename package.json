@@ -10,6 +10,7 @@
     "serve:python": "python3 scripts/synra_server.py",
     "typecheck": "tsc --noEmit",
     "audit:hub-runtime": "node scripts/hub-runtime-audit.mjs",
+    "audit:identity-contract": "node scripts/audit-identity-contract.mjs",
     "audit:stt-fallback": "node scripts/audit-stt-fallback.mjs",
     "audit:identity-readiness": "node scripts/audit-identity-readiness.mjs",
     "qa:avatars": "node scripts/avatar-motion-smoke.mjs",
