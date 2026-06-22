@@ -11,13 +11,34 @@ function requireText(label, haystack, needle) {
   }
 }
 
+function functionBody(name) {
+  const start = main.indexOf(`async function ${name}`);
+  if (start < 0) throw new Error(`${name} missing`);
+  const brace = main.indexOf("{", start);
+  let depth = 0;
+  for (let index = brace; index < main.length; index += 1) {
+    if (main[index] === "{") depth += 1;
+    if (main[index] === "}") depth -= 1;
+    if (depth === 0) return main.slice(brace, index + 1);
+  }
+  throw new Error(`${name} body did not close`);
+}
+
+function requireFunctionText(functionName, label, needle) {
+  requireText(`${functionName} ${label}`, functionBody(functionName), needle);
+}
+
 requireText("sync function", main, "async function syncStationIdentityCounts");
 requireText("count endpoint", main, 'fetch("/api/station/identity-counts"');
 requireText("health refresh", main, "await refreshSmartRecognitionHealth");
-requireText("face sync", main, "await syncStationIdentityCounts({ faceSampleCount: faceCount, voiceSampleCount: voiceCount });");
-requireText("voice sync", main, "await syncStationIdentityCounts({ faceSampleCount: faceCount, voiceSampleCount: voiceCount });");
 
-const syncFunction = main.slice(main.indexOf("async function syncStationIdentityCounts"), main.indexOf("function stationRouteToIdentityDevice"));
+const syncCall = "await syncStationIdentityCounts({ faceSampleCount: faceCount, voiceSampleCount: voiceCount });";
+requireFunctionText("captureIdentityWizardFacePose", "sync", syncCall);
+requireFunctionText("captureIdentityWizardVoiceSample", "sync", syncCall);
+requireFunctionText("captureKnownUserFaceSample", "sync", syncCall);
+requireFunctionText("captureKnownUserVoiceSample", "sync", syncCall);
+
+const syncFunction = functionBody("syncStationIdentityCounts");
 for (const forbidden of ["faceSamples", "facePoseSamples", "pendingFacePoseSamples", "voicePrints", "pendingVoicePrints", "dataUrl", "blob"]) {
   if (syncFunction.includes(forbidden)) {
     throw new Error(`syncStationIdentityCounts must not send raw enrollment material: ${forbidden}`);
