@@ -3077,6 +3077,7 @@ async function captureIdentityWizardFacePose(): Promise<void> {
       return;
     }
     pendingFacePoseSamples = { ...pendingFacePoseSamples, [pose]: capture.dataUrl };
+    markEnrollmentProofAccepted("face");
     const { faceCount, voiceCount } = wizardEnrollmentCounts();
     await syncStationIdentityCounts({ faceSampleCount: faceCount, voiceSampleCount: voiceCount });
     facePoseInput.value = nextMissingFacePose(currentEnrollmentUser());
@@ -3125,6 +3126,7 @@ async function captureIdentityWizardVoiceSample(): Promise<void> {
       return;
     }
     pendingVoicePrints = [...pendingVoicePrints, voicePrint].slice(-REQUIRED_VOICE_SAMPLE_COUNT);
+    markEnrollmentProofAccepted("voice");
     const { faceCount, voiceCount } = wizardEnrollmentCounts();
     await syncStationIdentityCounts({ faceSampleCount: faceCount, voiceSampleCount: voiceCount });
     setSynraState("idle", `Voice sample ${wizardEnrollmentCounts().voiceCount}/${REQUIRED_VOICE_SAMPLE_COUNT} captured locally.`);
@@ -3668,6 +3670,7 @@ async function captureKnownUserFaceSample(): Promise<void> {
       return;
     }
     pendingFacePoseSamples = { ...pendingFacePoseSamples, [pose]: capture.dataUrl };
+    markEnrollmentProofAccepted("face");
     const existing = currentEnrollmentUser();
     const savedFaceSamples = normalizeFacePoseSamples(existing?.facePoseSamples);
     const faceCount = FACE_ENROLLMENT_POSES.filter((facePose) => savedFaceSamples[facePose] || pendingFacePoseSamples[facePose]).length;
@@ -3706,6 +3709,7 @@ async function captureKnownUserVoiceSample(): Promise<void> {
       return;
     }
     pendingVoicePrints = [...pendingVoicePrints, voicePrint].slice(-REQUIRED_VOICE_SAMPLE_COUNT);
+    markEnrollmentProofAccepted("voice");
     const existing = currentEnrollmentUser();
     const savedFaceSamples = normalizeFacePoseSamples(existing?.facePoseSamples);
     const faceCount = FACE_ENROLLMENT_POSES.filter((facePose) => savedFaceSamples[facePose] || pendingFacePoseSamples[facePose]).length;

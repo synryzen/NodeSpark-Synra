@@ -48,6 +48,52 @@ function extractFunctionBody(source, signature) {
   throw new Error(`function body unterminated: ${signature}`);
 }
 
+function extractAsyncFunctionBody(source, name) {
+  return extractFunctionBody(source, `async function ${name}`);
+}
+
+function findBlockEnd(source, blockStart) {
+  let depth = 0;
+  for (let index = blockStart; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "{") depth += 1;
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+function assertAcceptedMarkerOrder({ functionName, qualityGate, pendingStore, marker }) {
+  const body = extractAsyncFunctionBody(main, functionName);
+  const qualityGateIndex = body.indexOf(qualityGate);
+  if (qualityGateIndex === -1) throw new Error(`${functionName} missing rejected-quality gate: ${qualityGate}`);
+  const qualityGateBlockStart = body.indexOf("{", qualityGateIndex);
+  if (qualityGateBlockStart === -1) throw new Error(`${functionName} rejected-quality gate has no block`);
+  const rejectedQualityReturnIndex = body.indexOf("return;", qualityGateBlockStart);
+  if (rejectedQualityReturnIndex === -1) throw new Error(`${functionName} rejected-quality gate has no return`);
+  const qualityGateBlockEnd = findBlockEnd(body, qualityGateBlockStart);
+  if (qualityGateBlockEnd === -1) throw new Error(`${functionName} rejected-quality gate is unterminated`);
+
+  const pendingStoreIndex = body.indexOf(pendingStore);
+  if (pendingStoreIndex === -1) throw new Error(`${functionName} missing accepted local sample store: ${pendingStore}`);
+  const markerIndex = body.indexOf(marker);
+  if (markerIndex === -1) throw new Error(`${functionName} missing accepted marker: ${marker}`);
+  const syncIndex = body.indexOf("syncStationIdentityCounts");
+  if (syncIndex === -1) throw new Error(`${functionName} missing Station identity count sync`);
+
+  if (markerIndex < qualityGateBlockEnd) {
+    throw new Error(`${functionName} marks accepted before the rejected-quality return gate finishes`);
+  }
+  if (markerIndex < pendingStoreIndex) {
+    throw new Error(`${functionName} marks accepted before storing the local sample`);
+  }
+  if (markerIndex > syncIndex) {
+    throw new Error(`${functionName} marks accepted after Station identity count sync`);
+  }
+}
+
 for (const id of [
   "recognitionProofStationStatus",
   "recognitionProofCameraStatus",
@@ -86,6 +132,35 @@ requireText("proof health updater marker", main, "updateEnrollmentProofFromStatu
 requireText("proof no-lower-local render marker", main, "function renderEnrollmentProofWithoutLoweringLocalCounts");
 requireText("proof styles", styles, ".recognition-proof-panel");
 requireText("package script", packageJson, "\"audit:enrollment-proof\"");
+
+for (const markerCheck of [
+  {
+    functionName: "captureIdentityWizardFacePose",
+    qualityGate: "if (!faceQuality.accepted)",
+    pendingStore: "pendingFacePoseSamples = { ...pendingFacePoseSamples, [pose]: capture.dataUrl };",
+    marker: "markEnrollmentProofAccepted(\"face\")"
+  },
+  {
+    functionName: "captureIdentityWizardVoiceSample",
+    qualityGate: "if (!voiceQuality.accepted)",
+    pendingStore: "pendingVoicePrints = [...pendingVoicePrints, voicePrint].slice(-REQUIRED_VOICE_SAMPLE_COUNT);",
+    marker: "markEnrollmentProofAccepted(\"voice\")"
+  },
+  {
+    functionName: "captureKnownUserFaceSample",
+    qualityGate: "if (!faceQuality.accepted)",
+    pendingStore: "pendingFacePoseSamples = { ...pendingFacePoseSamples, [pose]: capture.dataUrl };",
+    marker: "markEnrollmentProofAccepted(\"face\")"
+  },
+  {
+    functionName: "captureKnownUserVoiceSample",
+    qualityGate: "if (!voiceQuality.accepted)",
+    pendingStore: "pendingVoicePrints = [...pendingVoicePrints, voicePrint].slice(-REQUIRED_VOICE_SAMPLE_COUNT);",
+    marker: "markEnrollmentProofAccepted(\"voice\")"
+  }
+]) {
+  assertAcceptedMarkerOrder(markerCheck);
+}
 
 const verifyEnrollmentProofSyncBody = extractFunctionBody(main, "async function verifyEnrollmentProofSync");
 for (const forbidden of ["dataUrl", "blob", "voicePrint", "facePoseSamples", "pendingVoicePrints", "pendingFacePoseSamples"]) {
