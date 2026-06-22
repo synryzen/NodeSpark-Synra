@@ -110,6 +110,29 @@ Observed after the full Vulkan-from-ANGLE flag set:
 - Test counts were reset to face `0` and voice `0` after endpoint verification so the Jetson does not claim fake enrollment.
 - Standalone now syncs accepted enrollment counts only after quality-accepted face or voice captures and refreshes Smart Recognition from `/api/health.identitySmoke`.
 
+## 2026-06-22 Enrollment Proof Mode Verification
+
+- Enrollment Proof Mode was deployed inside the Smart Recognition settings area.
+- The main Synra stage remains clean; proof state is not rendered over Synra.
+- GitHub `main` was pushed through `b95ec42` (`Mark accepted enrollment proof samples`).
+- `synra-jetson-station.service`, `synra-standalone.service`, and `synra-electron-kiosk.service` were rebuilt/restarted on the Jetson and verified `active`.
+- Jetson tests passed in `/home/matthew/synra-jetson-station`: `npm run test:kiosk`, 20/20 tests.
+- Standalone is served on `http://192.168.1.165:5191/`; `/api/health.identitySmoke` remains available through that route.
+- Station direct identity smoke is available at `http://192.168.1.165:4788/station/identity-smoke`.
+- Deployed assets include `Enrollment Proof` in the production JavaScript bundle and `recognition-proof-panel` in the production CSS bundle.
+- Live `/api/health.identitySmoke` reports:
+  - Camera: `ready`, configured `/dev/video0`.
+  - Microphone: `ready`, configured EMEET SmartCam S600 input.
+  - STT: `ready`, provider `browser-fallback`.
+  - Speaker: `ready`, provider `system`.
+  - Face sample count: `0`.
+  - Voice sample count: `0`.
+  - `rawSamplesIncluded: false`.
+  - `secretsIncluded: false`.
+- `Verify Sync` now reads only current numeric face and voice counts from `/api/health.identitySmoke`; it does not send raw face frames, voice blobs, voice prints, pending samples, or biometric payloads.
+- Proof state preserves local enrollment counts when Station health lags, so a stale Jetson response cannot lower local progress and then falsely claim `Synced`.
+- Manual UI verification is still required after a real accepted camera/microphone sample to confirm the count increase from the physical enrollment path.
+
 ## Recommendation
 
 The app now fails gracefully when WebGL is unavailable, and the kiosk launcher has a repeatable Vulkan-from-ANGLE path that can make WebGL available. Full Synra avatar rendering on this Jetson still requires improving the browser/GPU stack or using a lighter dedicated runtime. The likely next hardware/runtime work is:
