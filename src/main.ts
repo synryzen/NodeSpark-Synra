@@ -1570,6 +1570,7 @@ const enrollmentProofState: EnrollmentProofState = {
   stationAvailable: false,
   syncState: "not-tested"
 };
+let enrollmentProofSyncRequestId = 0;
 let identityWizardStage: IdentityWizardStage = "overview";
 let identityWizardPreviewStream: MediaStream | null = null;
 let identityWizardVoiceSignal = { level: 0, isolation: 0, noise: 0 };
@@ -3189,6 +3190,10 @@ function proofCountLabel(count: number, target: number, acceptedAt: string | nul
   return `${safeCount}/${safeTarget}`;
 }
 
+function enrollmentProofConfirmedCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
+}
+
 function renderEnrollmentProof(status: SynraIdentityStatus): void {
   const cameraReady = isIdentityDeviceReady(status.cameraDevice) || status.cameraPermission === "ready";
   const micReady = isIdentityDeviceReady(status.microphoneDevice) || status.microphonePermission === "ready";
@@ -3196,7 +3201,7 @@ function renderEnrollmentProof(status: SynraIdentityStatus): void {
   const voiceCount = Math.min(status.voiceSampleCount, status.requiredVoiceSampleCount);
   const faceSynced = enrollmentProofState.syncState === "confirmed" && enrollmentProofState.lastSyncedFaceSampleCount >= faceCount;
   const voiceSynced = enrollmentProofState.syncState === "confirmed" && enrollmentProofState.lastSyncedVoiceSampleCount >= voiceCount;
-  const syncError = enrollmentProofState.syncState === "failed" && enrollmentProofState.lastSyncError
+  const syncError = (enrollmentProofState.syncState === "failed" || enrollmentProofState.syncState === "degraded") && enrollmentProofState.lastSyncError
     ? `: ${enrollmentProofState.lastSyncError.slice(0, 18)}`
     : "";
 
@@ -3346,10 +3351,15 @@ async function refreshSmartRecognitionHealth(): Promise<void> {
       return;
     }
     const health = (await response.json()) as { identitySmoke?: unknown };
+    if (!health.identitySmoke) {
+      enrollmentProofState.stationAvailable = false;
+      enrollmentProofState.syncState = enrollmentProofState.syncState === "confirmed" ? "degraded" : enrollmentProofState.syncState;
+      renderEnrollmentProof(state.identityStatus);
+      return;
+    }
     enrollmentProofState.stationAvailable = true;
     enrollmentProofState.lastHealthAt = new Date().toISOString();
     refreshSmartRecognitionFromHealth(health);
-    if (!health.identitySmoke) renderEnrollmentProof(state.identityStatus);
   } catch {
     enrollmentProofState.stationAvailable = false;
     enrollmentProofState.syncState = enrollmentProofState.syncState === "confirmed" ? "degraded" : enrollmentProofState.syncState;
@@ -3364,6 +3374,9 @@ async function refreshSmartRecognitionHealth(): Promise<void> {
 }
 
 async function syncStationIdentityCounts(counts: { faceSampleCount: number; voiceSampleCount: number }): Promise<void> {
+  const requestId = ++enrollmentProofSyncRequestId;
+  const requestedFaceSampleCount = Math.max(0, Math.floor(counts.faceSampleCount));
+  const requestedVoiceSampleCount = Math.max(0, Math.floor(counts.voiceSampleCount));
   enrollmentProofState.lastSyncAttemptAt = new Date().toISOString();
   enrollmentProofState.lastSyncError = null;
   enrollmentProofState.syncState = "pending";
@@ -3373,28 +3386,63 @@ async function syncStationIdentityCounts(counts: { faceSampleCount: number; voic
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        faceSampleCount: Math.max(0, Math.floor(counts.faceSampleCount)),
-        voiceSampleCount: Math.max(0, Math.floor(counts.voiceSampleCount))
+        faceSampleCount: requestedFaceSampleCount,
+        voiceSampleCount: requestedVoiceSampleCount
       })
     });
+    if (requestId !== enrollmentProofSyncRequestId) return;
     if (response.ok) {
-      const body = (await response.json()) as { ok?: boolean; identitySmoke?: unknown };
-      enrollmentProofState.stationAvailable = true;
-      enrollmentProofState.lastSyncConfirmedAt = new Date().toISOString();
-      enrollmentProofState.lastSyncedFaceSampleCount = Math.max(0, Math.floor(counts.faceSampleCount));
-      enrollmentProofState.lastSyncedVoiceSampleCount = Math.max(0, Math.floor(counts.voiceSampleCount));
-      enrollmentProofState.syncState = "confirmed";
-      if (body.identitySmoke) refreshSmartRecognitionFromHealth({ identitySmoke: body.identitySmoke });
+      const body = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        identitySmoke?: {
+          identity?: {
+            faceSampleCount?: unknown;
+            voiceSampleCount?: unknown;
+          };
+        };
+      };
+      if (requestId !== enrollmentProofSyncRequestId) return;
+      const confirmedFaceSampleCount = enrollmentProofConfirmedCount(body.identitySmoke?.identity?.faceSampleCount);
+      const confirmedVoiceSampleCount = enrollmentProofConfirmedCount(body.identitySmoke?.identity?.voiceSampleCount);
+      if (!body.ok) {
+        enrollmentProofState.syncState = "failed";
+        enrollmentProofState.lastSyncError = body.error ? body.error.slice(0, 18) : "Rejected";
+      } else if (!body.identitySmoke) {
+        enrollmentProofState.stationAvailable = false;
+        enrollmentProofState.syncState = "failed";
+        enrollmentProofState.lastSyncError = "No proof";
+      } else if (confirmedFaceSampleCount === null || confirmedVoiceSampleCount === null) {
+        enrollmentProofState.stationAvailable = true;
+        enrollmentProofState.syncState = "failed";
+        enrollmentProofState.lastSyncError = "Bad proof";
+      } else if (confirmedFaceSampleCount < requestedFaceSampleCount || confirmedVoiceSampleCount < requestedVoiceSampleCount) {
+        enrollmentProofState.stationAvailable = true;
+        enrollmentProofState.lastSyncedFaceSampleCount = confirmedFaceSampleCount;
+        enrollmentProofState.lastSyncedVoiceSampleCount = confirmedVoiceSampleCount;
+        enrollmentProofState.syncState = "degraded";
+        enrollmentProofState.lastSyncError = "Count lag";
+        refreshSmartRecognitionFromHealth({ identitySmoke: body.identitySmoke });
+      } else {
+        enrollmentProofState.stationAvailable = true;
+        enrollmentProofState.lastSyncConfirmedAt = new Date().toISOString();
+        enrollmentProofState.lastSyncedFaceSampleCount = confirmedFaceSampleCount;
+        enrollmentProofState.lastSyncedVoiceSampleCount = confirmedVoiceSampleCount;
+        enrollmentProofState.syncState = "confirmed";
+        refreshSmartRecognitionFromHealth({ identitySmoke: body.identitySmoke });
+      }
     } else {
       enrollmentProofState.syncState = "failed";
       enrollmentProofState.lastSyncError = `HTTP ${response.status}`;
     }
   } catch {
+    if (requestId !== enrollmentProofSyncRequestId) return;
     enrollmentProofState.stationAvailable = false;
     enrollmentProofState.syncState = "failed";
     enrollmentProofState.lastSyncError = "Offline";
     setSynraState("idle", "Enrollment saved locally. Station identity count sync is unavailable.");
   } finally {
+    if (requestId !== enrollmentProofSyncRequestId) return;
     renderEnrollmentProof(state.identityStatus);
     await refreshSmartRecognitionHealth();
   }

@@ -32,6 +32,12 @@ requireText("proof renderer", main, "function renderEnrollmentProof");
 requireText("proof status updater", main, "function updateEnrollmentProofFromStatus");
 requireText("proof station render", main, "recognitionProofStationStatus.textContent");
 requireText("proof sync render", main, "recognitionProofSyncStatus.textContent");
+requireText("proof sync request guard", main, "enrollmentProofSyncRequestId");
+requireText("proof sync response success gate", main, "body.ok");
+requireText("proof sync confirmed face count", main, "confirmedFaceSampleCount");
+requireText("proof sync confirmed voice count", main, "confirmedVoiceSampleCount");
+requireText("proof health identity smoke gate", main, "if (!health.identitySmoke)");
+requireText("proof health missing smoke offline", main, "if (!health.identitySmoke) {\n      enrollmentProofState.stationAvailable = false;");
 requireText("proof styles", styles, ".recognition-proof-panel");
 requireText("package script", packageJson, "\"audit:enrollment-proof\"");
 
