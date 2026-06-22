@@ -3009,6 +3009,8 @@ async function captureIdentityWizardFacePose(): Promise<void> {
       return;
     }
     pendingFacePoseSamples = { ...pendingFacePoseSamples, [pose]: capture.dataUrl };
+    const { faceCount, voiceCount } = wizardEnrollmentCounts();
+    await syncStationIdentityCounts({ faceSampleCount: faceCount, voiceSampleCount: voiceCount });
     facePoseInput.value = nextMissingFacePose(currentEnrollmentUser());
     setSynraState("idle", `${FACE_ENROLLMENT_POSE_LABELS[pose]} face pose captured locally.`);
   } catch (error) {
@@ -3055,6 +3057,8 @@ async function captureIdentityWizardVoiceSample(): Promise<void> {
       return;
     }
     pendingVoicePrints = [...pendingVoicePrints, voicePrint].slice(-REQUIRED_VOICE_SAMPLE_COUNT);
+    const { faceCount, voiceCount } = wizardEnrollmentCounts();
+    await syncStationIdentityCounts({ faceSampleCount: faceCount, voiceSampleCount: voiceCount });
     setSynraState("idle", `Voice sample ${wizardEnrollmentCounts().voiceCount}/${REQUIRED_VOICE_SAMPLE_COUNT} captured locally.`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Voice Match capture needs microphone permission.";
@@ -3209,6 +3213,44 @@ function updateStandaloneRecognitionDashboard(existing: KnownUserProfile | undef
   }));
 }
 
+async function refreshSmartRecognitionHealth(): Promise<void> {
+  try {
+    const response = await fetch("/api/health", { cache: "no-store" });
+    if (!response.ok) return;
+    const health = (await response.json()) as { identitySmoke?: unknown };
+    refreshSmartRecognitionFromHealth(health);
+  } catch {
+    renderSmartRecognition(normalizeIdentityStatus({
+      ...state.identityStatus,
+      readiness: {
+        ...state.identityStatus.readiness,
+        summary: "Station identity smoke is unavailable; local enrollment state is still saved."
+      }
+    }));
+  }
+}
+
+async function syncStationIdentityCounts(counts: { faceSampleCount: number; voiceSampleCount: number }): Promise<void> {
+  try {
+    const response = await fetch("/api/station/identity-counts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        faceSampleCount: Math.max(0, Math.floor(counts.faceSampleCount)),
+        voiceSampleCount: Math.max(0, Math.floor(counts.voiceSampleCount))
+      })
+    });
+    if (response.ok) {
+      const body = (await response.json()) as { ok?: boolean; identitySmoke?: unknown };
+      if (body.identitySmoke) refreshSmartRecognitionFromHealth({ identitySmoke: body.identitySmoke });
+    }
+  } catch {
+    setSynraState("idle", "Enrollment saved locally. Station identity count sync is unavailable.");
+  } finally {
+    await refreshSmartRecognitionHealth();
+  }
+}
+
 function identityStatusFromStationHealth(health: { identitySmoke?: unknown }): SynraIdentityStatus {
   const smoke = health.identitySmoke as {
     camera?: { status?: string };
@@ -3322,6 +3364,11 @@ async function captureKnownUserFaceSample(): Promise<void> {
       return;
     }
     pendingFacePoseSamples = { ...pendingFacePoseSamples, [pose]: capture.dataUrl };
+    const existing = currentEnrollmentUser();
+    const savedFaceSamples = normalizeFacePoseSamples(existing?.facePoseSamples);
+    const faceCount = FACE_ENROLLMENT_POSES.filter((facePose) => savedFaceSamples[facePose] || pendingFacePoseSamples[facePose]).length;
+    const voiceCount = Math.min((existing?.voicePrints?.length ?? 0) + pendingVoicePrints.length, REQUIRED_VOICE_SAMPLE_COUNT);
+    await syncStationIdentityCounts({ faceSampleCount: faceCount, voiceSampleCount: voiceCount });
     facePoseInput.value = nextMissingFacePose(currentEnrollmentUser());
     setSynraState("idle", `${FACE_ENROLLMENT_POSE_LABELS[pose]} face pose captured locally.`);
   } catch {
@@ -3355,6 +3402,11 @@ async function captureKnownUserVoiceSample(): Promise<void> {
       return;
     }
     pendingVoicePrints = [...pendingVoicePrints, voicePrint].slice(-REQUIRED_VOICE_SAMPLE_COUNT);
+    const existing = currentEnrollmentUser();
+    const savedFaceSamples = normalizeFacePoseSamples(existing?.facePoseSamples);
+    const faceCount = FACE_ENROLLMENT_POSES.filter((facePose) => savedFaceSamples[facePose] || pendingFacePoseSamples[facePose]).length;
+    const voiceCount = Math.min((existing?.voicePrints?.length ?? 0) + pendingVoicePrints.length, REQUIRED_VOICE_SAMPLE_COUNT);
+    await syncStationIdentityCounts({ faceSampleCount: faceCount, voiceSampleCount: voiceCount });
     setSynraState("idle", `Voice sample ${pendingVoicePrints.length}/${REQUIRED_VOICE_SAMPLE_COUNT} captured locally.`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Voice Match capture needs microphone permission.";

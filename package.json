@@ -14,6 +14,7 @@
     "audit:cross-app-identity": "node scripts/audit-cross-app-identity-parity.mjs",
     "audit:stt-fallback": "node scripts/audit-stt-fallback.mjs",
     "audit:identity-readiness": "node scripts/audit-identity-readiness.mjs",
+    "audit:station-identity-counts": "node scripts/audit-station-identity-counts-sync.mjs",
     "qa:avatars": "node scripts/avatar-motion-smoke.mjs",
     "perf:smoke": "node scripts/perf-smoke.mjs",
     "station:typecheck": "npm --prefix tools/SynraJetsonStation run typecheck",
