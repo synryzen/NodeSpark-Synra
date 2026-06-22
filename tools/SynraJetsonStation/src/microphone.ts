@@ -81,6 +81,16 @@ export function discoverMicrophoneSources(): StationAudioDevice[] {
   }
 }
 
+interface MicrophoneSourceDiscovery {
+  sources: StationAudioDevice[];
+  error: string | null;
+}
+
+interface MicrophoneRouteDiagnostics {
+  routeStatus: StationMicrophoneHealth["routeStatus"];
+  routeError: string | null;
+}
+
 export class StationMicrophone {
   private statusValue: SynraSensorStatus;
   private lastErrorValue: string | null = null;
@@ -115,47 +125,68 @@ export class StationMicrophone {
 
   debug(): StationMicrophoneHealth {
     const configuredSource = normalizeConfiguredSource(this.options.configuredSource ?? process.env.SYNRA_MICROPHONE_SOURCE);
-    const sources = this.detectSources(configuredSource);
-    const routeStatus = this.microphoneRouteStatus(sources, configuredSource);
+    const { sources, error: discoveryError } = this.detectSources(configuredSource);
+    const { routeStatus, routeError } = this.microphoneRouteStatus(sources, configuredSource);
 
     return {
       enabled: this.enabled,
       status: this.statusValue,
-      lastError: this.lastErrorValue,
+      lastError: this.lastErrorValue || discoveryError || routeError,
       configuredSource,
       sources,
       routeStatus
     };
   }
 
-  private detectSources(configuredSource: string | null): StationAudioDevice[] {
+  private detectSources(configuredSource: string | null): MicrophoneSourceDiscovery {
     const discoverSources = this.options.discoverSources || discoverMicrophoneSources;
     try {
-      return discoverSources().map((source) => ({
-        ...source,
-        configured: configuredSource !== null && source.id === configuredSource
-      }));
+      return {
+        sources: discoverSources().map((source) => ({
+          ...source,
+          configured: configuredSource !== null && source.id === configuredSource
+        })),
+        error: null
+      };
     } catch (error) {
-      this.lastErrorValue = `Microphone source discovery failed: ${error instanceof Error ? error.message : String(error)}`;
-      return [];
+      return {
+        sources: [],
+        error: `Microphone source discovery failed: ${error instanceof Error ? error.message : String(error)}`
+      };
     }
   }
 
-  private microphoneRouteStatus(sources: StationAudioDevice[], configuredSource: string | null): StationMicrophoneHealth["routeStatus"] {
-    if (!this.enabled) return "unavailable";
-    if (sources.length === 0) {
-      this.lastErrorValue = "No microphone input sources detected via pactl or arecord.";
-      return "unavailable";
+  private microphoneRouteStatus(sources: StationAudioDevice[], configuredSource: string | null): MicrophoneRouteDiagnostics {
+    if (!this.enabled) return { routeStatus: "unavailable", routeError: null };
+
+    if (configuredSource) {
+      const configured = sources.find((source) => source.id === configuredSource);
+      if (configured && configured.monitor) {
+        return {
+          routeStatus: "degraded",
+          routeError: `Configured microphone source '${configuredSource}' is a monitor source, not a capture input.`
+        };
+      }
+      if (configured) return { routeStatus: "ready", routeError: null };
+      return {
+        routeStatus: "degraded",
+        routeError: `Configured microphone source '${configuredSource}' was not detected.`
+      };
     }
-    if (!configuredSource) {
-      this.lastErrorValue = null;
-      return "not-configured";
+
+    const inputSources = sources.filter((source) => !source.monitor);
+    if (inputSources.length > 0) return { routeStatus: "not-configured", routeError: null };
+
+    if (sources.length > 0) {
+      return {
+        routeStatus: "unavailable",
+        routeError: "Only monitor sources are visible; no microphone capture input sources were detected."
+      };
     }
-    if (sources.some((source) => source.id === configuredSource)) {
-      this.lastErrorValue = null;
-      return "ready";
-    }
-    this.lastErrorValue = `Configured microphone source '${configuredSource}' was not detected.`;
-    return "degraded";
+
+    return {
+      routeStatus: "unavailable",
+      routeError: "No microphone input sources detected via pactl or arecord."
+    };
   }
 }

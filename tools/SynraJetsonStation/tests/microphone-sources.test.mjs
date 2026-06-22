@@ -102,6 +102,45 @@ test("reports unavailable when no input sources are visible", () => {
   assert.equal(status.routeStatus, "unavailable");
 });
 
+test("reports unavailable when only monitor sources are visible", () => {
+  const mic = new StationMicrophone(true, {
+    discoverSources: () => [
+      {
+        id: "alsa_output.pci-0000_00_1f.3.analog-stereo.monitor",
+        label: "System Monitor",
+        present: true,
+        configured: false,
+        monitor: true
+      }
+    ]
+  });
+
+  const status = mic.debug();
+  assert.equal(status.routeStatus, "unavailable");
+  assert.equal(status.sources.length, 1);
+  assert.match(status.lastError || "", /monitor/i);
+});
+
+test("reports degraded when configured source is a monitor source", () => {
+  const mic = new StationMicrophone(true, {
+    configuredSource: "alsa_output.pci-0000_00_1f.3.analog-stereo.monitor",
+    discoverSources: () => [
+      {
+        id: "alsa_output.pci-0000_00_1f.3.analog-stereo.monitor",
+        label: "System Monitor",
+        present: true,
+        configured: false,
+        monitor: true
+      }
+    ]
+  });
+
+  const status = mic.debug();
+  assert.equal(status.routeStatus, "degraded");
+  assert.equal(status.sources[0].configured, true);
+  assert.match(status.lastError || "", /monitor/i);
+});
+
 test("reports degraded when configured source is missing", () => {
   const mic = new StationMicrophone(true, {
     configuredSource: "missing-source",
@@ -120,4 +159,27 @@ test("reports degraded when configured source is missing", () => {
   assert.equal(status.routeStatus, "degraded");
   assert.equal(status.configuredSource, "missing-source");
   assert.match(status.lastError || "", /missing-source/);
+});
+
+test("debug does not clear operational microphone errors", async () => {
+  const mic = new StationMicrophone(true, {
+    configuredSource: "alsa_input.usb-test.analog-stereo",
+    discoverSources: () => [
+      {
+        id: "alsa_input.usb-test.analog-stereo",
+        label: "USB Test Mic",
+        present: true,
+        configured: false,
+        monitor: false
+      }
+    ]
+  });
+
+  await assert.rejects(() => mic.startListening(), /intentionally disabled/);
+  const operationalError = mic.lastError;
+  const status = mic.debug();
+
+  assert.equal(status.routeStatus, "ready");
+  assert.equal(status.lastError, operationalError);
+  assert.equal(mic.lastError, operationalError);
 });
