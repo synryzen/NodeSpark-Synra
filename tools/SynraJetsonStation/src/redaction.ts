@@ -12,11 +12,16 @@ export function redactSecrets<T>(value: T): T {
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
-      out[key] = SECRET_KEY_RE.test(key) ? "[redacted]" : redactSecrets(inner);
+      out[key] = SECRET_KEY_RE.test(key) ? redactSecretKeyValue(inner) : redactSecrets(inner);
     }
     return out as T;
   }
   return value;
+}
+
+function redactSecretKeyValue(value: unknown): unknown {
+  if (value === null || typeof value === "boolean" || typeof value === "number") return value;
+  return "[redacted]";
 }
 
 export function summarizeForLog(value: unknown): unknown {

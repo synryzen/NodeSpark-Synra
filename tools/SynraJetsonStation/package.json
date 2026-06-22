@@ -6,7 +6,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json",
-    "test:kiosk": "npm run build && node --test tests/kiosk-config.test.mjs tests/device-health.test.mjs",
+    "test:kiosk": "npm run build && node --test tests/kiosk-config.test.mjs tests/device-health.test.mjs tests/identity-smoke.test.mjs",
     "start": "node dist/station-server.js",
     "kiosk:electron": "electron dist/kiosk-shell.js",
     "kiosk:diagnostics": "node dist/kiosk-diagnostics.js",

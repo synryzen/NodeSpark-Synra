@@ -90,6 +90,11 @@ function statusPayload(): StationStatus {
   };
 }
 
+async function stationIdentitySmokePayload() {
+  const health = await collectHealth(config, healthState(), camera, microphone);
+  return health.identitySmoke;
+}
+
 function sendJson(res: ServerResponse, status: number, value: unknown): void {
   const data = Buffer.from(JSON.stringify(redactSecrets(value), null, 2), "utf8");
   res.writeHead(status, {
@@ -413,6 +418,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (req.method === "GET" && url.pathname === "/station/config") return sendJson(res, 200, publicConfig());
     if (req.method === "GET" && url.pathname === "/station/status") return sendJson(res, 200, statusPayload());
     if (req.method === "GET" && url.pathname === "/station/health") return sendJson(res, 200, await collectHealth(config, healthState(), camera, microphone));
+    if (req.method === "GET" && url.pathname === "/station/identity-smoke") return sendJson(res, 200, await stationIdentitySmokePayload());
     if (req.method === "GET" && url.pathname === "/station/events") return sendJson(res, 200, { events: events.recent(Number(url.searchParams.get("limit") || 50)) });
     if (req.method === "GET" && url.pathname === "/station/events/stream") return void events.subscribe(res);
     if (req.method === "GET" && url.pathname.startsWith("/synra/")) return serveStatic(synraDir, url.pathname.slice("/synra/".length), res);
